@@ -5,7 +5,7 @@ from dataclasses import replace
 
 from floorwise.core import geometry
 from floorwise.core.graph import Constraints, RouteGraph
-from floorwise.core.model import OUTSIDE, Building
+from floorwise.core.model import Building
 
 # Spaces a person counts as "rooms" in reachability and adjacency questions.
 NON_ROOM_TYPES = {"corridor", "stair", "lift", "outdoor"}
@@ -113,8 +113,7 @@ def straight_line_3d(building: Building, first: str, second: str) -> dict:
 
 
 def distances_to_exit(building: Building, constraints: Constraints = Constraints()) -> dict[str, float]:
-    graph = RouteGraph(building, replace(constraints, outside="free"))
-    return graph.distances_from(OUTSIDE)
+    return RouteGraph(building, constraints).distances_to_entrances()
 
 
 def what_if_door(building: Building, first: str, second: str, floor_id: str, threshold_m: float = 1.0, constraints: Constraints = Constraints()) -> dict:

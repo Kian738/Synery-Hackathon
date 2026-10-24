@@ -76,8 +76,38 @@ def _compile(content: str) -> dict:
                     continue
                 seen.add(key)
                 walls.append({'floor_id': space['floor_id'], 'space_id': space['id'], 'a': start, 'b': end, 'height_m': height})
+    # Node and deduplicate partial collinear overlap for display only. Analytical walls are unchanged.
+    from shapely.geometry import LineString
+    from shapely.ops import unary_union
+    unique=[]
+    for fid in floors:
+        source=[w for w in walls if w['floor_id']==fid]
+        if not source:continue
+        from shapely import STRtree
+        source_lines=[LineString([w['a'],w['b']]) for w in source]
+        tree=STRtree(source_lines)
+        union=unary_union(source_lines)
+        segments=list(union.geoms) if hasattr(union,'geoms') else [union]
+        for segment in segments:
+            coords=list(segment.coords)
+            for a,b in zip(coords,coords[1:]):
+                owners=tree.query(LineString([a,b]),predicate='covered_by')
+                owner=source[int(owners[0])]['space_id'] if len(owners) else None
+                unique.append({'floor_id':fid,'space_id':owner,'a':list(a),'b':list(b),'height_m':source[0]['height_m']})
+    walls=unique
+    # Actual upper-floor footprints form ceilings below. Missing coverage stays open.
+    from shapely import constrained_delaunay_triangles, make_valid
+    from shapely.geometry import Polygon
+    slabs = []
+    for fid in floors:
+        footprint = unary_union([make_valid(Polygon(s['polygon'])) for s in data['spaces']
+                                 if s['floor_id'] == fid and len(s['polygon']) >= 3])
+        triangles = constrained_delaunay_triangles(footprint)
+        vertices = [list(p) for triangle in triangles.geoms for p in list(triangle.exterior.coords)[:3]]
+        slabs.append({'floor_id': fid, 'vertices': vertices, 'area_m2': footprint.area})
     unmatched = sorted(o['id'] for o in data['openings'] if any(s != 'outside' and (o['id'], s) not in matched for s in o['space_ids']))
-    return {'revision': hashlib.sha256(content.encode()).hexdigest()[:16], 'walls': walls,
+    return {'revision': hashlib.sha256(('slabs-v1:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
-                            'Wall thickness and furniture heights are illustrative. Floor coordinates are preserved.']}
+                            'Wall thickness and furniture heights are illustrative. Floor coordinates are preserved.',
+                            'Slabs use recorded space footprints. No roof or unrecorded atrium is inferred.']}

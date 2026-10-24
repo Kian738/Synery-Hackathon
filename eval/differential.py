@@ -36,7 +36,7 @@ def compare_building(building: Building, pairs: int = 3, closures: int = 4) -> l
                 actual = ours.shortest(a, b)
                 ok = (expected is None and actual is None) or (expected is not None and actual is not None and abs(expected-actual[0]) < 1e-7)
                 if actual and closed:
-                    ok = ok and all(ours.edge_via(u,v)['via'] != closed for u,v in zip(actual[1],actual[1][1:]))
+                    ok = ok and closed not in ours.elements(actual[1])
                 rows.append({'correct': ok, 'start': a, 'end': b, 'closed': closed, 'step_free': step_free,
                              'expected_m': expected, 'actual_m': actual[0] if actual else None})
     assert building.data == original, 'Differential evaluation mutated its input'

@@ -43,15 +43,15 @@ class Conversation:
 
     def _anthropic(self, on_event: OnEvent) -> str:
         system = [{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}]
-        tools = [t.anthropic() for t in self.tools]
         for _ in range(MAX_STEPS):
             budget.check()
+            tools = [t.anthropic() for t in self.tools]
             response = self.client.beta.messages.create(
                 model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
                 output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default",
             )
             usage = response.usage
-            budget.add(usage.input_tokens, usage.output_tokens)
+            budget.add(usage.input_tokens+(usage.cache_read_input_tokens or 0)+(usage.cache_creation_input_tokens or 0), usage.output_tokens)
             self.usage.update({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
                                "cache_read_input_tokens": usage.cache_read_input_tokens or 0,
                                "cache_creation_input_tokens": usage.cache_creation_input_tokens or 0})
@@ -77,9 +77,9 @@ class Conversation:
     # ---------- OpenAI-compatible (Groq, OpenRouter) ----------
 
     def _openai(self, on_event: OnEvent) -> str:
-        tools = [t.openai() for t in self.tools]
         for _ in range(MAX_STEPS):
             budget.check()
+            tools = [t.openai() for t in self.tools]
             response = self.client.chat.completions.create(
                 model=self.model, max_tokens=4096, tools=tools, tool_choice="auto",
                 messages=[{"role": "system", "content": self.system}, *self.messages],

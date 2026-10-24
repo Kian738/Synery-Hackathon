@@ -1,23 +1,25 @@
-"""The route graph: exactly the dataset's route model, plus a constraint layer.
+"""The route graph: the organisers' route model (kit v1.1.0, README section 3), plus a constraint layer.
 
-Nodes are space ids, "door:<opening id>" nodes and one "outside" node. Space anchors are shapely's
-representative_point(); each space links to each of its openings by straight-line distance; stairs cost
-12 m per floor, lifts 15 m wait + 6 m per floor; entrances meet at "outside" at zero cost. A MultiGraph
-keeps parallel stair/lift edges."""
+Nodes are space anchors and "door:<opening id>" nodes. Inside a space the graph joins the anchor to each door and
+each pair of doors with the walking length of floorwise.core.inroom (15 cm off the walls, round corners, doors
+land 30 cm inside); an edge records the space it crosses. Stairs cost 2 m per metre climbed between consecutive
+stops; a lift costs 15 m once per ride plus 1 m per metre climbed, with every pair of stops joined. There is no
+route via the outside: an entrance is a door like any other, and a route never leaves the building.
+A MultiGraph keeps a stair and a lift that join the same two spaces."""
 
 import itertools
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import networkx as nx
-from shapely.geometry import Polygon
 
+from floorwise.core import inroom
 from floorwise.core.model import OUTSIDE, Building
 
 DOOR_PREFIX = "door:"
-STAIRS_COST_PER_FLOOR_M = 12.0
-LIFT_WAIT_COST_M = 15.0
-LIFT_COST_PER_FLOOR_M = 6.0
+STAIRS_M_PER_RISE = 2.0
+LIFT_FIXED_M = 15.0
+LIFT_M_PER_RISE = 1.0
+LENGTH_DECIMALS = inroom.LENGTH_DECIMALS
 
 
 @dataclass(frozen=True)
@@ -34,9 +36,6 @@ class Constraints:
     extra_openings: tuple[dict, ...] = ()  # what-if doors
     soft_avoid_types: frozenset[str] = frozenset()
     soft_penalty: float = 3.0
-    # "free": the dataset's model, all entrances meet at one outside node at zero cost (benchmark).
-    # "none": people do not teleport between entrances; routes stay indoors (navigation).
-    outside: str = "free"
 
     def describe(self) -> list[str]:
         notes = []
@@ -60,8 +59,11 @@ class Constraints:
 
 
 def anchor(building: Building, space_id: str) -> tuple[float, float]:
-    point = Polygon(building.spaces[space_id]["polygon"]).representative_point()
-    return (point.x, point.y)
+    return inroom.anchor_point(inroom.outline(building.spaces[space_id]["polygon"]))
+
+
+def is_door(node: str) -> bool:
+    return node.startswith(DOOR_PREFIX)
 
 
 class RouteGraph:
@@ -93,30 +95,27 @@ class RouteGraph:
             return False
         return True
 
+    def _softened(self, space_id: str) -> float:
+        constraints, space = self.constraints, self.building.spaces[space_id]
+        soft = space["room_type"] in constraints.soft_avoid_types or space["type"] in constraints.soft_avoid_types
+        return constraints.soft_penalty if constraints.soft_avoid_types and soft else 1.0
+
     def _build(self, keep: frozenset[str]) -> nx.MultiGraph:
         building, constraints = self.building, self.constraints
         graph = nx.MultiGraph()
-        anchors = {
-            space_id: anchor(building, space_id)
-            for space_id in building.spaces
-            if self._space_allowed(space_id, keep)
+        spaces = [space_id for space_id in building.spaces if self._space_allowed(space_id, keep)]
+        graph.add_nodes_from(spaces)
+        extra = constraints.extra_openings
+        open_doors = {
+            DOOR_PREFIX + opening["id"]
+            for opening in itertools.chain(building.openings.values(), extra)
+            if self._opening_allowed(opening)
         }
-        graph.add_nodes_from(anchors)
-        for opening in itertools.chain(building.openings.values(), constraints.extra_openings):
-            if not self._opening_allowed(opening):
-                continue
-            door = DOOR_PREFIX + opening["id"]
-            for space_id in opening["space_ids"]:
-                if space_id == OUTSIDE:
-                    if constraints.outside == "free":
-                        graph.add_edge(OUTSIDE, door, weight=0.0, via=opening["id"])
-                elif space_id in anchors:
-                    distance = math.dist(anchors[space_id], opening["position"])
-                    if constraints.soft_avoid_types:
-                        space = building.spaces[space_id]
-                        if space["room_type"] in constraints.soft_avoid_types or space["type"] in constraints.soft_avoid_types:
-                            distance *= constraints.soft_penalty
-                    graph.add_edge(space_id, door, weight=distance, via=opening["id"])
+        for space_id in spaces:
+            penalty = self._softened(space_id)
+            for first, second, length in inroom.space_walks(building, space_id, inroom.doors_of(building, space_id, extra), DOOR_PREFIX):
+                if (first == space_id or first in open_doors) and second in open_doors:
+                    graph.add_edge(first, second, weight=round(length, LENGTH_DECIMALS) * penalty, space=space_id)
         for connector in building.connectors.values():
             if connector["id"] in constraints.closed:
                 continue
@@ -129,12 +128,15 @@ class RouteGraph:
                 zip(connector["floor_ids"], connector["space_ids"], strict=True),
                 key=lambda stop: building.level(stop[0]),
             )
-            for (low_floor, low_space), (high_floor, high_space) in itertools.pairwise(stops):
-                if low_space not in anchors or high_space not in anchors:
+            # A lift ride pays the fixed cost once however many floors it passes, so every pair of stops is joined.
+            pairs = itertools.combinations(stops, 2) if is_lift else itertools.pairwise(stops)
+            for (low_floor, low_space), (high_floor, high_space) in pairs:
+                if low_space not in graph or high_space not in graph:
                     continue
-                span = abs(building.level(high_floor) - building.level(low_floor))
-                cost = LIFT_WAIT_COST_M + LIFT_COST_PER_FLOOR_M * span if is_lift else STAIRS_COST_PER_FLOOR_M * span
-                graph.add_edge(low_space, high_space, weight=cost, via=connector["id"])
+                rise = abs(building.elevation(high_floor) - building.elevation(low_floor))
+                cost = LIFT_FIXED_M + LIFT_M_PER_RISE * rise if is_lift else STAIRS_M_PER_RISE * rise
+                graph.add_edge(low_space, high_space, weight=round(cost, LENGTH_DECIMALS), via=connector["id"])
+        inroom.save(building)
         return graph
 
     # ---------- queries ----------
@@ -155,5 +157,45 @@ class RouteGraph:
             return set()
         return set(nx.node_connected_component(self.graph, source))
 
+    def entrance_doors(self) -> list[str]:
+        """Door nodes of every usable entrance (an opening that touches the outside)."""
+        extra = self.constraints.extra_openings
+        openings = itertools.chain(self.building.openings.values(), extra)
+        return [DOOR_PREFIX + o["id"] for o in openings if OUTSIDE in o["space_ids"] and DOOR_PREFIX + o["id"] in self.graph]
+
+    def distances_to_entrances(self) -> dict[str, float]:
+        """Walking distance from every node to its nearest entrance door."""
+        doors = self.entrance_doors()
+        if not doors:
+            return {}
+        return nx.multi_source_dijkstra_path_length(self.graph, doors, weight="weight")
+
     def edge_via(self, first: str, second: str) -> dict:
+        """The element a step between two route nodes uses. Route nodes alternate space and door (see expand), so a
+        step touching a door uses that opening; a step between two spaces uses its stair or lift."""
+        door = first if is_door(first) else second if is_door(second) else None
+        if door:
+            return {"via": door[len(DOOR_PREFIX):], "weight": 0.0}
         return min(self.graph[first][second].values(), key=lambda edge: edge["weight"])
+
+    def expand(self, nodes: list[str]) -> list[str]:
+        """Graph path -> the alternating path space, door, space, door ... that directions and drawing walk along.
+        A door-to-door step crosses a space that is not a node of its own; it is inserted between the two doors."""
+        expanded = [nodes[0]]
+        for first, second in itertools.pairwise(nodes):
+            if is_door(first) and is_door(second):
+                expanded.append(min(self.graph[first][second].values(), key=lambda edge: edge["weight"])["space"])
+            expanded.append(second)
+        return expanded
+
+    def elements(self, nodes: list[str]) -> list[str]:
+        """Openings and connectors a graph path uses, in order; a connector once per stair flight or ride."""
+        used = []
+        for index, node in enumerate(nodes):
+            if is_door(node):
+                used.append(node[len(DOOR_PREFIX):])
+            elif index and not is_door(nodes[index - 1]):
+                edge = min(self.graph[nodes[index - 1]][node].values(), key=lambda edge: edge["weight"])
+                if "via" in edge:
+                    used.append(edge["via"])
+        return used

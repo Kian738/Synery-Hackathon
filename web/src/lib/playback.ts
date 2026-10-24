@@ -41,3 +41,15 @@ export function samplePreview(model: Presentation, seconds: number) {
 export function advancePreview(time:number,dt:number,speed:number,duration:number) {
   return Math.min(duration,Math.max(0,time+Math.max(0,dt)*speed));
 }
+
+/** Both renderers use the same walking sections. Never join across a hidden floor or gap. */
+export function routeRuns(route:Route,visibleFloors:Set<string>):RoutePoint[][] {
+  const runs:RoutePoint[][]=[];let run:RoutePoint[]=[];
+  for(const section of presentation(route).sections){
+    if(section.transition||!visibleFloors.has(section.a.floor_id)){if(run.length>1)runs.push(run);run=[];continue;}
+    if(!run.length)run=[section.a];
+    run.push(section.b);
+  }
+  if(run.length>1)runs.push(run);
+  return runs;
+}

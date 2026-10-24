@@ -1,5 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { RoomText } from "../components/RoomText";
+import { ToolTrace } from "../components/ToolTrace";
+import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { BuildDialog } from "../components/BuildDialog";
 import { FloorRail } from "../components/FloorRail";
@@ -7,7 +10,7 @@ import { Pictogram } from "../components/Pictogram";
 import { PlanView, type Pin } from "../components/PlanView";
 import { api } from "../lib/api";
 import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from "../lib/geometry";
-import type { BuildingRow, GuideStep, Space } from "../lib/types";
+import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
@@ -21,19 +24,31 @@ export default function Navigator() {
   const [buildings, setBuildings] = useState<BuildingRow[]>([]);
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
+  const [weakOpen,setWeakOpen]=useState(false);
+  const [questionOpen,setQuestionOpen]=useState(false);
+  const [phoneOpen,setPhoneOpen]=useState(false);
+  const [compact,setCompact]=useState(()=>matchMedia("(max-width:1023px)").matches);
+  const [toolsOpen,setToolsOpen]=useState(false);
+  useEffect(()=>{const q=matchMedia("(max-width:1023px)");const changed=()=>{setCompact(q.matches);setToolsOpen(false);};q.addEventListener("change",changed);return()=>q.removeEventListener("change",changed);},[]);
+  const [lookOffset,setLookOffset]=useState({yaw:0,pitch:0});
+  const [focusRequest,setFocusRequest]=useState<{id:string;revision:number}|null>(null);
+  const [heading,setHeading]=useState<string>("");
+  const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow">(params.get("view") === "2d" ? "2d" : "3d");
   const [scope, setScope] = useState<"current"|"route"|"building">("current");
   const [exploded,setExploded]=useState(true);
   const [planExpanded,setPlanExpanded]=useState(false);
+  const [stageExpanded,setStageExpanded]=useState(params.get("explore")==="1");
   const [seekRequest,setSeekRequest]=useState(0);
+  const [previewPosition,setPreviewPosition]=useState<{x:number;y:number;floor_id:string}|null>(null);
   const following=view==="follow"||view==="guide";
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [buildingImport, setBuildingImport] = useState(false);
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
-  useEffect(() => { setSelected(null); setStepMode(false); }, [buildingId]);
+  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setHeading("");setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null); }, [buildingId]);
   // Deep link (shareable, QR at a door): ?building=…&at=<space id>&to=<place>&step_free=1
   const linked = useRef(false);
   useEffect(() => {
@@ -47,6 +62,8 @@ export default function Navigator() {
 
   const g = nav.geometry;
   const steps = nav.route?.guide?.steps ?? [];
+  const companionRouteId=nav.route?nav.sessionId??undefined:undefined;
+  useEffect(()=>setLookOffset({yaw:0,pitch:0}),[nav.route]);
   const cats = useMemo(() => (g ? categories(g) : []), [g]);
   // Example requests built from this building's own rooms, items and lifts, so every one of them works here.
   const examples = useMemo(() => {
@@ -67,29 +84,32 @@ export default function Navigator() {
   // Speak new agent replies and route overviews when voice output is on.
   const spokenFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!voiceOut || !nav.route) return;
+    if(!voiceOut){spokenFor.current=null;return;}
+    if (!nav.route || following) return;
     const key = `${nav.route.length_m}-${nav.route.stops.join()}`;
     if (spokenFor.current === key) return;
     spokenFor.current = key;
     speak(nav.route.guide.spoken);
-  }, [nav.route, voiceOut]);
+  }, [nav.route, voiceOut,following]);
+  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speak(steps[nav.activeStep].text);return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
 
   const pins: Pin[] = useMemo(() => {
     if (!g) return [];
     const out: Pin[] = [];
+    if(following&&previewPosition)out.push({id:"preview",at:[previewPosition.x,previewPosition.y],floor_id:previewPosition.floor_id,label:"Preview avatar (not your location)",tone:"info"});
     const at = (id: string) => g.spaces.find((s) => s.id === id);
     const here = nav.here ? at(nav.here) : null;
-    if (here) out.push({ id: "here", at: centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start" });
+    if (here) out.push({ id: "here", at: here.anchor??centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start",heading:heading?Number(heading):undefined });
     if (nav.route?.polyline.length) {
       const first = nav.route.polyline[0], last = nav.route.polyline[nav.route.polyline.length - 1];
-      out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Start", tone: "start" });
+      if(nav.route.stops[0]!==nav.here)out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Route start", tone: "start" });
       out.push({ id: "end", at: [last.x, last.y], floor_id: last.floor_id, label: "Destination", tone: "end" });
       const step = steps[nav.activeStep];
-      if (step?.point && step.floor_id && nav.activeStep > 0 && step.kind !== "arrive")
+      if (!following && step?.point && step.floor_id && nav.activeStep > 0 && step.kind !== "arrive")
         out.push({ id: "step", at: step.point, floor_id: step.floor_id, label: step.text, tone: "info", n: nav.activeStep });
     }
     return out;
-  }, [g, nav.here, nav.route, nav.activeStep, steps]);
+  }, [g, nav.here, nav.route, nav.activeStep, steps,following,previewPosition,heading]);
 
   const focusStep = (i: number) => {
     nav.setActiveStep(i);
@@ -97,14 +117,22 @@ export default function Navigator() {
     const s = steps[i];
     if (s?.floor_id) nav.setFloorId(s.floor_id);
   };
-  const focusPoint = nav.route && nav.activeStep > 0 ? steps[nav.activeStep]?.point ?? null : null;
+  const displayFloor=following&&previewPosition?previewPosition.floor_id:nav.floorId;
+  const visualRooms=nav.visualResult?.entities.filter(e=>e.kind==="room")??[];
+  const visualPrimary=(nav.visualResult?.measurements.primary_ids as string[]|undefined)?.[0];
+  const visualRoom=g?.spaces.find(s=>s.id===(visualPrimary??(visualRooms.length===1?visualRooms[0].id:null)));
+  const visualAnchor=visualRoom?(visualRoom.anchor??centroid(visualRoom.polygon)):null;
+  const focused=g?.spaces.find(s=>s.id===focusRequest?.id);
+  const focusPoint = following&&previewPosition?[previewPosition.x,previewPosition.y] as [number,number]:focused?(focused.anchor??centroid(focused.polygon)):visualAnchor??(nav.route&&steps[nav.activeStep]?.floor_id===nav.floorId?steps[nav.activeStep]?.point??null:null);
 
+  const focusRoom=(room:Space)=>{selectSpace(room);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
+  const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
   if (!g) {
     return <div className="grid h-full place-items-center bg-ink font-sign text-xl text-concrete">{nav.notice ?? "Loading building…"}</div>;
   }
 
   return (
-    <div className="navigator-shell flex h-full flex-col lg:flex-row">
+    <div className={`navigator-shell flex h-full flex-col lg:flex-row ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`}>
       {/* ---------- sign column ---------- */}
       <aside className="order-2 flex min-h-0 flex-1 flex-col navigation-panel bg-ink text-white lg:order-1 lg:w-[370px] lg:flex-none">
         <header className="flex items-center gap-2 border-b border-ink-2 px-4 py-3">
@@ -125,20 +153,22 @@ export default function Navigator() {
             </span>
             <span className="shrink-0 text-sm text-ink-4 underline underline-offset-4">change</span>
           </button>
+          {nav.here&&<label className="location-heading">Facing <select aria-label="Facing direction" value={heading} onChange={e=>setHeading(e.target.value)}><option value="">Not set</option><option value="0">North</option><option value="90">East</option><option value="180">South</option><option value="270">West</option></select><span>set manually</span></label>}
           {picking && (
             <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
           )}
         </div>
 
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-          {nav.route && (
+          {nav.visualResult&&nav.sessionId&&<VisualAnswer result={nav.visualResult} total={nav.visualResult.total_rows} sessionId={nav.sessionId} onClose={()=>nav.setVisualResult(null)} onPick={id=>{const room=g.spaces.find(s=>s.id===id)??g.spaces.find(s=>s.id===g.assets.find(a=>a.id===id)?.space_id);if(room)focusRoom(room);}} onFloor={nav.setFloorId} geometry={g}/> }
+          {nav.route && !nav.visualResult && (
             <RouteSign route={nav.route} meta={nav.routeMeta} stepFree={nav.route.constraints.includes("step-free")}
-              active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => { setView("guide"); nav.setActiveStep(0); setSelected(null); }} floors={g.floors} />
+              active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => { setView("guide");setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setStageExpanded(false); nav.setVisualResult(null); nav.setActiveStep(0); setSelected(null); }} floors={g.floors} />
           )}
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -150,56 +180,90 @@ export default function Navigator() {
             ))}
           </div>
         )}
-        <Composer busy={nav.busy} onSend={nav.ask} />
+        {nav.turnUsage&&<div className="turn-usage" role="status">{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}</div>}
+        <Composer busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
       </aside>
 
       <main className="model-panel relative order-1 flex h-[46vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
         <div className="model-toolbar">
           <div className="mode-switch" aria-label="View mode">
+            {following?<button aria-label="3D" onClick={()=>{setView("3d");setQuestionOpen(false);}}>Back to building</button>:<>
             <button aria-pressed={view === "3d"} onClick={() => setView("3d")}>3D</button>
             <button aria-pressed={view === "2d"} onClick={() => setView("2d")}>Floor plan</button>
-            <button disabled={!nav.route || nav.route.preview_available === false} aria-pressed={following} onClick={() => {setView("guide");setSelected(null);}}>Guide me</button>
+            <button disabled={!nav.route || nav.route.preview_available === false} aria-pressed={following} onClick={() => {setView("guide");setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setStageExpanded(false);nav.setVisualResult(null);setSelected(null);}}>Guide me</button>
+            <button className="stage-toggle" aria-label={stageExpanded?"Shrink building view":"Expand building view"} onClick={()=>{if(stageExpanded)setPlanExpanded(false);setStageExpanded(!stageExpanded);}}>{stageExpanded?"↙":"↗"}</button>
+            </>}
           </div>
           <div className="model-actions">
-            {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
-            <button disabled={nav.busy} onClick={nav.inspectWeakPoints}>Test weak points</button>
-            <Link to="/lab">Evidence</Link>
+            <button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button>
+            {following&&<button aria-expanded={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}>Ask</button>}
+            <details className="building-tools" open={!compact||toolsOpen} onToggle={e=>{if(compact)setToolsOpen(e.currentTarget.open);}}>
+              <summary aria-label="Building tools" title="Building tools">•••</summary><div className="building-tools-content">
+            <CompanionControl buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
+              onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
+              onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
+              onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
+            {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>{setScope(e.target.value as typeof scope);if(compact)setToolsOpen(false);}}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
+            {following?<button aria-label="Read aloud" aria-pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}><Pictogram name="speaker" size={18}/>Read aloud</button>:<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}>Stress test</button><Link to="/lab">Evidence</Link></>}
+              </div>
+            </details>
           </div>
         </div>
-        <div className="floor-selector"><FloorRail floors={g.floors} active={nav.floorId} route={nav.route} onPick={nav.setFloorId} here={hereFloor} /></div>
+        <div className="floor-selector"><FloorRail floors={g.floors} active={displayFloor} route={nav.route} onPick={id=>{if(following)setView("3d");nav.setFloorId(id);}} here={hereFloor} /></div>
         <div className="model-viewport">
-          <ErrorBoundary key={`${g.building.id}-${view}`} label="The building view needs recovery">
-            {view === "2d" ? <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed}
-              pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={setSelected} /> :
+          <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
+            {view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult}
+              pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
-                <Building3D geometry={g} floorId={nav.floorId} route={nav.route} previousRoute={nav.previousRoute} highlights={nav.highlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} onFinish={()=>setView("3d")} onPreview={()=>{stopSpeaking();setView("follow");}}
-                  onStep={i=>{nav.setActiveStep(i);const f=steps[i]?.floor_id;if(f)nav.setFloorId(f);}} onSpaceClick={setSelected} />
+                <Building3D geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                  onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
         </div>
-        {view!=="2d"&&<section className={`linked-plan ${planExpanded?"expanded":""}`} aria-label="Linked floor plan">
-          <header><span>{g.floors.find(f=>f.id===nav.floorId)?.name}</span><button aria-expanded={planExpanded} onClick={()=>setPlanExpanded(!planExpanded)}>{planExpanded?"Shrink plan":"Expand plan"}</button></header>
-          <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed} pins={pins} selected={selected?.id} focus={focusPoint} onSpaceClick={setSelected} compact/>
+        {view!=="2d"&&planExpanded&&<section className="map-drawer" aria-label="Linked floor plan">
+          <header><span>{g.floors.find(f=>f.id===displayFloor)?.name}</span><button aria-label="Close map" onClick={()=>setPlanExpanded(false)}><Pictogram name="close" size={18}/></button></header>
+          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span><button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
-        {following && nav.route && <div className="follow-instruction"><span>Decision {nav.activeStep + 1} / {steps.length}</span><p>{steps[nav.activeStep]?.text}</p></div>}
-        {nav.weakPoints.length > 0 && !following && <section className="weak-points" aria-label="Weak points">
-          <h2>Single closure simulation</h2>
-          {nav.weakPoints.map((item, i) => <button key={i} onClick={() => {nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}>
-            <b>{item.name}</b><span>{item.rooms_lost} of {item.of_rooms} rooms would lose step-free exit access</span>
-          </button>)}
+        {weakOpen&&!following&&<section className="stress-drawer" aria-label="Building stress test">
+          <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>
+          <p>Each result closes one connector independently and checks step-free routes to mapped exits.</p>
+          {nav.busy?<p role="status">Checking connector closures…</p>:nav.weakPoints.length?nav.weakPoints.map((item,i)=><button className="stress-result" key={i} onClick={()=>{nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}>
+            <span><Pictogram name={item.kind==="lift"?"lift":"stairs"}/><b>{item.name}</b></span><strong>{item.rooms_lost}<small> / {item.of_rooms} rooms</small></strong><span>would lose step-free exit access</span><span className="stress-inspect">Show affected rooms</span>
+          </button>):<p>No individual connector closure disconnects mapped rooms for this analysis.</p>}
+          <details><summary>Evidence and assumptions</summary><p>Computed by removing each connector from the route graph and comparing exit reachability. This is a single-failure sensitivity check, not a fire or crowd-capacity simulation. Occupancy and door throughput are not supplied.</p></details>
+          <button className="stress-rerun" disabled={nav.busy} onClick={nav.inspectWeakPoints}>Run again</button>
         </section>}
         {selected && !following && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
           onHere={() => { nav.setHere(selected.id); nav.setFloorId(selected.floor_id); setSelected(null); nav.setNotice(`Location set: ${selected.name}. Your green marker is set manually.`); }}
-          onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} />}
+          onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} onFocus={()=>focusRoom(selected)} />}
         {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking();}} />}
       </main>
       {buildingImport && <BuildDialog onClose={() => setBuildingImport(false)} onBuilt={id => {setBuildingImport(false);setParams({building:id});api.buildings().then(setBuildings);}} />}
 
     </div>
   );
+}
+
+function VisualAnswer({result,total,sessionId,onClose,onPick,onFloor,geometry}:{result:VisualResult;total:number;sessionId:string;onClose:()=>void;onPick:(id:string)=>void;onFloor:(id:string)=>void;geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>}) {
+  const [rows,setRows]=useState<Record<string,unknown>[]>([]),[offset,setOffset]=useState(0),[error,setError]=useState("");
+  useEffect(()=>{setOffset(0);setRows([]);},[result.id]);
+  useEffect(()=>{let current=true;setError("");api.resultPage(sessionId,result.id,offset).then(page=>{if(current)setRows(page.rows);}).catch(e=>{if(current)setError(e.message);});return()=>{current=false;};},[sessionId,result.id,offset]);
+  return <section className="visual-answer" aria-label="Visual answer">
+    <header><span>{result.kind.replaceAll("_"," ")}</span><button aria-label="Close visual answer" onClick={onClose}>Close</button></header>
+    <h2>{result.title}</h2>
+    <p className="result-provenance">{result.provenance}</p>
+    <div className="result-floors">{result.floor_ids.map(id=><button key={id} onClick={()=>onFloor(id)}>{geometry.floors.find(f=>f.id===id)?.name??id}</button>)}</div>
+    {Object.entries(result.measurements).filter(([,v])=>typeof v==="number").map(([key,value])=><p key={key} className="result-measure"><span>{key.replace(/_m2$|_m$/," ").replaceAll("_"," ")}</span><b>{String(value)}{key.includes("m2")?" m²":key.endsWith("_m")?" m":""}</b></p>)}
+    {result.warnings.map((warning,i)=><p key={i}>{warning}</p>)}
+    {error&&<p role="alert">{error}</p>}
+    {!rows.length&&total>0&&!error&&<p className="result-provenance" role="status">Loading result page…</p>}
+    <ol className="result-list">{rows.map((row,i)=><li key={String(row.id??i)}><button onClick={()=>geometry.floors.some(f=>f.id===row.id)?onFloor(String(row.id)):onPick(String(row.id))} disabled={!geometry.spaces.some(s=>s.id===row.id)&&!geometry.assets.some(a=>a.id===row.id)&&!geometry.floors.some(f=>f.id===row.id)}><span>{String(row.label??row.name??row.id)}</span><b>{row.count!==undefined?String(row.count):row.area_m2!==undefined?`${row.area_m2} m²`:row.overlap_m2!==undefined?`${row.overlap_m2} m² overlap`:row.reachable!==undefined?(row.reachable?"Reachable":"Unavailable"):row.before_m!==undefined?`${row.before_m} → ${row.after_m} m`:"Show"}</b></button></li>)}</ol>
+    {total>25&&<nav aria-label="Result pages"><button disabled={offset===0} onClick={()=>{setRows([]);setOffset(Math.max(0,offset-25));}}>Previous</button><span>{offset+1}–{Math.min(offset+25,total)} of {total}</span><button disabled={offset+25>=total} onClick={()=>{setRows([]);setOffset(offset+25);}}>Next</button></nav>}
+    <p className="result-provenance">All {result.entities.length} entities are highlighted across the listed floors. The list is paged.</p>
+  </section>;
 }
 
 function BuildingPicker({ buildings, value, onChange, name }: { buildings: BuildingRow[]; value: string; onChange: (b: string) => void; name: string }) {
@@ -211,7 +275,7 @@ function BuildingPicker({ buildings, value, onChange, name }: { buildings: Build
   return (
     <label className="flex min-w-0 flex-col">
       <span className="sr-only">Building</span>
-      <span className="font-sign text-[22px] font-bold leading-tight tracking-tight">{name}</span>
+      <span title={name} className="building-title font-sign text-[22px] font-bold leading-tight tracking-tight">{name}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Change building"
         className="-ml-1 mt-0.5 w-[150px] cursor-pointer appearance-none bg-transparent text-sm text-ink-4 hover:text-white focus:text-white">
         <option value={value} hidden>Change building ▾</option>
@@ -286,8 +350,8 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
           <button onClick={onClear} className="text-sm text-ink-4 hover:text-white" aria-label="Clear route"><Pictogram name="close" size={20} /></button>
         </div>
         <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-sign text-[15px]">
-          <span className="font-semibold">{Math.round(route.walk_m ?? route.length_m)} m walk</span>
-          <span>about {minutes} min</span>
+          <span className="font-semibold">{Math.round(route.walk_m ?? route.length_m)} {route.walk_m==null?"route-model m":"m walk"}</span>
+          {route.walk_m!=null&&<span>about {minutes} min</span>}
           {floorChanges > 0 && <span>{floorChanges} floor change{floorChanges > 1 ? "s" : ""}</span>}
           {stepFree && <span className="flex items-center gap-1 text-[#7fd4a8]"><Pictogram name="wheelchair" size={15} /> step-free</span>}
           {route.constraints.filter((c) => c !== "step-free").map((c) => <span key={c} className="text-mark">{c}</span>)}
@@ -303,7 +367,7 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
           <StepRow key={i} step={s} index={i} active={i === active} onClick={() => onStep(i)} floorName={floors.find((f) => f.id === s.floor_id)?.name} />
         ))}
       </ol></details>
-      <div className="flex gap-2 px-4 py-3">
+      <div className="route-start-actions flex gap-2 px-4 py-3">
         <button disabled={route.preview_available === false} onClick={onStepMode} className="flex-1 bg-mark py-2.5 font-sign text-[17px] font-bold text-ink hover:brightness-95">{route.preview_available === false ? "Preview unavailable: check geometry" : "Guide me step by step"}</button>
       </div>
     </section>
@@ -330,17 +394,31 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide }: {
+function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom }: {
+  geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
 }) {
+  const [history,setHistory]=useState(false);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { const panel = end.current?.parentElement; if (panel) panel.scrollTop = panel.scrollHeight; }, [messages, busy]);
+  const turns=useMemo(()=>{
+    const turns:Message[][]=[];
+    messages.forEach(m=>{if(m.role==="user"||!turns.length)turns.push([]);turns[turns.length-1].push(m);});
+    return turns;
+  },[messages]);
+  const shown=history?turns:turns.slice(-2);
+  const visible=shown.flatMap(turn=>[
+    ...turn.filter(m=>m.role==="user"),
+    {role:"trace" as const,id:-(turn[0]?.id??1),activities:turn.filter((m):m is Extract<Message,{role:"activity"}>=>m.role==="activity"),busy:busy&&turn===turns.at(-1)},
+    ...turn.filter(m=>m.role!=="activity"&&m.role!=="user")
+  ]);
   if (!messages.length && !busy) return null;
   return (
     <section aria-label="Conversation" aria-live="polite" style={{maxHeight:320,overflowY:"auto"}} className="space-y-3 px-4 py-4">
-      {messages.map((m) => {
+      {turns.length>2&&<button className="conversation-history" aria-expanded={history} onClick={()=>setHistory(!history)}>{history?"Collapse history":`Earlier conversation (${turns.length-2} turns)`}</button>}
+      {visible.map((m) => {
+        if(m.role==="trace")return <ToolTrace key={m.id} activities={m.activities} busy={m.busy}/>;
         if (m.role === "user") return <p key={m.id} className="ml-10 border-r-4 border-concrete pr-3 text-right text-[15.5px] text-concrete">{m.text}</p>;
-        if (m.role === "activity") return <p key={m.id} className="flex items-center gap-2 text-[13px] text-ink-4"><span className="h-1.5 w-1.5 bg-ink-3" />{m.text}</p>;
         if (m.role === "error") return <p key={m.id} className="border-l-4 border-signal bg-ink-2 px-3 py-2 text-[14.5px]">{m.text}</p>;
         if (m.role === "options")
           return (
@@ -370,7 +448,7 @@ function Conversation({ messages, busy, onOption, onDecide }: {
           );
         return (
           <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
-            {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}>{line.replace(/\*\*/g, "")}</p>)}
+            {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}><RoomText text={line.replace(/\*\*/g, "")} spaces={geometry.spaces} onRoom={onRoom}/></p>)}
           </div>
         );
       })}
@@ -397,7 +475,7 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void
       {voiceError && <p role="status" className="absolute bottom-full left-0 right-0 bg-ink-2 p-3 text-sm">{voiceError}</p>}
       {canListen() && (
         <button type="button" disabled={busy} aria-label={listening ? "Stop listening" : "Speak"} aria-pressed={listening}
-          onClick={() => { if (listening) {stopListening.current?.();setListening(false);return;} setVoiceError("");setListening(true);stopListening.current=listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false), setVoiceError); }}
+          onClick={() => { if (listening) {stopListening.current?.();setListening(false);return;} stopSpeaking();window.dispatchEvent(new Event("floorwise:voice-start"));setVoiceError("");setListening(true);stopListening.current=listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false), setVoiceError); }}
           className={`grid h-12 w-12 shrink-0 place-items-center ${listening ? "bg-signal text-white" : "bg-white text-ink hover:bg-concrete"}`}>
           <Pictogram name="mic" size={22} />
         </button>
@@ -410,16 +488,16 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void
   );
 }
 
-function RoomCard({ space, building, onClose, onHere, onGo, closed, onToggleClosed }: {
+function RoomCard({ space, building, onClose, onHere, onGo, closed, onToggleClosed,onFocus }: {
   space: Space; building: NonNullable<ReturnType<typeof useNavigator>["geometry"]>; onClose: () => void; onHere: () => void; onGo: () => void;
-  closed: Set<string>; onToggleClosed: (id: string) => void;
+  closed: Set<string>; onToggleClosed: (id: string) => void;onFocus:()=>void;
 }) {
   const items = building.assets.filter((a) => a.space_id === space.id);
   const counts = Object.entries(items.reduce<Record<string, number>>((m, a) => ({ ...m, [a.type]: (m[a.type] ?? 0) + 1 }), {})).slice(0, 6);
   const connector = building.connectors.find((c) => c.space_ids.includes(space.id));
   const floor = building.floors.find((f) => f.id === space.floor_id);
   return (
-    <div className="absolute inset-x-3 bottom-3 border border-ink bg-white p-4 shadow-[4px_4px_0_var(--color-ink)] sm:left-auto sm:right-16 sm:w-[340px]" role="dialog" aria-label={space.name}>
+    <div className="room-inspector absolute inset-x-3 bottom-3 border border-ink bg-white p-4 shadow-[4px_4px_0_var(--color-ink)] sm:left-auto sm:right-16 sm:w-[340px]" role="dialog" aria-label={space.name}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] text-ink-3">{ZONE_LABEL[zoneOf(space)]} · {floor?.name}</p>
@@ -428,6 +506,7 @@ function RoomCard({ space, building, onClose, onHere, onGo, closed, onToggleClos
         </div>
         <button onClick={onClose} aria-label="Close"><Pictogram name="close" size={20} /></button>
       </div>
+      <button className="focus-room" onClick={onFocus}><Pictogram name="fit" size={16}/>Focus room</button>
       {counts.length > 0 && <p className="mt-2 text-[14px] text-ink-2">{counts.map(([t, n]) => `${n} ${t.replace(/_/g, " ")}`).join(" · ")}</p>}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button onClick={onGo} className="bg-ink py-2.5 font-sign text-[16px] font-bold text-white hover:bg-ink-2">Go here</button>

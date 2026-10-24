@@ -2,6 +2,7 @@
 
   fw doctor                 is everything installed and configured? (keys, data, web build)
   fw start                  build the web app if needed and open it (http://localhost:8000)
+  fw start --lan            also accept connections from a phone on this network
   fw dev                    backend + frontend with hot reload (http://localhost:5173)
   fw check                  every offline test and eval gate (free, ~3 min)
   fw ui-test                build the web app, start a server, run Playwright on desktop + phone
@@ -68,18 +69,18 @@ def doctor() -> int:
     status = llm.info()
     line(status.available, f"LLM provider: {status.name} (chat {status.models['chat']}, parser {status.models['parser']})",
          "add ANTHROPIC_API_KEY (or GROQ_API_KEY for testing) to .env")
-    print("\nWithout an LLM key everything works except chat and the LLM parts of evals.")
+    print("\nWithout an LLM key supported deterministic chat still works; unfamiliar phrasing and agent actions need a key.")
     return 0 if ok else 1
 
 
-def start() -> int:
+def start(lan: bool = False) -> int:
     if web_is_stale():
         if not (ROOT / "web" / "node_modules").exists():
             run(["npm", "install"], ROOT / "web")
         if run(["npm", "run", "build"], ROOT / "web"):
             return 1
     webbrowser.open("http://localhost:8000")
-    return run([sys.executable, "-m", "uvicorn", "server.app:app", "--port", "8000"])
+    return run([sys.executable, "-m", "uvicorn", "server.app:app", "--host", "0.0.0.0" if lan else "127.0.0.1", "--port", "8000"])
 
 
 def dev() -> int:
@@ -138,7 +139,10 @@ def main() -> None:
     if command == "doctor":
         sys.exit(doctor())
     if command == "start":
-        sys.exit(start())
+        if rest not in ([], ["--lan"]):
+            print("usage: fw start [--lan]")
+            sys.exit(2)
+        sys.exit(start(lan="--lan" in rest))
     if command == "dev":
         sys.exit(dev())
     if command == "check":

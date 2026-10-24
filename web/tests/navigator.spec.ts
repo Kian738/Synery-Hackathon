@@ -54,14 +54,14 @@ test("deep link draws a multi-floor route with followable steps", async ({ page 
 test("follow-route mode advances through eye-level waypoints", async ({ page }) => {
   await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
   await page.getByRole("button", { name: "Guide me step by step" }).click();
-  await expect(page.getByText(/Guide me - location set manually/)).toBeVisible();
-  await expect(page.getByText(/Decision 1 \/ /)).toBeVisible();
+  await expect(page.getByRole("region",{name:"Route preview player"})).toBeVisible();
+  await expect(page.getByRole("region",{name:"Route preview player"})).toContainText(/Decision 1 of/);
   const canvas=page.locator("canvas");
   await expect(canvas).toHaveAttribute("data-camera-position", /\[/);
   const before=await canvas.getAttribute("data-camera-position");
   await page.getByRole("button", {name:"Next instruction"}).click();
   await expect(canvas).not.toHaveAttribute("data-camera-position", before!);
-  await expect(page.getByText(/Decision 2 \/ /)).toBeVisible();
+  await expect(page.getByRole("region",{name:"Route preview player"})).toContainText(/Decision 2 of/);
 });
 
 test("step-free toggle is announced as pressed", async ({ page }) => {
@@ -75,13 +75,14 @@ test("3D view can be switched on", async ({ page }) => {
   await page.goto(FACTORY);
   await page.getByRole("button", { name: "3D" }).click();
   await expect(page.getByRole("button", { name: "3D" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".building-tools")).toBeAttached();
+  if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
   await expect(page.getByRole("combobox", { name: "Visible floors" })).toBeVisible();
 });
 
 test("preview has a seekable player, speed, arrival and replay", async ({page})=>{
   await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
   await page.getByRole("button",{name:"Guide me step by step"}).click();
-  await page.getByRole("button",{name:"Preview route",exact:true}).click();
   const progress=page.getByRole("slider",{name:"Preview progress"});
   await expect(progress).toBeVisible();
   await page.getByRole("combobox",{name:"Playback speed"}).selectOption("2");
@@ -128,9 +129,11 @@ test("HTTP chat failures preserve the composer and building controls", async ({p
 
 test("weak point simulation highlights the real step-free consequence", async ({page}) => {
   await page.goto(FACTORY);
-  await page.getByRole("button",{name:"Test weak points"}).click();
-  await expect(page.getByRole("region",{name:"Weak points"})).toContainText("Office lift");
-  await expect(page.getByRole("region",{name:"Weak points"})).toContainText("29 of 56");
+  await expect(page.locator(".building-tools")).toBeAttached();
+  if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
+  await page.getByRole("button",{name:"Stress test",exact:true}).click();
+  await expect(page.getByRole("region",{name:"Building stress test"})).toContainText("Office lift");
+  await expect(page.getByRole("region",{name:"Building stress test"})).toContainText("29 / 56 rooms");
 });
 
 test("3D scene has compiled geometry and a rendered canvas", async ({page}, testInfo) => {
@@ -138,6 +141,7 @@ test("3D scene has compiled geometry and a rendered canvas", async ({page}, test
   await page.goto(CAMPUS);
   await expect(page.getByTestId("building-scene")).toHaveAttribute("data-scene-revision", /[a-f0-9]{16}/);
   await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.locator("canvas")).toHaveAttribute("data-scene-painted","true");
   expect(errors).toEqual([]);
   await page.screenshot({path:`../runs/demo/${testInfo.project.name}.png`});
 });
@@ -202,4 +206,14 @@ test("reduced motion uses static waypoint guidance", async ({page}) => {
   await page.getByRole("button",{name:"Guide me step by step"}).click();
   await expect(page.getByRole("button",{name:"Next instruction"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Play preview"})).toHaveCount(0);
+});
+
+test("an incomplete visual answer cannot blank the conversation",async({page})=>{
+  await page.route("**/api/sessions/*/chat",route=>route.fulfill({contentType:"text/event-stream",body:'data: {"type":"ui","data":{"type":"visual_result","result":{"id":"broken","entities":[],"floor_ids":[]},"total_rows":0}}\n\ndata: {"type":"reply","data":{"text":"Please retry the visual answer.","model":"fixture","usage":{}}}\n\ndata: {"type":"done","data":null}\n\n'}));
+  await page.goto(CAMPUS);
+  await page.getByRole("textbox",{name:"Message"}).fill("Show me equipment");
+  await page.getByRole("button",{name:"Send",exact:true}).click();
+  await expect(page.getByText("Please retry the visual answer.")).toBeVisible();
+  await expect(page.getByText("An incomplete visual answer was ignored. Please retry.")).toBeVisible();
+  await expect(page.getByRole("textbox",{name:"Message"})).toBeEnabled();
 });

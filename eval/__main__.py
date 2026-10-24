@@ -34,12 +34,12 @@ def main() -> None:
         os.environ.setdefault("FLOORWISE_OFFLINE", "1")
         for gate in GATES:
             print(f"\n##### {' '.join(gate)}")
-            from pathlib import Path
+            from eval.ledger import Ledger
             import json
-            before = set(Path("runs").glob("*/summary.json"))
+            before = len(Ledger.completed)
             run(gate[0], gate[1:])
             if gate[0] != "report":
-                created = set(Path("runs").glob("*/summary.json")) - before
+                created = Ledger.completed[before:]
                 if len(created) != 1:
                     raise SystemExit(f"Gate {gate[0]} did not produce exactly one summary")
                 summary = json.loads(created.pop().read_text(encoding="utf-8"))

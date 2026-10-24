@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { advancePreview, presentation, samplePreview } from "../src/lib/playback";
+import { advancePreview, presentation, samplePreview, routeRuns } from "../src/lib/playback";
 import type { Route } from "../src/lib/types";
 
 const point=(x:number,y:number,floor_id="ground",gap=false)=>({x,y,floor_id,node:"",gap});
@@ -21,4 +21,11 @@ test("speed changes preserve position and elapsed overshoot",()=>{
   t=advancePreview(t,.5,2,model.duration);
   expect(samplePreview(model,t).point!.x).toBeCloseTo(1.8);
   expect(advancePreview(t,0,4,model.duration)).toBe(t);
+});
+test("renderers never join a hidden floor or connector gap",()=>{
+  const current=routeRuns(route,new Set(["upper"]));
+  expect(current).toHaveLength(1);
+  expect(current[0].every(p=>p.floor_id==="upper")).toBe(true);
+  expect(current[0].map(p=>p.x)).toEqual([20,24]);
+  expect(routeRuns(route,new Set(["ground","upper"]))).toHaveLength(2);
 });

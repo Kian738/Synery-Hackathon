@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { placeMapLabels } from "../lib/mapLabels";
+import { routeRuns } from "../lib/playback";
 import { area, bounds, centroid, zoneOf } from "../lib/geometry";
-import type { Geometry, Opening, Route, Space, XY } from "../lib/types";
+import type { Geometry, Opening, Route, Space, XY, VisualResult } from "../lib/types";
 import { Pictogram } from "./Pictogram";
 
 /** Architect's-drawing plan of one floor: ink outlines, quiet zone tints, the route as floor-marking tape.
@@ -13,10 +15,12 @@ export interface Pin {
   label: string;
   tone: "start" | "end" | "match" | "info";
   n?: number;
+  heading?: number;
 }
 
 interface Props {
   geometry: Geometry;
+  visualResult?:VisualResult|null;
   floorId: string;
   route?: Route | null;
   highlights?: Set<string>;
@@ -28,6 +32,8 @@ interface Props {
   showItems?: boolean;
   onSpaceClick?: (space: Space) => void;
   compact?: boolean;
+  followPosition?:boolean;
+  focusKey?:string;
 }
 
 const ZONE_FILL: Record<string, string> = {
@@ -43,7 +49,7 @@ const flip = ([x, y]: XY): XY => [x, -y];
 const pts = (polygon: XY[]) => polygon.map((p) => flip(p).join(",")).join(" ");
 
 export function PlanView({ geometry, floorId, route, highlights, closed, pins = [], previewDoor, selected, focus,
-  showItems = true, onSpaceClick, compact }: Props) {
+  showItems = true, onSpaceClick, compact,visualResult,followPosition=false,focusKey }: Props) {
   const spaces = useMemo(() => geometry.spaces.filter((s) => s.floor_id === floorId), [geometry, floorId]);
   const openings = useMemo(() => geometry.openings.filter((o) => o.floor_id === floorId), [geometry, floorId]);
   const assets = useMemo(() => geometry.assets.filter((a) => a.floor_id === floorId), [geometry, floorId]);
@@ -55,15 +61,12 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
   }, [box, size]);
   const [view, setView] = useState(fit);
   const svg = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
+  const drag = useRef<{ x: number; y: number; view: typeof view; moved: boolean;spaceId:string|null } | null>(null);
 
-  useEffect(() => setView(fit), [fit]);
-  useEffect(() => {
-    if (!focus) return;
-    const w = Math.min(fit.w, Math.max(size * 0.35, 18));
-    const h = (w * fit.h) / fit.w;
-    setView({ x: focus[0] - w / 2, y: -focus[1] - h / 2, w, h });
-  }, [focus, fit, size]);
+  const [tracking,setTracking]=useState(true);
+  useEffect(() => {setView(fit);setTracking(true);}, [fit]);
+  useEffect(()=>setTracking(true),[focusKey]);
+
 
   // Sizes are set in screen pixels, then converted to metres, so labels stay readable in any building.
   const [screen, setScreen] = useState({ w: 800, h: 600 });
@@ -75,6 +78,11 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  useEffect(()=>{
+    if(!focus||(followPosition&&!tracking))return;
+    const w=Math.max(12,Math.min(24,size*.25)),h=w*screen.h/Math.max(1,screen.w);
+    setView({x:focus[0]-w/2,y:-focus[1]-h/2,w,h});
+  },[focus,screen.w,screen.h,size,followPosition,tracking]);
   const pxPerM = Math.max(0.01, Math.min(screen.w / view.w, screen.h / view.h));
   const scale = 8 / pxPerM; // 8 screen px, in metres: base unit for strokes and markers
   const font = 12.5 / pxPerM; // labels are 12.5 px on screen
@@ -83,32 +91,22 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     geometry.connectors.filter((c) => closed?.has(c.id)).forEach((c) => c.space_ids.forEach((s) => ids.add(s)));
     return ids;
   }, [closed, geometry]);
+  const labelIds=useMemo(()=>placeMapLabels(spaces.flatMap(s=>{
+    const [x,y]=flip(s.anchor??centroid(s.polygon)),core=zoneOf(s)==="core",text=s.ref||s.name;
+    if(x<view.x||x>view.x+view.w||y<view.y||y>view.y+view.h)return [];
+    const pixels=area(s.polygon)*pxPerM*pxPerM;
+    if(s.id!==selected&&pixels<(core?500:1500))return [];
+    return [{id:s.id,x:(x-view.x)*pxPerM,y:(y-view.y)*pxPerM,width:core?22:Math.min(150,text.length*6.5),height:core?22:17,
+             priority:s.id===selected?1e9:(highlights?.has(s.id)?1e6:0)+pixels}];
+  }),compact?12:32),[spaces,view,pxPerM,selected,highlights,compact]);
   const coreIcon = (s: Space) => (/lift/.test(s.type + s.room_type) ? "lift" : "stairs");
 
   const zoom = (factor: number, cx = view.x + view.w / 2, cy = view.y + view.h / 2) =>
     setView((v) => ({ x: cx - (cx - v.x) * factor, y: cy - (cy - v.y) * factor, w: v.w * factor, h: v.h * factor }));
   const pan = (dx: number, dy: number) => setView((v) => ({ ...v, x: v.x + dx * v.w, y: v.y + dy * v.h }));
 
-  const runs = useMemo(() => {
-    if (!route) return [] as XY[][];
-    const out: XY[][] = [];
-    let current: XY[] = [];
-    for (const p of route.polyline as (typeof route.polyline[number] & { gap?: boolean })[]) {
-      if (p.gap && current.length) {
-        out.push(current);
-        current = [];
-      }
-      if (p.floor_id === floorId) current.push([p.x, p.y]);
-      else if (current.length) {
-        out.push(current);
-        current = [];
-      }
-    }
-    if (current.length) out.push(current);
-    return out.filter((r) => r.length > 1);
-  }, [route, floorId]);
+  const runs=useMemo(()=>route?routeRuns(route,new Set([floorId])).map(run=>run.map(p=>[p.x,p.y] as XY)):[],[route,floorId]);
 
-  const length = (run: XY[]) => run.reduce((sum, p, i) => (i ? sum + Math.hypot(p[0] - run[i - 1][0], p[1] - run[i - 1][1]) : 0), 0);
 
   return (
     <div ref={box_} className="relative h-full w-full select-none overflow-hidden" onKeyDown={(e) => {
@@ -123,23 +121,35 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
         onWheel={(e) => {
+          if(followPosition)setTracking(false);
           const r = svg.current!.getBoundingClientRect();
           const k = Math.max(view.w / r.width, view.h / r.height);
           const cx = view.x + (e.clientX - r.left - (r.width - view.w / k) / 2) * k;
           const cy = view.y + (e.clientY - r.top - (r.height - view.h / k) / 2) * k;
           zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15, cx, cy);
         }}
-        onPointerDown={(e) => (drag.current = { x: e.clientX, y: e.clientY, view, moved: false })}
+        onPointerDown={e=>{
+          if(e.button!==0)return;
+          const spaceId=(e.target as Element).closest('[data-space-id]')?.getAttribute('data-space-id')??null;
+          drag.current={x:e.clientX,y:e.clientY,view,moved:false,spaceId};
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
         onPointerMove={(e) => {
           if (!drag.current) return;
           const r = svg.current!.getBoundingClientRect();
           const k = Math.max(view.w / r.width, view.h / r.height);
           const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
-          if (Math.abs(dx) + Math.abs(dy) > 4) drag.current.moved = true;
+          if (Math.hypot(dx,dy)>5) {drag.current.moved=true;if(followPosition)setTracking(false);}
+          if(!drag.current.moved)return;
           setView({ ...drag.current.view, x: drag.current.view.x - dx * k, y: drag.current.view.y - dy * k });
         }}
-        onPointerUp={() => setTimeout(() => (drag.current = null), 0)}
-        onPointerLeave={() => (drag.current = null)}
+        onPointerUp={e=>{
+          const gesture=drag.current;drag.current=null;
+          if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
+          if(gesture&&!gesture.moved&&gesture.spaceId){const room=spaces.find(s=>s.id===gesture.spaceId);if(room)onSpaceClick?.(room);}
+        }}
+        onPointerCancel={()=>{drag.current=null;}}
+        onPointerLeave={e=>{if(!e.currentTarget.hasPointerCapture(e.pointerId))drag.current=null;}}
       >
         <g>
           {spaces.map((s) => {
@@ -149,12 +159,12 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
             return (
               <polygon
                 key={s.id}
+                data-space-id={s.id}
                 points={pts(s.polygon)}
                 fill={isClosed ? "#f3d9dd" : ZONE_FILL[zone]}
                 stroke="var(--color-ink)"
                 strokeWidth={scale * 0.14}
                 className="cursor-pointer transition-[fill] duration-150 hover:fill-white"
-                onClick={() => !drag.current?.moved && onSpaceClick?.(s)}
               >
                 <title>{`${s.name} — ${s.room_type.replace(/_/g, " ")}, ${area(s.polygon).toFixed(1)} m²`}</title>
               </polygon>
@@ -183,21 +193,20 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
               fill={closed?.has(o.id) ? "var(--color-signal)" : o.step_free ? "white" : "var(--color-mark)"}
               stroke="var(--color-ink)" strokeWidth={scale * 0.1}><title>{`${o.kind}, ${o.width_m} m${o.step_free ? "" : ", has steps"}`}</title></rect>;
           })}
-          {showItems && assets.filter((a) => a.category === "machine" || a.category === "equipment").map((a) => {
+          {showItems && assets.filter((a) => highlights?.has(a.id)||a.category === "machine" || a.category === "equipment").map((a) => {
             const [x, y] = flip(a.position);
             const w = a.footprint?.width_m ?? 0.6, d = a.footprint?.depth_m ?? 0.6;
+            if(!highlights?.has(a.id)&&Math.max(w,d)*pxPerM<4)return null;
             return <rect key={a.id} x={x - w / 2} y={y - d / 2} width={w} height={d}
               transform={`rotate(${-(a.footprint?.rotation_deg ?? 0)} ${x} ${y})`}
               fill={highlights?.has(a.id) ? "var(--color-mark)" : "none"} stroke="var(--color-ink-3)" strokeWidth={scale * 0.08}>
               <title>{a.name}</title></rect>;
           })}
           {spaces.map((s) => {
-            const a = area(s.polygon);
-            const minArea = 1500 / (pxPerM * pxPerM); // room must offer ~1500 px² on screen for a label
+            if(!labelIds.has(s.id))return null;
             const zone = zoneOf(s);
             const [x, y] = flip(centroid(s.polygon));
             if (zone === "core") return <g key={`l-${s.id}`} transform={`translate(${x - font} ${y - font}) scale(${font / 12})`} color="var(--color-ink)" pointerEvents="none"><Pictogram name={coreIcon(s)} size={24} /></g>;
-            if (a < minArea && !highlights?.has(s.id) && selected !== s.id) return null;
             return <text key={`l-${s.id}`} x={x} y={y} fontSize={font} textAnchor="middle" dominantBaseline="middle"
               fill="var(--color-ink)" fontFamily="var(--font-sign)" fontWeight={600} pointerEvents="none">{s.ref || s.name}</text>;
           })}
@@ -207,14 +216,19 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
           })()}
           {runs.map((run, i) => {
             const d = run.map((p) => flip(p).join(",")).join(" ");
-            const len = length(run) + 1;
             return (
               <g key={`${route?.length_m}-${i}`} pointerEvents="none">
                 <polyline points={d} fill="none" stroke="var(--color-ink)" strokeWidth={font * 0.95} strokeLinecap="round" strokeLinejoin="round" />
                 <polyline points={d} fill="none" stroke="var(--color-mark)" strokeWidth={font * 0.6} strokeLinecap="round" strokeLinejoin="round"
-                  className="route-draw" style={{ ["--len" as string]: len }} />
+                  />
               </g>
             );
+          })}
+          {visualResult?.kind==="intervention"&&(()=>{const o=visualResult.measurements.proposed_opening as Opening|undefined;return o?.floor_id===floorId?<circle cx={o.position[0]} cy={-o.position[1]} r={font} fill="none" stroke="var(--color-mandatory)" strokeWidth={scale*.4} strokeDasharray={`${scale} ${scale*.4}`}><title>Proposed opening, not applied</title></circle>:null;})()}
+          {visualResult?.lines?.map((line,i)=>{
+            const floor=geometry.floors.find(f=>Math.abs(f.elevation_m-line.a[2])<.01);
+            if(floor&&floor.id!==floorId)return null;
+            return <line key={`measurement-${i}`} x1={line.a[0]} y1={-line.a[1]} x2={line.b[0]} y2={-line.b[1]} stroke="var(--color-mandatory)" strokeWidth={scale*.4} strokeDasharray={`${scale} ${scale*.4}`}><title>{visualResult.title}</title></line>;
           })}
           {pins.filter((p) => p.floor_id === floorId).map((p) => {
             const [x, y] = flip(p.at);
@@ -222,15 +236,18 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
             const fill = p.tone === "start" ? "var(--color-escape)" : p.tone === "end" ? "var(--color-ink)" : p.tone === "match" ? "var(--color-mandatory)" : "var(--color-ink-3)";
             return (
               <g key={p.id} pointerEvents="none">
-                {p.tone === "end" ? (
+                {p.id === "preview" ? (
+                  <path d={`M${x} ${y-r}L${x-r*.8} ${y+r*.75}L${x} ${y+r*.3}L${x+r*.8} ${y+r*.75}Z`} fill="var(--color-mark)" stroke="var(--color-ink)" strokeWidth={scale*.25}/>
+                ) : p.tone === "end" ? (
                   <rect x={x - r} y={y - r} width={2 * r} height={2 * r} fill={fill} stroke="var(--color-mark)" strokeWidth={scale * 0.35} />
                 ) : (
                   <circle cx={x} cy={y} r={r} fill={fill} stroke="white" strokeWidth={scale * 0.25} />
                 )}
                 <text x={x} y={y} fontSize={font * 1.05} textAnchor="middle" dominantBaseline="central"
                   fill={p.tone === "end" ? "var(--color-mark)" : "white"} fontWeight={700} fontFamily="var(--font-sign)">
-                  {p.n ?? (p.tone === "start" ? "●" : p.tone === "end" ? "▸" : "")}
+                  {p.n ?? (p.tone === "end" ? "▸" : "")}
                 </text>
+                {p.heading!==undefined&&<path d={`M${x} ${y-r*2.2}L${x-r*.55} ${y-r*1.1}L${x+r*.55} ${y-r*1.1}Z`} fill={fill} transform={`rotate(${p.heading} ${x} ${y})`}/>}
                 <title>{p.label}</title>
               </g>
             );
@@ -238,7 +255,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
         </g>
       </svg>
       <div className={`absolute ${compact ? "bottom-2 right-2" : "bottom-4 right-4"} flex flex-col border border-ink bg-white`}>
-        {[["plus", () => zoom(0.75), "Zoom in"], ["minus", () => zoom(1.33), "Zoom out"], ["fit", () => setView(fit), "Fit floor"]].map(([icon, fn, label]) => (
+        {[["plus", () => zoom(0.75), "Zoom in"], ["minus", () => zoom(1.33), "Zoom out"], ["fit", () => {if(followPosition)setTracking(true);else setView(fit);}, followPosition?"Follow preview":"Fit floor"]].map(([icon, fn, label]) => (
           <button key={icon as string} type="button" onClick={fn as () => void} aria-label={label as string} title={label as string}
             className="grid h-9 w-9 place-items-center border-b border-concrete-3 last:border-b-0 hover:bg-concrete">
             <Pictogram name={icon as string} size={18} />

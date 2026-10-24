@@ -3,6 +3,16 @@ import type React from "react";
 // Signage-style pictograms (ISO 7001/7010-inspired), drawn as simple strokes so they read at 20 px.
 
 const PATHS: Record<string, React.ReactNode> = {
+  phone: <><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 5h4M11 19h2"/></>,
+  play: <path d="M8 4l12 8-12 8z" fill="currentColor" stroke="none" />,
+  pause: <path d="M7 4h4v16H7zM15 4h4v16h-4z" fill="currentColor" stroke="none" />,
+  replay: <path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" />,
+  "skip-back": <path d="M5 5v14M18 5l-9 7 9 7z" />,
+  "skip-next": <path d="M19 5v14M6 5l9 7-9 7z" />,
+  hand: <path d="M8 12V5a2 2 0 0 1 4 0v6M12 9V4a2 2 0 0 1 4 0v7M16 10V7a2 2 0 0 1 4 0v8c0 4-3 6-6 6h-2c-2 0-3-1-4-3l-4-6c-1-2 1-3 2-2l2 2" />,
+  orbit: <><ellipse cx="12" cy="12" rx="10" ry="5"/><ellipse cx="12" cy="12" rx="5" ry="10"/></>,
+  map: <path d="M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2zM9 3v16M15 5v16" />,
+  info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></>,
   start: <circle cx="12" cy="12" r="5" fill="currentColor" stroke="none" />,
   straight: <path d="M12 20V5M6 11l6-6 6 6" />,
   left: <path d="M17 20v-7a4 4 0 0 0-4-4H5M10 4L5 9l5 5" />,

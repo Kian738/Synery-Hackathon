@@ -89,48 +89,101 @@ def resolve_spec(building: Building, spec: QuerySpec) -> dict:
     return inputs
 
 
-MAX_ALTERNATIVES = 12
+MAX_ALTERNATIVES = 64
+ENUMERATE_LIMIT = 4096
+SLOTS = ("start", "first", "second", "destination")
+
+
+def _even_picks(total: int, count: int) -> list[int]:
+    """count indices spread evenly over range(total), always including the first and last: a fixed,
+    order-independent sample instead of the first few readings (which would pin the first slot)."""
+    if total <= count:
+        return list(range(total))
+    return sorted({round(i * (total - 1) / (count - 1)) for i in range(count)})
+
+
+def _decode(index: int, radices: list[int]) -> list[int]:
+    digits = []
+    for radix in reversed(radices):
+        index, digit = divmod(index, radix)
+        digits.append(digit)
+    return digits[::-1]
+
+
+def _candidate_ids(building: Building, mention: str, strict: bool = True) -> list[str] | None:
+    """None: the mention resolves to one space. Otherwise the spaces that tie on name (and floor).
+    A mention that matches nothing exactly re-raises its own error when strict, so the caller sees why."""
+    try:
+        R.resolve_space(building, mention)
+        return None
+    except R.ResolveError as error:
+        ids = [c["id"] for c in error.candidates if "score" not in c]
+        if not ids and strict:
+            raise
+        return ids
 
 
 def resolve_spec_all(building: Building, spec: QuerySpec) -> list[dict]:
     """Like resolve_spec, but when a space name is shared by several spaces (OSM has duplicate names),
-    return one inputs dict per reading instead of failing. The benchmark path solves each and votes."""
+    return one inputs dict per reading instead of failing. The benchmark path solves each and votes.
+
+    Repeated mentions may denote the same space; zero-length readings remain valid.
+    More than MAX_ALTERNATIVES readings are sampled evenly across all combinations, not cut off after the first."""
     try:
         return [resolve_spec(building, spec)]
     except R.ResolveError as error:
-        slots = {}
-        for slot in ("start", "first", "second", "destination"):
+        slots: dict[str, list[str]] = {}
+        for slot in SLOTS:
             mention = getattr(spec, slot)
             if mention is None:
                 continue
-            try:
-                R.resolve_space(building, mention)
-            except R.ResolveError as slot_error:
-                ids = [c["id"] for c in slot_error.candidates if "score" not in c]
-                if not ids:
-                    raise
+            ids = _candidate_ids(building, mention)
+            if ids is not None:
                 slots[slot] = ids
-        stop_options = []
+        stop_options: list[list[str]] = []
         for stop in spec.stops or []:
-            try:
-                stop_options.append([R.resolve_space(building, stop).id])
-            except R.ResolveError as stop_error:
-                ids = [c["id"] for c in stop_error.candidates if "score" not in c]
-                if not ids:
-                    raise
-                stop_options.append(ids)
+            ids = _candidate_ids(building, stop)
+            stop_options.append([R.resolve_space(building, stop).id] if ids is None else ids)
         if not slots and not any(len(o) > 1 for o in stop_options):
             raise error
-    readings = [spec]
-    for slot, ids in slots.items():
-        readings = [r.model_copy(update={slot: space_id}) for r in readings for space_id in ids]
-    if spec.stops:
-        for index, ids in enumerate(stop_options):
-            readings = [
-                r.model_copy(update={"stops": [*r.stops[:index], space_id, *r.stops[index + 1:]]})
-                for r in readings for space_id in ids
-            ]
-    return [resolve_spec(building, reading) for reading in readings[:MAX_ALTERNATIVES]]
+    names = list(slots)
+    options = [slots[name] for name in names] + stop_options
+    radices = [len(o) for o in options]
+    total = 1
+    for radix in radices:
+        total *= radix
+
+    def reading(index: int) -> dict:
+        choice = _decode(index, radices)
+        update: dict = {name: options[i][choice[i]] for i, name in enumerate(names)}
+        if spec.stops:
+            update["stops"] = [options[len(names) + i][choice[len(names) + i]] for i in range(len(spec.stops))]
+        return resolve_spec(building, spec.model_copy(update=update))
+
+    indices = range(total) if total <= ENUMERATE_LIMIT else _even_picks(total, ENUMERATE_LIMIT)
+    readings = [reading(i) for i in indices]
+    return [readings[i] for i in _even_picks(len(readings), MAX_ALTERNATIVES)]
+
+
+def describe_ambiguity(building: Building, spec: QuerySpec) -> list[dict]:
+    """What a question leaves open: for every mention that fits several spaces, the tied candidates and
+    which of their recorded properties could tell them apart. Display and diagnosis only; never used to choose."""
+    found = []
+    mentions = [(slot, getattr(spec, slot)) for slot in SLOTS if getattr(spec, slot)]
+    mentions += [(f"stops[{i}]", stop) for i, stop in enumerate(spec.stops or [])]
+    for slot, mention in mentions:
+        ids = _candidate_ids(building, mention, strict=False)
+        if not ids or len(ids) < 2:
+            continue
+        spaces = [building.spaces[i] for i in ids]
+        differing = [key for key in ("ref", "room_type", "floor_id") if len({str(s.get(key)) for s in spaces}) > 1]
+        found.append({
+            "slot": slot,
+            "mention": mention,
+            "candidates": [{"id": s["id"], "label": building.label(s["id"]), "ref": s.get("ref")} for s in spaces],
+            "differs_in": differing,
+        })
+    return found
 
 
 def _need(value, what: str):

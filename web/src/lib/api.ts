@@ -24,6 +24,7 @@ const post = (url: string, body: unknown) =>
 type WithEvents<T> = { result: T; events: UiEvent[] };
 
 export const api = {
+  resultPage: (session:string,result:string,offset=0) => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),
   profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
   widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
   weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
@@ -43,8 +44,9 @@ export const api = {
 
 export type ChatEvent =
   | { type: "tool"; data: { name: string; input: Record<string, any> } }
+  | { type: "tool_result"; data:{name:string;content:string;is_error:boolean} }
   | { type: "ui"; data: UiEvent }
-  | { type: "reply"; data: { text: string; usage: Record<string, number>; model: string } }
+  | { type: "reply"; data: { text: string; usage: Record<string, unknown>; model: string } }
   | { type: "error"; data: { message: string } }
   | { type: "done"; data: null };
 
@@ -78,8 +80,8 @@ export async function readEvents<T>(response: Response, onEvent: (e: T) => void)
   }
 }
 
-export const chat = (sessionId: string, text: string, onEvent: (e: ChatEvent) => void) =>
-  post(`/api/sessions/${sessionId}/chat`, { text }).then((r) => readEvents(r, onEvent));
+export const chat = (sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null) =>
+  post(`/api/sessions/${sessionId}/chat`, { text,selected_space:selectedSpace??null }).then((r) => readEvents(r, onEvent));
 
 // ---------- Lab ----------
 

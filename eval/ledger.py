@@ -4,6 +4,7 @@ so runs can be compared over time (eval.report) instead of eyeballed."""
 import json
 import subprocess
 import time
+import uuid
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -22,10 +23,12 @@ def git_sha() -> str:
 
 
 class Ledger:
+    completed: list[Path] = []
+
     def __init__(self, suite: str, config: dict, name: str | None = None) -> None:
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        self.directory = RUNS / f"{stamp}_{suite}{'_' + name if name else ''}"
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.directory = RUNS / f"{stamp}_{suite}{'_' + name if name else ''}_{uuid.uuid4().hex[:8]}"
+        self.directory.mkdir(parents=True, exist_ok=False)
         self.suite, self.config = suite, dict(config)
         import os
 
@@ -76,6 +79,7 @@ class Ledger:
             "usage": dict(self.usage),
         }
         (self.directory / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
+        self.completed.append(self.directory / "summary.json")
         if not quiet:
             print_summary(summary)
             print(f"run saved to {self.directory}")

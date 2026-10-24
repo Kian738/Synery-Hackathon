@@ -1,13 +1,13 @@
 # Status: what works, what is untested, what is missing
 
-Last updated: 2026-10-24 (implementation milestone 1). **verified** = measured by an eval or test in this repo; **live-tested** = ran against a real LLM; **untested** = written but never run; **missing** = not built.
+Last updated: 2026-10-24 (UX overhaul milestones 1–3). **verified** = measured by an eval or test in this repo; **live-tested** = ran against a real LLM; **untested** = written but never run; **missing** = not built.
 
 ## Challenge levels
 
 | Level | Capability | Status | Evidence |
 |---|---|---|---|
 | 1 Locate | find items and rooms by name, type, number | verified | `e2e_basic` locate 553/553, count 239/239 |
-| 1 Locate | show them on a view | verified (old UI) | highlight events; screenshots |
+| 1 Locate | show them on a view | verified | complete visual events, linked views and desktop/phone regression tests |
 | 2 Route | shortest route, step-free, closures, tours | verified | `routes` 2130/2130 (to the cm) |
 | 2 Route | avoid X and Y, soft avoid, no stairs/lifts, min door width | verified in unit tests | `tests/test_core.py`; no gold exists |
 | 2 Route | humane drawn routes (inside rooms, around furniture, no entrance teleport) | validated/withheld | latest: 134 valid routes and 26 withheld cases in 160 dev samples; no collision-crossing fallback |
@@ -94,3 +94,55 @@ The recorded deterministic fallback and screenshots are under runs/demo; the cap
 ## UX overhaul milestone 1 (2026-10-24)
 
 Implemented a shared preview timeline, frame-independent progress, bounded camera rotation, seek/speed controls, distinct arrival state, landmark guidance, explicit floor scopes, persistent manual-position markers, a linked expandable plan, and a collapsed route itinerary. Preview never changes declared location. Verified: `fw check` (27 unit tests and all offline gates; existing ambiguous-name misses unchanged); 40 initial desktop/phone checks passed, four corrected-flow checks passed on rerun, and two new seek/arrival/replay checks passed. Physical voice and uncoached teammate testing remain manual.
+
+## UX overhaul milestones 2–3 (2026-10-24)
+
+The building workspace now has linked/focused plan and model selection, manual location/facing separate from preview position, compact mobile guidance with an expandable stage, camera memory, instanced oriented door frames, illustrative ceilings and recognizable equipment. Duplicate/coplanar display walls are unioned without changing analytical geometry. Supplied stair assets are illustrative; unsurveyed connector interiors use landing transitions, not invented continuous flights.
+
+Chat now dispatches supported counts, item rankings, highlights, area queries and references deterministically, including without an API key. Unknown simple wording uses the configured parser; edits, complex constraints and multi-step work use the full agent. Required parser fields are checked before execution. All geometry facts stay deterministic. Specialized tool schemas load on demand on both providers.
+
+Complete visual result events and session-scoped paged results support every question family. Search no longer limits computed highlights to 12. New analytics include inclusive, labeled chair-family counts, optional floor/room counts, room rankings with ties, AND equipment/minimum-count filters, and area/count groups. Source capacity, bookings, access and windows remain unavailable rather than inferred. Per-turn usage includes cache tokens and latency; price estimates require explicit `FLOORWISE_MODEL_PRICES_JSON` rates (USD per million tokens).
+
+The eval ledger now creates unique run directories and gates identify their own process's summaries, fixing same-second evidence overwrites. Latest verification details and the 25-issue mapping are in `docs/UX_AUDIT.md`. Physical voice, projector/FPS measurement and the three-person uncoached study remain manual; no claim of having completed them is made.
+
+### Latest measured evidence
+
+- `fw check`: 57 unit tests passed; all offline gates passed. Routing 2130/2130, solver/parser 655/655, test parser 145/145, robustness 630/630, metamorphic 898/898, differential 240/240. The eight pre-existing ambiguous-name e2e misses are unchanged.
+- `fw ui-test`: 64 desktop/phone checks passed; the two opt-in recording cases are skipped in routine runs.
+- All 280 supplied buildings compiled successfully: 175,456 display-wall segments in 11.11 seconds total on this machine. This is compilation throughput, not an FPS measurement.
+- Live Claude and Groq passed unfamiliar-count wording and closure tools; the final closure smoke passed with deferred tool schemas on both providers. Known simple chat questions are verified to make zero model calls.
+- Visual audit evidence: `runs/ux-overhaul/`; complete issue mapping and human acceptance script: `docs/UX_AUDIT.md`.
+
+The updated deterministic fallback recording passed its opt-in capture test and is saved at `runs/demo/fallback.webm`, including a real zero-model chair-ranking turn after the scripted route/closure/fix transport. It is not a live voice recording.
+
+## CIT walking regression and straight corridors (2026-10-24)
+
+Fixed grid-region connectivity to match the pathfinder's no-corner-cutting rule. The reported CIT route 03.05.061 → 00.05.058 now produces validated walking geometry. Empty, convex, elongated corridors use a verified central straight run with door approaches instead of raster-induced slalom. Source graph/benchmark distances and obstacle collision checks are unchanged. Verified by targeted regressions and `fw check`; subsequent UI redesign is in progress.
+
+## Guidance and rendering second pass (2026-10-24)
+
+Guide me now uses the full scene and one compact media player with direct play, seeking, chapter navigation, speed and replay. Map and conversation are opt-in drawers. Room selection preserves camera framing; Focus room and Fit animate explicit changes. Pointer-intent handling prevents pan/rotate gestures from selecting rooms, including drags returning to their origin. Dense plan labels avoid collisions; route/selected connector labels use fixed-size icons. Raised opaque route geometry and tighter camera depth ranges replace overlapping route strips. Interiors retain ceilings. Manual-location and simulated-progress markers are distinct.
+
+Integrated the reviewed Claude asset catalogue: all 96 supplied types have bounded, illustrative procedural silhouettes rendered in instanced batches. Repeated tools are grouped by turn and name with inspectable inputs and computed summaries. The closure stress-test panel now explains its actual reachability computation and assumptions.
+
+Verification: `fw check` passed all offline gates; the eight existing ambiguous-name e2e misses are unchanged. Full desktop/phone UI run: 90 passed, four opt-in capture/contact-sheet cases skipped. TypeScript check passed after the concurrent companion package's typing fix. Screenshot evidence is under `runs/ux2/`; design rationale and incomplete stair/sensor/human checks are documented in `docs/UX_REVIEW_SECOND_PASS.md`. The phone companion and benchmark-resolution packages remain separate work until their READY handoffs are reviewed; this milestone does not claim they are integrated.
+
+## Paired phone integration and ambiguity review (2026-10-24)
+
+The companion is now mounted at `/phone` with confirmed, expiring pairing, synchronized computed instructions, remote chapter/repeat controls, touch/optional gyro camera orientation, recenter, revocation and reconnect. `fw start --lan` exposes the single-process server to the selected same-network phone setup. Added the required WebSocket transport dependency. The default LAN HTTP setup supports touch; motion requires a trusted secure context and an explicit user action. No physical phone, iOS hardware or real LAN trial is claimed. Setup and the short jury beat are in `docs/PHONE_DEMO.md`.
+
+The real two-context integration test exposed a connector-label DOM teardown race. Labels now project into the ordinary React overlay with wall occlusion rather than creating independent DOM roots inside the canvas. First-person orientation looks farther along visible walking sections, ray-tested against walls, while positions remain on the validated route. Phone orientation does not update the declared location. Read-aloud also works when explicitly enabled during playback.
+
+Reviewed the benchmark package: larger bounded sampling and ambiguity diagnostics are integrated; the proposed same-room pruning was rejected to preserve valid zero-length/repeated-room interpretations. The eight insufficiently specified end-to-end misses remain unchanged. Final `fw check`: 108 unit tests and all offline gates passed. Full UI run: 113 passed; 27 duplicate-project/opt-in cases skipped. The final wall-visible camera adjustment passed 11 targeted checks, including real paired navigation, with one duplicate-project skip. Typechecking and production build passed through `fw ui-test`.
+
+The multi-hop capacity/evacuation proposal and landmark/multisensory evidence are saved under `research_notes/scenario-simulation/`; integer scheduling/discretization concerns are recorded in the integration review. This is research only. Capacity units are still an outstanding user decision; no occupancy, throughput, stair flights, hazard progression or responder tactics have been invented. Continuous surveyed stair traversal, physical voice/sensor rehearsal and unfamiliar-user acceptance remain incomplete.
+
+## Atrium, phone and chat corrections (2026-10-24)
+
+Removed blanket current-room ceilings. Recorded upper-floor unions are triangulated with gaps intact, and actual upper slabs/walls provide context during guidance. All 280 buildings compiled to 85,264 slab triangles in 20.475 seconds; summed triangle areas match every unioned footprint within 1e-5 m². This does not recover unrecorded roof/atrium geometry or measure interactive FPS.
+
+The route display now uses flat strips and round joins instead of swept tubes. Camera turns use damping and a speed bound; the analytical walking polyline is unchanged. Claude owns the pending graph/routing changes and the remaining walking-line zigzag audit. Scene pinch-wheel gestures no longer zoom the whole page; intentional page/keyboard zoom remains available. The media rail is smaller and mobile secondary tools are collapsed.
+
+Fixed the phone's ignored overview input when no route existed. The pad now turns the existing overview or first-person camera without silently changing modes or declared position. The phone can open the current building in its own expanded 3D workspace; motion/disconnect controls are collapsed. Verified in separate browser contexts, not on physical hardware. Assistant room mentions now link unique names/references to the real room inspector/focus; ambiguous names and decimal measurements are not guessed into links. Added footprint clipping for rotated equipment parts after the isolated tests exposed small robot-cell arm overflow.
+
+Release browser validation: 124 passed, 28 duplicate-project/opt-in cases skipped. Integration snapshot: 118 unit tests and all offline gates passed. The shared core's basic e2e result is 2122/2130 versus the prior committed 2124/2130; this belongs to Claude's in-progress core changes and is documented in `docs/parallel/codex-third-pass-handoff.md`. No graph/routing changes are included in the UI commit. Sources and future VR/AR/SLAM/Wi-Fi/BLE requirements are in `research_notes/PHONE_XR_POSITIONING_REVIEW.md`. Physical devices, immersive XR and live positioning remain unverified/unimplemented.
