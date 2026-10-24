@@ -104,6 +104,12 @@ def resolve_space(building: Building, mention: str, floor_hint: str | None = Non
             f"'{mention}' matches {len(exact)} spaces; which one?",
             [{"id": i, "label": building.label(i)} for i in exact],
         )
+    # "room 0.29", "the 2.04 lab": a token that is a room number settles it when unique on the floor.
+    refs = [t for t in key.split() if any(ch.isdigit() for ch in t)]
+    for token in refs:
+        by_ref = [s["id"] for s in pool if s.get("ref") and normalise(s["ref"]) == token]
+        if len(by_ref) == 1:
+            return Resolution(by_ref[0], 0.95)
     choices = {s["id"]: normalise(f"{s['name']} {s.get('ref') or ''}") for s in pool}
     ranked = process.extract(key, choices, scorer=fuzz.token_set_ratio, limit=5)
     if ranked and ranked[0][1] >= FUZZY_ACCEPT and (len(ranked) == 1 or ranked[0][1] - ranked[1][1] >= 5):
@@ -134,7 +140,7 @@ def _vocab_match(text: str, vocabulary: set[str], what: str) -> str:
         if attempt in candidates:
             return candidates[attempt]
     ranked = process.extract(key, list(candidates), scorer=fuzz.ratio, limit=3)
-    if ranked and ranked[0][1] >= 85:
+    if ranked and ranked[0][1] >= 78 and (len(ranked) == 1 or ranked[0][1] - ranked[1][1] >= 8):
         return candidates[ranked[0][0]]
     raise ResolveError(f"Unknown {what} '{text}'.", [{"id": candidates[r[0]], "score": round(r[1])} for r in ranked])
 

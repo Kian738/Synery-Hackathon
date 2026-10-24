@@ -5,9 +5,10 @@ import re
 
 from floorwise.agent.spec import QuerySpec
 
-FLOOR_NAME = r"(?:ground floor|floor\s*-?\d+|basement\s*\d+|level\s*-?\d+)"
+_ORD = r"(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|\d+(?:st|nd|rd|th))"
+FLOOR_NAME = (r"(?:ground floor|floor\s*-?\d+|basement\s*\d*|level\s*-?\d+|storey\s*-?\d+|" + _ORD + r"\s+(?:floor|storey|level|basement))")
 SPACE = r"(?P<{name}>.+?\(" + FLOOR_NAME + r"\))"  # "Bathroom 0.05 (apartment 2) (Ground floor)"
-FLOOR = r"(?:the\s+)?(?P<floor>ground floor|floor\s*-?\d+|basement\s*\d+|level\s*-?\d+)"
+FLOOR = r"(?:the\s+)?(?P<floor>" + FLOOR_NAME + ")"
 
 
 def _space(name: str) -> str:
