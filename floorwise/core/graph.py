@@ -34,6 +34,9 @@ class Constraints:
     extra_openings: tuple[dict, ...] = ()  # what-if doors
     soft_avoid_types: frozenset[str] = frozenset()
     soft_penalty: float = 3.0
+    # "free": the dataset's model, all entrances meet at one outside node at zero cost (benchmark).
+    # "none": people do not teleport between entrances; routes stay indoors (navigation).
+    outside: str = "free"
 
     def describe(self) -> list[str]:
         notes = []
@@ -105,7 +108,8 @@ class RouteGraph:
             door = DOOR_PREFIX + opening["id"]
             for space_id in opening["space_ids"]:
                 if space_id == OUTSIDE:
-                    graph.add_edge(OUTSIDE, door, weight=0.0, via=opening["id"])
+                    if constraints.outside == "free":
+                        graph.add_edge(OUTSIDE, door, weight=0.0, via=opening["id"])
                 elif space_id in anchors:
                     distance = math.dist(anchors[space_id], opening["position"])
                     if constraints.soft_avoid_types:

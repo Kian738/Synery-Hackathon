@@ -33,6 +33,8 @@ SUITES = {
     "interaction": {"label": "Tricky users + judge", "llm": True, "args": ["--only"]},
 }
 JOBS: dict[str, dict] = {}
+JOB_TIMEOUT_S = int(os.environ.get("FLOORWISE_JOB_TIMEOUT_S", "1200"))
+JOB_TOKEN_BUDGET = os.environ.get("FLOORWISE_JOB_MAX_TOKENS", "300000")
 
 
 def summaries() -> list[dict]:
@@ -123,7 +125,7 @@ def launch(body: Launch) -> dict:
     if any(f not in allowed for f in flags):
         raise HTTPException(422, f"allowed flags for {body.suite}: {sorted(allowed)}")
     job_id = uuid.uuid4().hex[:8]
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "FLOORWISE_MAX_TOKENS": JOB_TOKEN_BUDGET}
     if "llm" not in body.args and SUITES[body.suite]["llm"] == "optional":
         env["FLOORWISE_OFFLINE"] = "1"
     command = [sys.executable, "-u", "-m", "eval", body.suite, *body.args]
@@ -135,9 +137,13 @@ def launch(body: Launch) -> dict:
         before = {p.name for p in RUNS.glob("*")} if RUNS.exists() else set()
         process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    text=True, encoding="utf-8", errors="replace")
+        job["process"] = process
+        deadline = threading.Timer(JOB_TIMEOUT_S, lambda: (job["lines"].append(f"[lab] stopped: over {JOB_TIMEOUT_S}s"), process.kill()))
+        deadline.start()
         for line in process.stdout:
             job["lines"].append(line.rstrip())
         job["code"] = process.wait()
+        deadline.cancel()
         new = sorted({p.name for p in RUNS.glob("*")} - before)
         job["run"] = new[-1] if new else None
         job["done"] = True
@@ -146,9 +152,19 @@ def launch(body: Launch) -> dict:
     return {"id": job_id}
 
 
+@router.post("/jobs/{job_id}/cancel")
+def cancel(job_id: str) -> dict:
+    job = JOBS.get(job_id)
+    if not job or job["done"] or "process" not in job:
+        raise HTTPException(404, "no running job")
+    job["lines"].append("[lab] cancelled by user")
+    job["process"].kill()
+    return {"cancelled": job_id}
+
+
 @router.get("/jobs")
 def jobs() -> list[dict]:
-    return [{k: v for k, v in j.items() if k != "lines"} | {"last": j["lines"][-1] if j["lines"] else ""}
+    return [{k: v for k, v in j.items() if k not in ("lines", "process")} | {"last": j["lines"][-1] if j["lines"] else ""}
             for j in sorted(JOBS.values(), key=lambda j: -j["started"])]
 
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from floorwise import llm
+from floorwise.llm import budget
 from floorwise.llm.tools import Tool, call
 
 MAX_TOKENS = 16000
@@ -44,11 +45,13 @@ class Conversation:
         system = [{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}]
         tools = [t.anthropic() for t in self.tools]
         for _ in range(MAX_STEPS):
+            budget.check()
             response = self.client.beta.messages.create(
                 model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
                 output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default",
             )
             usage = response.usage
+            budget.add(usage.input_tokens, usage.output_tokens)
             self.usage.update({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
                                "cache_read_input_tokens": usage.cache_read_input_tokens or 0,
                                "cache_creation_input_tokens": usage.cache_creation_input_tokens or 0})
@@ -74,11 +77,13 @@ class Conversation:
     def _openai(self, on_event: OnEvent) -> str:
         tools = [t.openai() for t in self.tools]
         for _ in range(MAX_STEPS):
+            budget.check()
             response = self.client.chat.completions.create(
                 model=self.model, max_tokens=4096, tools=tools, tool_choice="auto",
                 messages=[{"role": "system", "content": self.system}, *self.messages],
             )
             if response.usage:
+                budget.add(response.usage.prompt_tokens, response.usage.completion_tokens)
                 self.usage.update({"input_tokens": response.usage.prompt_tokens, "output_tokens": response.usage.completion_tokens})
             message = response.choices[0].message
             entry = {"role": "assistant", "content": message.content or ""}

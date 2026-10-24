@@ -65,11 +65,13 @@ def info() -> ProviderInfo:
 def client(provider: str | None = None):
     """SDK client for the provider: anthropic.Anthropic or openai.OpenAI (compatible endpoint)."""
     provider = provider or provider_name()
+    from floorwise.llm.budget import timeout_s
+
     if provider == "anthropic":
         import anthropic
 
-        return anthropic.Anthropic()
+        return anthropic.Anthropic(timeout=timeout_s(), max_retries=1)
     import openai
 
     config = PROVIDERS[provider]
-    return openai.OpenAI(base_url=config["base_url"], api_key=os.environ[config["key_env"]])
+    return openai.OpenAI(base_url=config["base_url"], api_key=os.environ[config["key_env"]], timeout=timeout_s(), max_retries=1)

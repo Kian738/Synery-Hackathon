@@ -95,8 +95,10 @@ def _names(building: Building, space_ids: list[str]) -> str:
     return f"{names[0]}, {len(names) - 2} more and {names[-1]}"
 
 
-def guide(building: Building, graph: RouteGraph, nodes: list[str]) -> dict:
+def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dict | None = None) -> dict:
+    """segments (optional): walking line per space-node index (floorwise.core.walk); used for metres and turns."""
     points = {node: point_of(building, graph, node) for node in nodes}
+    segments = segments or {}
     steps: list[Step] = []
     start = nodes[0]
     steps.append(Step("start", "start", f"Start in {building.label(start)}.", f"From {building.spaces[start]['name']}.",
@@ -112,7 +114,8 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str]) -> dict:
         element = edge["via"]
         here = points.get(current)
         if current.startswith(DOOR_PREFIX) and here and last and here[0] == last[0]:
-            walked += math.dist(here[1:], last[1:])
+            through = segments.get(index - 1)
+            walked += _length(through) if through and len(through) > 1 else math.dist(here[1:], last[1:])
             last = here
         if element in building.connectors:
             connector = building.connectors[element]
@@ -154,6 +157,12 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str]) -> dict:
             turn = "straight"
             before = points.get(nodes[index - 2]) if index >= 2 else None
             after = points.get(nodes[index + 1]) if index + 1 < len(nodes) else None
+            # Prefer the real walking line: last bend before the door, first bend after it.
+            into, out_of = segments.get(index - 2), segments.get(index)
+            if door and into and len(into) >= 2:
+                before = (door[0], *_away(list(reversed(into)), door[1:]))
+            if door and out_of and len(out_of) >= 2 and not is_last:
+                after = (door[0], *_away(out_of, door[1:]))
             if door and before and after and before[0] == door[0] == after[0] and not came_from_outside:
                 turn = turn_between(before[1:], door[1:], after[1:])
             elif door and before and before[0] == door[0] and is_last:
@@ -194,6 +203,18 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str]) -> dict:
                           f"arrive at {building.spaces[end]['name']}", 0.0, building.spaces[end]["floor_id"],
                           list(points[end][1:]), space_id=end))
     return {"steps": [asdict(s) for s in steps], "spoken": spoken(steps)}
+
+
+def _away(points, door, minimum: float = 1.5):
+    """First point along the walking line that is at least `minimum` metres from the door (stable heading)."""
+    for p in points:
+        if math.dist(p, door) >= minimum:
+            return p
+    return points[-1]
+
+
+def _length(points) -> float:
+    return sum(math.dist(points[i], points[i + 1]) for i in range(len(points) - 1))
 
 
 def _lead(building: Building, metres: float, passed: list[str], to: str | None = None) -> str:

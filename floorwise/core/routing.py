@@ -6,6 +6,7 @@ import math
 from dataclasses import asdict, dataclass, field
 
 from floorwise.core.graph import DOOR_PREFIX, Constraints, RouteGraph
+from floorwise.core import walk
 from floorwise.core.instructions import guide, point_of
 from floorwise.core.model import Building
 
@@ -31,6 +32,7 @@ class Route:
     floors: list[str] = field(default_factory=list)
     polyline: list[dict] = field(default_factory=list)  # [{floor_id, x, y}] for drawing
     guide: dict = field(default_factory=dict)  # structured steps + spoken overview
+    walk_m: float | None = None  # humane walking length along the drawn path (navigation only)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -40,7 +42,9 @@ class NoRoute(ValueError):
     pass
 
 
-def plan_route(building: Building, stops: list[str], constraints: Constraints = Constraints()) -> Route:
+def plan_route(building: Building, stops: list[str], constraints: Constraints = Constraints(), humane: bool = False) -> Route:
+    """humane=True: also compute real walking lines through each room (floorwise.core.walk) and use them for
+    drawing, distances and turns. The graph length (length_m) is unchanged either way."""
     graph = RouteGraph(building, constraints, keep=frozenset(stops))
     legs, total, all_nodes = [], 0.0, []
     for start, end in itertools.pairwise(stops):
@@ -61,9 +65,17 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     # The dataset sums rounded legs; doing the same keeps tours equal to the centimetre.
     route = Route(stops=stops, length_m=round(sum(leg.length_m for leg in legs), 2), legs=legs,
                   constraints=constraints.describe())
-    route.guide = guide(building, graph, all_nodes)
+    segments = walking_segments(building, graph, all_nodes) if humane else None
+    route.guide = guide(building, graph, all_nodes, segments)
     route.steps = [step["text"] for step in route.guide["steps"]]
-    route.polyline = polyline(building, graph, all_nodes)
+    if segments:
+        route.polyline = [
+            {"floor_id": building.spaces[all_nodes[i]]["floor_id"], "x": round(x, 3), "y": round(y, 3), "node": all_nodes[i]}
+            for i in sorted(segments) for x, y in segments[i]
+        ]
+        route.walk_m = round(sum(walk.length(seg) for seg in segments.values()), 1)
+    else:
+        route.polyline = polyline(building, graph, all_nodes)
     route.floors = list(dict.fromkeys(p["floor_id"] for p in route.polyline))
     return route
 
@@ -75,3 +87,28 @@ def polyline(building: Building, graph: RouteGraph, nodes: list[str]) -> list[di
         if point:
             points.append({"floor_id": point[0], "x": round(point[1], 3), "y": round(point[2], 3), "node": node})
     return points
+
+
+def walking_segments(building: Building, graph: RouteGraph, nodes: list[str]) -> dict[int, list[tuple[float, float]]]:
+    """For every space node in the route: the walking line through that space, from where the person enters
+    (a door, or the room itself at the start / after a lift) to where they leave."""
+    segments = {}
+    for index, node in enumerate(nodes):
+        if node.startswith(DOOR_PREFIX) or node not in building.spaces:
+            continue
+        floor = building.spaces[node]["floor_id"]
+        here = point_of(building, graph, node)
+
+        def door_point(neighbour: int):
+            if 0 <= neighbour < len(nodes) and nodes[neighbour].startswith(DOOR_PREFIX):
+                p = point_of(building, graph, nodes[neighbour])
+                if p and p[0] == floor:
+                    return (p[1], p[2])
+            return None
+
+        entry_door, exit_door = door_point(index - 1), door_point(index + 1)
+        entry = entry_door or (here[1], here[2])
+        exit_ = exit_door or (here[1], here[2])
+        segments[index] = [entry] if entry == exit_ else walk.walk_in_space(
+            building, node, entry, exit_, a_door=entry_door is not None, b_door=exit_door is not None)
+    return segments

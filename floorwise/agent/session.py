@@ -4,6 +4,7 @@ Tools (for Claude) and the REST API (for the app) both go through this object, s
 and what the map shows can never disagree."""
 
 import copy
+from dataclasses import replace
 import re
 import itertools
 from dataclasses import dataclass, field
@@ -117,6 +118,7 @@ class Session:
             no_stairs=avoid_stairs,
             no_lifts=avoid_lifts,
             soft_avoid_types=frozenset(soft),
+            outside="none",  # people walk indoors; no free hop between entrances
         )
 
     def _avoid_target(self, item: str) -> tuple[str, str]:
@@ -217,8 +219,14 @@ class Session:
         alternatives = self.alternatives
         stops = [first, *middle, last]
         constraints = self.constraints(**constraint_args)
+        outdoors = False
         try:
-            route = plan_route(b, stops, constraints)
+            try:
+                route = plan_route(b, stops, constraints, humane=True)
+            except NoRoute:
+                # Only outdoors connects these places: allow leaving the building, and say so.
+                route = plan_route(b, stops, replace(constraints, outside="free"), humane=True)
+                outdoors = True
         except NoRoute as error:
             relaxed = None
             if constraints.describe():
@@ -232,7 +240,8 @@ class Session:
         return {
             "from": b.label(stops[0]), "to": b.label(stops[-1]), "via": [b.label(s) for s in stops[1:-1]],
             "length_m": route.length_m, "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
-            "steps": route.steps, "spoken_overview": route.guide.get("spoken"),
+            "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m,
+            **({"note": "No indoor route: this goes outside between two entrances."} if outdoors else {}),
             **({"other_matches_further_away": alternatives} if alternatives else {}),
         }
 
