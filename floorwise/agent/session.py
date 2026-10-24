@@ -123,7 +123,6 @@ class Session:
             no_stairs=avoid_stairs,
             no_lifts=avoid_lifts,
             soft_avoid_types=frozenset(soft),
-            outside="none",  # people walk indoors; no free hop between entrances
         )
 
     def _avoid_target(self, item: str) -> tuple[str, str]:
@@ -456,7 +455,7 @@ class Session:
         snapshots = {"general": ops.distances_to_exit(self.building, general),
                      "step_free": ops.distances_to_exit(self.building, replace(general, step_free=True))}
         if self.profile.min_door_width_m is not None:
-            snapshots["your_needs"] = ops.distances_to_exit(self.building, replace(self.constraints(), outside="free", extra_openings=extra))
+            snapshots["your_needs"] = ops.distances_to_exit(self.building, replace(self.constraints(), extra_openings=extra))
         return snapshots
 
     def impact_diff(self, before: dict, after: dict) -> dict:
@@ -486,7 +485,7 @@ class Session:
 
     def weak_points(self, step_free: bool = True) -> list[dict]:
         from floorwise.core.resilience import chaos_test
-        result = chaos_test(self.building, replace(self.constraints(step_free=step_free), outside="free"))
+        result = chaos_test(self.building, self.constraints(step_free=step_free))
         items = result["critical"][:3]
         self.emit("weak_points", items=items, profile="step-free" if step_free else "general")
         self.emit("highlight", ids=list(dict.fromkeys(s for item in items for s in item["room_ids"])))

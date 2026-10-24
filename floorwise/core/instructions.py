@@ -15,7 +15,7 @@ import math
 from dataclasses import asdict, dataclass
 
 from floorwise.core.graph import DOOR_PREFIX, RouteGraph, anchor
-from floorwise.core.model import OUTSIDE, Building
+from floorwise.core.model import Building
 
 LANDMARK_RADIUS_M = 6.0
 UNIQUENESS_RADIUS_M = 15.0
@@ -38,8 +38,6 @@ class Step:
 
 
 def point_of(building: Building, graph: RouteGraph, node: str) -> tuple[str, float, float] | None:
-    if node == OUTSIDE:
-        return None
     if node.startswith(DOOR_PREFIX):
         opening_id = node[len(DOOR_PREFIX):]
         opening = building.openings.get(opening_id) or next(
@@ -143,11 +141,6 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                               round(walked, 1), floor, list(points[current][1:]), space_id=current))
             walked, passed = 0.0, []
             last = points[current]
-        elif current == OUTSIDE:
-            steps.append(Step("outside", "outside", f"{_lead(building, walked, passed, to='the entrance')}Go outside.",
-                              "go outside", round(walked, 1), None, None))
-            walked, passed = 0.0, []
-            last = None
         elif not current.startswith(DOOR_PREFIX):
             door_node = previous
             door = points.get(door_node)
@@ -155,7 +148,6 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                 (o for o in graph.constraints.extra_openings if o["id"] == element), None)
             space = building.spaces[current]
             is_last = index == len(nodes) - 1
-            came_from_outside = index >= 2 and nodes[index - 2] == OUTSIDE
             turn = "straight"
             before = points.get(nodes[index - 2]) if index >= 2 else None
             after = points.get(nodes[index + 1]) if index + 1 < len(nodes) else None
@@ -165,13 +157,13 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                 before = (door[0], *_away(list(reversed(into)), door[1:]))
             if door and out_of and len(out_of) >= 2 and not is_last:
                 after = (door[0], *_away(out_of, door[1:]))
-            if door and before and after and before[0] == door[0] == after[0] and not came_from_outside:
+            if door and before and after and before[0] == door[0] == after[0] :
                 turn = turn_between(before[1:], door[1:], after[1:])
             elif door and before and before[0] == door[0] and is_last:
                 turn = turn_between(before[1:], door[1:], points[current][1:])
             mergeable = turn == "straight" and not is_last and space["type"] in ("corridor", "hall") \
                 and index + 2 < len(nodes) and nodes[index + 1].startswith(DOOR_PREFIX)
-            if mergeable and not came_from_outside:
+            if mergeable:
                 passed.append(current)
                 index += 1
                 continue
@@ -181,10 +173,8 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                 walked += _length(segments.get(index, []))
                 index += 1
                 continue
-            if came_from_outside:
-                last = door
             landmark = salient_landmark(building, opening, door[0], door[1], door[2]) if door else None
-            target = "the entrance" if came_from_outside else ("the door" + (f" by the {landmark}" if landmark else ""))
+            target = "the door" + (f" by the {landmark}" if landmark else "")
             lead = _lead(building, walked, passed)
             if is_last:
                 ref = f" ({space['ref']})" if space.get("ref") and space["ref"] not in space["name"] else ""
