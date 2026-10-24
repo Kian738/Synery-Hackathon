@@ -15,6 +15,7 @@ test("paired phone operates the real Navigator without changing declared locatio
   await page.getByRole("button",{name:"Phone companion",exact:true}).click();
   await page.getByRole("button",{name:"Pair a phone",exact:true}).click();
   const code=page.locator(".cmp-code");await expect(code).toHaveText(/^\d{6}$/);
+  await expect(page.getByRole("img",{name:"Scan to pair your phone"})).toHaveAttribute("src",/^data:image\/png;base64,/);
   const secret=(await code.textContent())!.trim();
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,baseURL});
   try{

@@ -8,9 +8,32 @@ agent stops instead of eating credits."""
 
 import os
 import threading
+import time
+from contextvars import ContextVar
+from functools import wraps
 
 _lock = threading.Lock()
 _used = 0
+_interactive = ContextVar('floorwise_interactive_deadline', default=None)
+
+
+def interactive_turn(function):
+    """Bound interactive network waits without changing benchmark/eval timeouts."""
+    @wraps(function)
+    def run(agent, *args, **kwargs):
+        if agent.benchmark:
+            return function(agent, *args, **kwargs)
+        token = _interactive.set((time.monotonic()+float(os.environ.get('FLOORWISE_CHAT_DEADLINE_S','60')),
+                                  float(os.environ.get('FLOORWISE_CHAT_CALL_TIMEOUT_S','25'))))
+        try:
+            return function(agent, *args, **kwargs)
+        finally:
+            _interactive.reset(token)
+    return run
+
+
+def retries() -> int:
+    return 0 if _interactive.get() else 1
 
 
 class BudgetExceeded(RuntimeError):
@@ -22,10 +45,15 @@ def limit() -> int:
 
 
 def timeout_s() -> float:
-    return float(os.environ.get("FLOORWISE_LLM_TIMEOUT_S", "90"))
+    maximum = float(os.environ.get("FLOORWISE_LLM_TIMEOUT_S", "90"))
+    scope = _interactive.get()
+    return max(.05,min(maximum,scope[1],scope[0]-time.monotonic())) if scope else maximum
 
 
 def check() -> None:
+    scope = _interactive.get()
+    if scope and time.monotonic() >= scope[0]:
+        raise TimeoutError('This request took too long. Try one question at a time; computed map results remain available.')
     if limit() and _used >= limit():
         raise BudgetExceeded(f"LLM token budget spent ({_used:,} of {limit():,}). Raise FLOORWISE_MAX_TOKENS to continue.")
 

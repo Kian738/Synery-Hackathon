@@ -28,7 +28,7 @@ test("complete real chat analytics are visual, paged and free of model calls",as
   await capture(page,"ranking",info.project.name);
   await page.getByRole("button",{name:"I'm here",exact:true}).click();
   await expect(page.getByRole("status").filter({hasText:"Location set:"})).toBeVisible();
-  await page.getByRole("combobox",{name:"Facing direction"}).selectOption("90");
+  await expect(page.getByRole("combobox",{name:"Facing direction"})).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 test("floor scope and linked plan stay usable through preview",async({page},info)=>{

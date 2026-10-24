@@ -217,3 +217,21 @@ test("an incomplete visual answer cannot blank the conversation",async({page})=>
   await expect(page.getByText("An incomplete visual answer was ignored. Please retry.")).toBeVisible();
   await expect(page.getByRole("textbox",{name:"Message"})).toBeEnabled();
 });
+
+test("model timeout is visible and the next chat turn recovers",async({page})=>{
+  let attempt=0;
+  await page.route('**/api/sessions/*/chat',async route=>{
+    attempt++;
+    await route.fulfill({contentType:'text/event-stream',body:attempt===1
+      ? 'data: {"type":"progress","data":{"stage":"model","message":"Waiting for Claude"}}\n\ndata: {"type":"error","data":{"message":"The language service timed out. Please retry."}}\n\ndata: {"type":"done","data":null}\n\n'
+      : 'data: {"type":"reply","data":{"text":"Model connection recovered.","usage":{}}}\n\ndata: {"type":"done","data":null}\n\n'});
+  });
+  await page.goto(CAMPUS);
+  const composer=page.getByRole('textbox',{name:'Message'});
+  await composer.fill('hello');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.getByText('The language service timed out. Please retry.',{exact:true})).toBeVisible();
+  await expect(composer).toBeEnabled();
+  await composer.fill('try again');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.getByText('Model connection recovered.',{exact:true})).toBeVisible();
+  await expect(page.locator('canvas')).toBeVisible();
+});

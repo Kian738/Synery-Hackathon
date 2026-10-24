@@ -112,7 +112,7 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
 
 function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors}:{route:Route;geometry:Geometry;explode?:number;ghost?:boolean;xray?:boolean;visibleFloors:Set<string>}){
   const meshes=useMemo(()=>routeRuns(route,visibleFloors).map(run=>{
-    const points=run.map(p=>{const f=geometry.floors.find(f=>f.id===p.floor_id);return frame(p.x,p.y,(f?.elevation_m??0)+(f?.level??0)*explode+.045);});
+    const points=run.map(p=>{const f=geometry.floors.find(f=>f.id===p.floor_id);return frame(p.x,p.y,(f?.elevation_m??0)+(f?.level??0)*explode+(ghost?.03:.075));});
     const vertices:number[]=[],radius=ghost?.055:.08;
     for(let i=1;i<points.length;i++){
       const a=points[i-1],b=points[i],delta=b.clone().sub(a);if(delta.length()<1e-6)continue;
@@ -124,7 +124,7 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors}:{r
     const mesh=new THREE.BufferGeometry();mesh.setAttribute("position",new THREE.Float32BufferAttribute(vertices,3));mesh.computeVertexNormals();return mesh;
   }),[route,geometry,explode,visibleFloors,ghost]);
   useEffect(()=>()=>meshes.forEach(m=>m.dispose()),[meshes]);
-  return <>{meshes.map((g,i)=><mesh key={i} geometry={g}><meshStandardMaterial color={ghost?"#869ba5":"#ffd45c"} emissive={ghost?"#000000":"#a8750d"} emissiveIntensity={.5} roughness={.8} side={THREE.DoubleSide} transparent={ghost} opacity={ghost?.3:1} depthWrite={!ghost}/></mesh>)}</>;
+  return <>{meshes.map((g,i)=><mesh key={i} geometry={g} renderOrder={ghost?1:2}><meshBasicMaterial color={ghost?"#869ba5":"#ffd45c"} side={THREE.DoubleSide} transparent={ghost} opacity={ghost?.3:1} depthWrite={false} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-2}/></mesh>)}</>;
 }
 
 

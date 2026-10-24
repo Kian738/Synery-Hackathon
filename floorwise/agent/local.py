@@ -31,6 +31,9 @@ def dispatch(session, text):
     """None means unknown wording; ambiguity is deliberately raised for a clarification."""
     original=text
     text = text.strip().rstrip('?.!').strip()
+    count_command=re.fullmatch(r'(?:count|give me (?:the )?(?:number|count) of|what(?: is|\x27s) the (?:total )?(?:number|count) of)\s+(.+)',text,re.I)
+    if count_command:
+        text='how many '+count_command[1]
     if re.search(r'jump.*window|window.*jump',text,re.I):
         return "I can guide you to mapped exits or stairs. I can't assess jumping safety."
     if re.search(r'\b(?:available|unbooked|bookings?|opening hours|staff.only|card access|seating capacity)\b',text,re.I) or re.search(r'\bfree (?:meeting )?rooms?\b',text,re.I):
@@ -38,6 +41,11 @@ def dispatch(session, text):
     # Do not partially execute multi-part requests or quietly ignore constraints.
     if re.search(r'\b(?:then|afterwards|except|excluding|but|avoid|without)\b', text, re.I):
         return None
+    simple_route=re.fullmatch(r'(?:how (?:do|can) I (?:get|go|walk)|(?:guide|take) me)\s+from\s+(.+?)\s+to\s+(.+)',text,re.I)
+    if simple_route and not re.search(r'\b(?:with|via|using|closed|blocked|prefer|wheelchair|step.free)\b',text,re.I):
+        result=session.route(simple_route[1],simple_route[2])
+        if result.get('error'):return result['error']
+        return f"{result['from']} to {result['to']}: {result['length_m']} " + ('m walk. ' if result.get('walk_m') is not None else 'route-model m. ') + ' '.join(result['steps'])
     match = re.fullmatch(r'(?:which|what) (?:room|rooms) (?:has|have|contains?) (?:the )?most (.+)', text, re.I)
     if match:
         item, floor = _scope(match[1])

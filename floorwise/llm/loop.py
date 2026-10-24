@@ -34,10 +34,17 @@ class Conversation:
         self.by_name = {t.name: t for t in self.tools}
 
     def ask(self, text: str, on_event: OnEvent = None) -> str:
+        checkpoint = len(self.messages)
         self.messages.append({"role": "user", "content": text})
-        if self.provider == "anthropic":
-            return self._anthropic(on_event)
-        return self._openai(on_event)
+        try:
+            if self.provider == "anthropic":
+                return self._anthropic(on_event)
+            return self._openai(on_event)
+        except Exception:
+            # A failed tool turn must not leave unmatched tool calls or user turns
+            # that invalidate the next request. Computed session state survives.
+            del self.messages[checkpoint:]
+            raise
 
     # ---------- Claude ----------
 
@@ -45,10 +52,11 @@ class Conversation:
         system = [{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}]
         for _ in range(MAX_STEPS):
             budget.check()
+            if on_event:on_event('progress',{'stage':'model','message':'Waiting for Claude'})
             tools = [t.anthropic() for t in self.tools]
             response = self.client.beta.messages.create(
                 model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
-                output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default",
+                output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default", timeout=budget.timeout_s(),
             )
             usage = response.usage
             budget.add(usage.input_tokens+(usage.cache_read_input_tokens or 0)+(usage.cache_creation_input_tokens or 0), usage.output_tokens)
@@ -79,10 +87,11 @@ class Conversation:
     def _openai(self, on_event: OnEvent) -> str:
         for _ in range(MAX_STEPS):
             budget.check()
+            if on_event:on_event('progress',{'stage':'model','message':'Waiting for the language model'})
             tools = [t.openai() for t in self.tools]
             response = self.client.chat.completions.create(
                 model=self.model, max_tokens=4096, tools=tools, tool_choice="auto",
-                messages=[{"role": "system", "content": self.system}, *self.messages],
+                messages=[{"role": "system", "content": self.system}, *self.messages], timeout=budget.timeout_s(),
             )
             if response.usage:
                 budget.add(response.usage.prompt_tokens, response.usage.completion_tokens)

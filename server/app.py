@@ -230,7 +230,11 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
         loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload})
 
     def work() -> None:
-        with entry["lock"]:
+        if not entry['lock'].acquire(timeout=5):
+            push('error',{'message':'Another request is still using this session. Please retry shortly.'})
+            push('done',None)
+            return
+        try:
             try:
                 from floorwise import llm
 
@@ -246,10 +250,14 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                 reply = agent.ask(body.text, on_event=push)
                 push("reply", {"text": reply, "usage": agent.turn_usage, "model": agent.model})
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
-                push("error", {"message": f"{type(error).__name__}: {error}"})
+                message = 'The language service timed out. Please retry, or use the map controls. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else f"{type(error).__name__}: {error}"
+                push("error", {"message": message})
             finally:
                 push("done", None)
+        finally:
+            entry['lock'].release()
 
+    push('progress',{'stage':'queued','message':'Starting your request'})
     threading.Thread(target=work, daemon=True).start()
 
     async def stream():
