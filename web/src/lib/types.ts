@@ -111,7 +111,7 @@ export interface Profile {
   location: string | null;
 }
 
-export interface FixProposal { reachable_before: boolean; reason: string; verified: boolean; widen: { opening_id: string; from_m: number; to_m: number; between: string[] }[] }
+export interface FixProposal { reachable_before: boolean; reason: string; verified: boolean; widen: { opening_id: string; from_m: number; to_m: number; between: string[] }[]; rooms_reachable_before?: number | null; rooms_reachable_after?: number | null; of_rooms?: number | null }
 export interface WeakPoint { name: string; element_ids: string[]; room_ids: string[]; rooms_lost: number; of_rooms: number; kind: string }
 
 export type UiEvent =

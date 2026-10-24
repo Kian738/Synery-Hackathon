@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute } from "../lib/validation";
-import { impactText } from "../lib/impact";
+import { fixCardText, impactText } from "../lib/impact";
 import { ApiError, api, chat } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
 import type { Geometry, Opening, Route, UiEvent, WeakPoint } from "../lib/types";
@@ -119,7 +119,7 @@ export function useNavigator(buildingId: string) {
         setHighlights(new Set(e.impact.step_free?.cut_off_ids ?? e.impact.cut_off_ids ?? []));
       } else if (e.type === "fix_preview") {
         setPreviewDoor(e.opening); setFloorId(e.opening.floor_id);
-        push({role: "change", kind: "widen", text: `${e.fix.reason} ${e.fix.widen.map(w => `${w.from_m} m → ${w.to_m} m`).join(", ")}`,
+        push({role: "change", kind: "widen", text: fixCardText(e.fix),
               first: "", second: "", widenings:e.fix.widen, openingId: e.opening.id, width: e.opening.width_m, start: e.start, destination: e.destination, state: "pending"});
       } else if (e.type === "weak_points") {
         setWeakPoints(e.items);
