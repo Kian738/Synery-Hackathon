@@ -34,8 +34,7 @@ Last updated: 2026-10-24. **verified** = measured by an eval or test in this rep
 | Item | Status |
 |---|---|
 | chat agent with tools | live-tested on Groq (`openai/gpt-oss-120b`) |
-| interaction suite (8 personas + judge) | runs on Groq; first 3 scenarios: wheelchair 5.0, vague 5.0, wrong_room 3.8 (failed the "said it doesn't exist" check) |
-| known agent flaws seen live | asks back when both matches are in the same room; did not call `remember_person` on "I use a wheelchair" (applied step-free per call instead) |
+| flaws seen before the protocol fixes | asked back when both matches were in the same room; skipped `remember_person`. Both are fixed: the ask-gate is in `Session.place`, and the prompt was rewritten |
 | research-backed behaviour | done: nearest-match ask-gate, answer-first header (prompt + UI route sign), landmark chunking and floor-change steps (`instructions.py`), spoken overview of 4 parts or fewer, step mode with next/repeat/back |
 | live check (Groq, via web SSE) | wheelchair + location → `remember_person`, nearest toilet without asking, header line, 2 steps, alternative mentioned |
 | interaction suite on Groq | 7 of 8 scenarios score 4.7–5.0; wrong_room 3.3 (no directions to the alternatives). The judge is a lenient open model: **calibrate before trusting** |
