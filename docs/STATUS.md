@@ -118,3 +118,11 @@ The updated deterministic fallback recording passed its opt-in capture test and 
 ## CIT walking regression and straight corridors (2026-10-24)
 
 Fixed grid-region connectivity to match the pathfinder's no-corner-cutting rule. The reported CIT route 03.05.061 → 00.05.058 now produces validated walking geometry. Empty, convex, elongated corridors use a verified central straight run with door approaches instead of raster-induced slalom. Source graph/benchmark distances and obstacle collision checks are unchanged. Verified by targeted regressions and `fw check`; subsequent UI redesign is in progress.
+
+## Guidance and rendering second pass (2026-10-24)
+
+Guide me now uses the full scene and one compact media player with direct play, seeking, chapter navigation, speed and replay. Map and conversation are opt-in drawers. Room selection preserves camera framing; Focus room and Fit animate explicit changes. Pointer-intent handling prevents pan/rotate gestures from selecting rooms, including drags returning to their origin. Dense plan labels avoid collisions; route/selected connector labels use fixed-size icons. Raised opaque route geometry and tighter camera depth ranges replace overlapping route strips. Interiors retain ceilings. Manual-location and simulated-progress markers are distinct.
+
+Integrated the reviewed Claude asset catalogue: all 96 supplied types have bounded, illustrative procedural silhouettes rendered in instanced batches. Repeated tools are grouped by turn and name with inspectable inputs and computed summaries. The closure stress-test panel now explains its actual reachability computation and assumptions.
+
+Verification: `fw check` passed all offline gates; the eight existing ambiguous-name e2e misses are unchanged. Full desktop/phone UI run: 90 passed, four opt-in capture/contact-sheet cases skipped. TypeScript check passed after the concurrent companion package's typing fix. Screenshot evidence is under `runs/ux2/`; design rationale and incomplete stair/sensor/human checks are documented in `docs/UX_REVIEW_SECOND_PASS.md`. The phone companion and benchmark-resolution packages remain separate work until their READY handoffs are reviewed; this milestone does not claim they are integrated.

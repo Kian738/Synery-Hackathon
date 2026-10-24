@@ -19,11 +19,11 @@
 | 13 | Competing directions | One current decision; complete itinerary in an expandable drawer |
 | 14 | Overlay collisions | Reserved playback/inset/inspector zones, inspector hidden while guiding |
 | 15 | Conversation clutter | Earlier turns collapsed; pending decisions remain accessible |
-| 16 | Cramped mobile view | Compact inset during guidance and expandable building stage |
-| 17 | Disconnected selection | Linked room selection, focused plan/model and contextual inspector |
+| 16 | Cramped mobile view | Full-stage guidance with one bottom player; map and questions open on demand |
+| 17 | Disconnected selection | Linked room selection and contextual inspector; explicit Focus room animates framing |
 | 18 | Unexplained door gaps | Oriented instanced frames and thresholds; passage/entrance distinctions |
 | 19 | Connector teleports | Labeled landings and explicit transition curtain; no traversal through unknown interiors |
-| 20 | Unenclosed interiors | Full supplied wall heights, illustrative ceiling toggle, balanced lighting |
+| 20 | Unenclosed interiors | Full supplied wall heights, interior ceiling, balanced lighting; overview remains open |
 | 21 | Unrecognizable assets | Procedural furniture, printer, oscilloscope and supplied internal-stair silhouettes; muted irrelevant context |
 | 22 | Coplanar artifacts | Display-wall union removes overlapping segments; deterministic floor depth layers |
 | 23 | Truncated visual answers | Typed validated visual events, complete entity sets and session-scoped result pages |

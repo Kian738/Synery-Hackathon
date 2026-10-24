@@ -44,6 +44,7 @@ export const api = {
 
 export type ChatEvent =
   | { type: "tool"; data: { name: string; input: Record<string, any> } }
+  | { type: "tool_result"; data:{name:string;content:string;is_error:boolean} }
   | { type: "ui"; data: UiEvent }
   | { type: "reply"; data: { text: string; usage: Record<string, unknown>; model: string } }
   | { type: "error"; data: { message: string } }

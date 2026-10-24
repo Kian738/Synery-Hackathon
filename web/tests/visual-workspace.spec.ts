@@ -40,14 +40,13 @@ test("floor scope and linked plan stay usable through preview",async({page},info
   await page.getByRole("combobox",{name:"Visible floors"}).selectOption("current");
   await expect(scene).toHaveAttribute("data-visible-floors",/^[^,]+$/);
   await page.getByRole("button",{name:"Guide me step by step"}).click();
-  await page.getByRole("button",{name:"Preview route",exact:true}).click();
   await page.getByRole("button",{name:"Play preview",exact:true}).click();
   await expect(page.getByRole("button",{name:"Pause preview"})).toBeVisible();
   await expect(page.locator("canvas")).toHaveAttribute("data-camera-floor",/F2/);
   await expect.poll(async()=>Number(await page.getByRole("slider",{name:"Preview progress"}).inputValue())).toBeGreaterThan(.3);
   await capture(page,"preview",info.project.name);
   await page.getByRole("button",{name:"Pause preview"}).click();
-  await page.getByRole("button",{name:"Expand plan",exact:true}).click();
-  await expect(page.getByRole("button",{name:"Shrink plan"})).toBeVisible();
+  await page.getByRole("button",{name:"Show map",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Close map"})).toBeVisible();
   await capture(page,"expanded-plan",info.project.name);
 });

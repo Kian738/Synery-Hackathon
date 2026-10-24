@@ -32,7 +32,6 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await page.getByRole("button",{name:"Guide me",exact:true}).click();
   await expect(page.locator("canvas")).toHaveAttribute("data-camera-position", /\[/);
   await page.screenshot({path:path.join(out,"first-person.png")});
-  await page.getByRole("button",{name:"Preview route",exact:true}).click();
   await page.getByRole("button",{name:"Play preview",exact:true}).click();
   await page.waitForTimeout(6000);
   await page.getByRole("button",{name:"Pause preview",exact:true}).click();
@@ -44,8 +43,8 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await expect(page.getByRole("status")).toBeVisible();
   await page.waitForTimeout(4000);
   await page.screenshot({path:path.join(out,"closure-reroute.png")});
-  await page.getByRole("button",{name:"Test weak points",exact:true}).click();
-  await expect(page.getByRole("region",{name:"Weak points"})).toBeVisible();
+  await page.getByRole("button",{name:"Stress test",exact:true}).click();
+  await expect(page.getByRole("region",{name:"Building stress test"})).toBeVisible();
   await page.waitForTimeout(4000);
   await page.getByRole("textbox",{name:"Message"}).fill("Can a 1.1 m trolley reach Print room 0.16 from Main lobby?");
   await page.getByRole("button",{name:"Send",exact:true}).click();
