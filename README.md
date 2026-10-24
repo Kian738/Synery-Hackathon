@@ -29,7 +29,7 @@ Synera Track 01, Industrial Agents Hackathon 2026. You give Floorwise a floor pl
 
 Test submission: `submissions/team_floorwise_test.csv` (145 answers, regenerated under route model v1.1.0, offline, $0 API cost).
 
-**Live-LLM status.** Every gate above runs offline and needs no model. Live Claude checks (`rehearse`, `interaction`, parser comparisons) were last run on an earlier key and before the v1.1.0 change; no live call has been verified on the current setup, and AWS Bedrock is not yet configured. Treat anything that says "live" as that earlier run until it is repeated.
+**Live-LLM status.** Every gate above runs offline and needs no model. Live Claude checks (`rehearse`, `interaction`, parser comparisons) were last run on an earlier key and before the v1.1.0 change; one live call has since been verified on AWS Bedrock (Claude Sonnet 4.6, EU inference profile, 2 requests, about 3.8k tokens): asked about a fire in a named room, Claude called `plan_scenario` and its answer repeated the solver's numbers exactly (358 people, 345 out through 2 exits in 155 s, 13 stranded in the hazard room, door fix 155 s to 145 s). The check script is not part of the gates; the older `rehearse` and `interaction` runs have not been repeated.
 
 ## Run
 
