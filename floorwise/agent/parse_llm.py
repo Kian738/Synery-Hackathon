@@ -1,16 +1,11 @@
-"""Claude as a semantic parser: question -> QuerySpec (structured output). Claude only extracts what the
+"""LLM as a semantic parser: question -> QuerySpec (structured output). The model only extracts what the
 question says; entity linking and every number stay deterministic. Used when the rule parser does not
-recognise the wording (new phrasings on the Sunday building)."""
-
-import os
-
-import anthropic
+recognise the wording (new phrasings on the Sunday building). Provider: see floorwise.llm."""
 
 from floorwise.agent.spec import QuerySpec
 from floorwise.core import resolve as R
 from floorwise.core.model import Building
-
-DEFAULT_MODEL = os.environ.get("FLOORWISE_PARSER_MODEL", "claude-haiku-5-5")
+from floorwise.llm import structured
 
 SYSTEM = """You turn a question about a building into a QuerySpec. Copy room names, floors and items \
 exactly as the question writes them (keep the "(Floor 2)" part with a room). Do not compute anything.
@@ -30,6 +25,10 @@ means above; leaking onto a floor means below.
 - straight_line_3d: straight-line distance between the centres of two rooms (first, second).
 - what_if_door: add a door between two rooms (first, second); how many rooms on another floor (floor) get \
 a shorter walk out of the building.
+- locate: where is an item (item).
+- count: how many items of a type on a floor (item, floor).
+- route: how to get from start to destination; step_free if the person needs it; closed if a lift/stair is closed.
+- tour: visit stops in order (stops, start first).
 - other: anything else.
 
 Use the vocabulary below to normalise words (e.g. "WCs" -> the matching room type), but keep names of \
@@ -37,9 +36,8 @@ specific rooms as written."""
 
 
 class LLMParser:
-    def __init__(self, model: str = DEFAULT_MODEL, client: anthropic.Anthropic | None = None) -> None:
-        self.model = model
-        self.client = client or anthropic.Anthropic()
+    def __init__(self, model: str | None = None, provider: str | None = None) -> None:
+        self.model, self.provider = model, provider
 
     def parse(self, building: Building, question: str) -> tuple[QuerySpec | None, dict]:
         vocabulary = (
@@ -48,20 +46,6 @@ class LLMParser:
             f"Item types: {', '.join(sorted(R.asset_types(building)))}\n"
             f"Stairs and lifts: {', '.join(c['name'] for c in building.connectors.values())}"
         )
-        response = self.client.messages.parse(
-            model=self.model,
-            max_tokens=4000,
-            system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": f"{vocabulary}\n\nQuestion: {question}"}],
-            output_format=QuerySpec,
-            output_config={"effort": "low"},
-        )
-        usage = {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-            "cache_read_input_tokens": response.usage.cache_read_input_tokens or 0,
-            "cache_creation_input_tokens": response.usage.cache_creation_input_tokens or 0,
-        }
-        if response.stop_reason == "refusal":
-            return None, usage
-        return response.parsed_output, usage
+        spec, usage = structured.parse("parser", SYSTEM, f"{vocabulary}\n\nQuestion: {question}", QuerySpec,
+                                       provider=self.provider, model=self.model)
+        return spec, dict(usage)

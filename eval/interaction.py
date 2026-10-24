@@ -11,13 +11,13 @@ import argparse
 import json
 from dataclasses import dataclass, field
 
-import anthropic
 from pydantic import BaseModel
 
 from eval.ledger import Ledger
 from floorwise.agent.chat import ChatAgent
 from floorwise.agent.session import Session
 from floorwise.core.model import Building
+from floorwise.llm import model_for, structured
 from floorwise.paths import DATA
 
 FACTORY = DATA / "dev" / "proc-factory-dev-003"
@@ -127,9 +127,9 @@ class Grade(BaseModel):
     issues: list[str]
 
 
-def run_scenario(scenario: Scenario, client: anthropic.Anthropic) -> dict:
+def run_scenario(scenario: Scenario) -> dict:
     session = Session.for_building(Building.load(scenario.building))
-    agent = ChatAgent(session, client=client)
+    agent = ChatAgent(session)
     calls, replies, transcript = [], [], []
     for turn_index, text in enumerate(scenario.turns, 1):
         transcript.append(f"USER: {text}")
@@ -142,31 +142,28 @@ def run_scenario(scenario: Scenario, client: anthropic.Anthropic) -> dict:
         reply = agent.ask(text, on_event=on_event)
         replies.append(reply)
         transcript.append(f"GUIDE: {reply}")
-    return {"calls": calls, "replies": replies, "transcript": "\n".join(transcript), "usage": agent.usage}
+    return {"calls": calls, "replies": replies, "transcript": "\n".join(transcript), "usage": agent.usage, "model": agent.model}
 
 
-def judge(scenario: Scenario, transcript: str, client: anthropic.Anthropic, model: str) -> Grade | None:
-    response = client.messages.parse(
-        model=model, max_tokens=4000, output_config={"effort": "medium"}, output_format=Grade,
-        messages=[{"role": "user", "content": f"Persona: {scenario.persona}\n\n{RUBRIC}\n\nTranscript:\n{transcript}"}],
-    )
-    return response.parsed_output
+def judge(scenario: Scenario, transcript: str, model: str | None) -> Grade | None:
+    grade, _ = structured.parse("judge", "You grade conversations between a building guide and a person.",
+                                f"Persona: {scenario.persona}\n\n{RUBRIC}\n\nTranscript:\n{transcript}", Grade, model=model)
+    return grade
 
 
 def main() -> None:
     cli = argparse.ArgumentParser(prog="eval.interaction")
     cli.add_argument("--only", nargs="*")
-    cli.add_argument("--judge-model", default="claude-opus-5-5")
+    cli.add_argument("--judge-model", default=None, help="default: the provider's judge model")
     args = cli.parse_args()
-    client = anthropic.Anthropic()
-    ledger = Ledger("interaction", {"judge": args.judge_model})
+    ledger = Ledger("interaction", {"judge": args.judge_model or model_for("judge")})
     for scenario in SCENARIOS:
         if args.only and scenario.name not in args.only:
             continue
-        run = run_scenario(scenario, client)
+        run = run_scenario(scenario)
         ledger.add_usage(run["usage"])
         check_results = [(fn.__name__, *fn(run["calls"], run["replies"])) for fn in scenario.checks]
-        grade = judge(scenario, run["transcript"], client, args.judge_model)
+        grade = judge(scenario, run["transcript"], args.judge_model)
         scores = grade.model_dump(exclude={"issues"}) if grade else {}
         mean = sum(scores.values()) / len(scores) if scores else 0
         ok = all(c[1] for c in check_results) and mean >= 4.0

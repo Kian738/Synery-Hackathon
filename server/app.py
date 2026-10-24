@@ -195,8 +195,11 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
     def work() -> None:
         with entry["lock"]:
             try:
-                if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-                    raise RuntimeError("No ANTHROPIC_API_KEY set on the server. Add it to .env and restart.")
+                from floorwise import llm
+
+                status = llm.info()
+                if not status.available:
+                    raise RuntimeError(f"Chat needs an LLM key: {status.reason}. Add it to .env and restart.")
                 if entry["agent"] is None:
                     from floorwise.agent.chat import ChatAgent
 
@@ -204,7 +207,7 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                 agent = entry["agent"]
                 entry["session"].events.clear()
                 reply = agent.ask(body.text, on_event=push)
-                push("reply", {"text": reply, "usage": agent.usage})
+                push("reply", {"text": reply, "usage": agent.usage, "model": agent.model})
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
                 push("error", {"message": f"{type(error).__name__}: {error}"})
             finally:

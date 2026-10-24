@@ -1,10 +1,11 @@
-"""Claude's tools: thin, typed wrappers around Session. Results are compact JSON; errors become
-is_error tool results with candidates, so Claude can ask the person instead of guessing."""
+"""The agent's tools: thin, typed wrappers around Session, provider-neutral (floorwise.llm.tools).
+Results are compact JSON; errors become is_error tool results with candidates, so the model can ask
+the person instead of guessing."""
 
 import json
 
-from anthropic import beta_tool
-from anthropic.lib.tools import ToolError
+from floorwise.llm.tools import ToolFailure as ToolError
+from floorwise.llm.tools import tool as beta_tool
 
 from floorwise.agent.session import Session
 from floorwise.core.resolve import ResolveError
