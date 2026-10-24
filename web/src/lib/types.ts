@@ -50,6 +50,7 @@ export interface Asset {
 
 export interface Geometry {
   building: { id: string; name: string; source: string };
+  scene?: { revision: string; walls: { floor_id: string; space_id: string; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];
@@ -74,9 +75,12 @@ export interface RoutePoint {
   x: number;
   y: number;
   node: string;
+  gap?: boolean;
 }
 
 export interface Route {
+  preview_available?: boolean;
+  warnings?: string[];
   stops: string[];
   length_m: number;
   steps: string[];
@@ -88,6 +92,11 @@ export interface Route {
 }
 
 export interface Impact {
+  of_rooms?: number;
+  cut_off_ids?: string[];
+  reconnected_ids?: string[];
+  step_free?: Impact;
+  your_needs?: Impact;
   rooms_cut_off_from_exits: string[];
   cut_off_count: number;
   rooms_reconnected: string[];
@@ -102,7 +111,12 @@ export interface Profile {
   location: string | null;
 }
 
+export interface FixProposal { reachable_before: boolean; reason: string; verified: boolean; widen: { opening_id: string; from_m: number; to_m: number; between: string[] }[] }
+export interface WeakPoint { name: string; element_ids: string[]; room_ids: string[]; rooms_lost: number; of_rooms: number; kind: string }
+
 export type UiEvent =
+  | { type: "fix_preview"; opening: Opening; fix: FixProposal; start: string; destination: string }
+  | { type: "weak_points"; items: WeakPoint[]; profile: string }
   | { type: "route"; route: Route }
   | { type: "highlight"; ids: string[] }
   | { type: "closure"; id: string; closed: boolean; impact: Impact }

@@ -34,12 +34,21 @@ def insight_router(get_session, call):
         entry = get_session(session_id)
         with entry['lock']:
             session = entry['session']
+            changed = (body.step_free is not None and body.step_free != session.profile.step_free) or (
+                'min_door_width_m' in body.model_fields_set and body.min_door_width_m != session.profile.min_door_width_m)
             if body.location is not None:
                 session.profile.location = session.place(body.location)
             if body.step_free is not None:
                 session.profile.step_free = body.step_free
             if 'min_door_width_m' in body.model_fields_set:
                 session.profile.min_door_width_m = body.min_door_width_m
-            return {'profile': session.profile.__dict__}
+            update = None
+            request = getattr(session, 'last_route_request', None)
+            if changed and request:
+                start, destination, via, kwargs = request
+                kwargs = {**kwargs, 'step_free': session.profile.step_free, 'min_door_width_m': session.profile.min_door_width_m}
+                update = session.route(start, destination, via, **kwargs)
+            events, session.events[:] = list(session.events), []
+            return {'profile': session.profile.__dict__, 'events': events, 'route_update': update}
 
     return router

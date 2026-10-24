@@ -278,3 +278,11 @@ def _dedupe(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
 
 def length(points: list[tuple[float, float]]) -> float:
     return sum(math.dist(points[i], points[i + 1]) for i in range(len(points) - 1))
+
+
+def invalidate(building: Building) -> None:
+    """Drop occupancy caches after a session changes doors or furniture."""
+    for key in list(_grids):
+        if key[0] == id(building):
+            del _grids[key]
+    _walk.cache_clear()

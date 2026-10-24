@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { BuildDialog } from "../components/BuildDialog";
 import { FloorRail } from "../components/FloorRail";
 import { Pictogram } from "../components/Pictogram";
 import { PlanView, type Pin } from "../components/PlanView";
@@ -9,7 +11,7 @@ import type { BuildingRow, GuideStep, Space } from "../lib/types";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
-const DEFAULT_BUILDING = "proc-factory-dev-003";
+const DEFAULT_BUILDING = "proc-campus-dev-000";
 const Building3D = lazy(() => import("../components/Building3D"));
 
 export default function Navigator() {
@@ -20,10 +22,11 @@ export default function Navigator() {
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
   const [stepMode, setStepMode] = useState(false);
-  const [view, setView] = useState<"2d" | "3d">(params.get("view") === "3d" ? "3d" : "2d");
+  const [view, setView] = useState<"2d" | "3d" | "follow">(params.get("view") === "2d" ? "2d" : "3d");
   const [allFloors, setAllFloors] = useState(false);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [buildingImport, setBuildingImport] = useState(false);
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
   useEffect(() => { setSelected(null); setStepMode(false); }, [buildingId]);
@@ -39,7 +42,7 @@ export default function Navigator() {
   }, [nav.geometry, nav.here, nav.sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const g = nav.geometry;
-  const steps = nav.route?.guide.steps ?? [];
+  const steps = nav.route?.guide?.steps ?? [];
   const cats = useMemo(() => (g ? categories(g) : []), [g]);
   // Example requests built from this building's own rooms, items and lifts, so every one of them works here.
   const examples = useMemo(() => {
@@ -73,7 +76,7 @@ export default function Navigator() {
     const at = (id: string) => g.spaces.find((s) => s.id === id);
     const here = nav.here ? at(nav.here) : null;
     if (here && !nav.route) out.push({ id: "here", at: centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start" });
-    if (nav.route) {
+    if (nav.route?.polyline.length) {
       const first = nav.route.polyline[0], last = nav.route.polyline[nav.route.polyline.length - 1];
       out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Start", tone: "start" });
       out.push({ id: "end", at: [last.x, last.y], floor_id: last.floor_id, label: "Destination", tone: "end" });
@@ -96,12 +99,12 @@ export default function Navigator() {
   }
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
+    <div className="navigator-shell flex h-full flex-col lg:flex-row">
       {/* ---------- sign column ---------- */}
-      <aside className="order-2 flex min-h-0 flex-1 flex-col bg-ink text-white lg:order-1 lg:w-[440px] lg:flex-none">
+      <aside className="order-2 flex min-h-0 flex-1 flex-col navigation-panel bg-ink text-white lg:order-1 lg:w-[370px] lg:flex-none">
         <header className="flex items-center gap-2 border-b border-ink-2 px-4 py-3">
           <BuildingPicker buildings={buildings} value={buildingId} onChange={(b) => setParams({ building: b })} name={g.building.name} />
-          <Link to="/lab" className="ml-auto font-sign text-sm text-ink-4 hover:text-white">Benchmark lab</Link>
+          <button onClick={() => setBuildingImport(true)} className="ml-auto text-sm text-concrete">Import plan</button>
         </header>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-2 px-4 py-2.5">
@@ -125,7 +128,7 @@ export default function Navigator() {
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
           {nav.route && (
             <RouteSign route={nav.route} meta={nav.routeMeta} stepFree={nav.route.constraints.includes("step-free")}
-              active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => setStepMode(true)} floors={g.floors} />
+              active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => { setView("follow"); nav.setActiveStep(0); }} floors={g.floors} />
           )}
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
@@ -145,56 +148,47 @@ export default function Navigator() {
         <Composer busy={nav.busy} onSend={nav.ask} />
       </aside>
 
-      {/* ---------- plan ---------- */}
-      <main className="relative order-1 flex h-[46vh] shrink-0 bg-concrete lg:order-2 lg:h-auto lg:flex-1">
-        <div className="z-10 shrink-0 overflow-y-auto border-r border-ink bg-white">
-          <FloorRail floors={g.floors} active={nav.floorId} route={nav.route} onPick={nav.setFloorId} here={hereFloor} />
-        </div>
-        <div className="relative min-w-0 flex-1">
-        {view === "2d" ? (
-          <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed}
-            pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint}
-            onSpaceClick={(s) => setSelected(s)} />
-        ) : (
-          <Suspense fallback={<div className="grid h-full place-items-center font-sign text-ink-3">Loading 3D…</div>}>
-            <Building3D geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} showAll={allFloors} />
-          </Suspense>
-        )}
-        <div className="absolute right-3 top-3 flex border border-ink bg-white font-sign text-[15px]">
-          {(["2d", "3d"] as const).map((v) => (
-            <button key={v} onClick={() => setView(v)} aria-pressed={view === v}
-              className={`px-3 py-1.5 font-semibold ${view === v ? "bg-ink text-white" : "hover:bg-concrete"}`}>{v.toUpperCase()}</button>
-          ))}
-          {view === "3d" && (
-            <button onClick={() => setAllFloors(!allFloors)} aria-pressed={allFloors} className={`border-l border-ink px-3 py-1.5 ${allFloors ? "bg-ink text-white" : "hover:bg-concrete"}`}>
-              All floors
-            </button>
-          )}
-        </div>
-        {view === "2d" && (
-          <div className="absolute bottom-3 left-3">
-            {showKey && <Legend />}
-            <button onClick={() => setShowKey(!showKey)} aria-expanded={showKey}
-              className="mt-1 border border-ink bg-white px-3 py-1.5 font-sign text-[14px] font-semibold hover:bg-concrete">{showKey ? "Hide key" : "Key"}</button>
+      <main className="model-panel relative order-1 flex h-[46vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
+        <div className="model-toolbar">
+          <div className="mode-switch" aria-label="View mode">
+            <button aria-pressed={view === "3d"} onClick={() => setView("3d")}>3D</button>
+            <button aria-pressed={view === "2d"} onClick={() => setView("2d")}>Floor plan</button>
+            <button disabled={!nav.route || nav.route.preview_available === false} aria-pressed={view === "follow"} onClick={() => setView("follow")}>Follow route</button>
           </div>
-        )}
-        {nav.notice && (
-          <div role="status" className="absolute inset-x-3 top-3 mx-auto flex max-w-xl items-start gap-3 border-l-4 border-mandatory bg-white p-3 text-[15px] shadow-[0_2px_0_var(--color-ink)] lg:left-auto lg:right-3">
-            <span className="flex-1">{nav.notice}</span>
-            <button onClick={() => nav.setNotice(null)} aria-label="Dismiss"><Pictogram name="close" size={18} /></button>
+          <div className="model-actions">
+            {view === "3d" && <button aria-pressed={allFloors} onClick={() => setAllFloors(!allFloors)}>All floors</button>}
+            <button disabled={nav.busy} onClick={nav.inspectWeakPoints}>Test weak points</button>
+            <Link to="/lab">Evidence</Link>
           </div>
-        )}
-        {selected && (
-          <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
-            onHere={() => { nav.setHere(selected.id); setSelected(null); nav.setNotice(null); }}
-            onGo={() => { nav.goTo(selected.id); setSelected(null); }}
-            onToggleClosed={nav.toggleClosed} />
-        )}
-        {stepMode && nav.route && (
-          <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => { setStepMode(false); stopSpeaking(); }} />
-        )}
         </div>
+        <div className="floor-selector"><FloorRail floors={g.floors} active={nav.floorId} route={nav.route} onPick={nav.setFloorId} here={hereFloor} /></div>
+        <div className="model-viewport">
+          <ErrorBoundary key={`${g.building.id}-${view}`} label="The building view needs recovery">
+            {view === "2d" ? <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed}
+              pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={setSelected} /> :
+              <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
+                <Building3D geometry={g} floorId={nav.floorId} route={nav.route} previousRoute={nav.previousRoute} highlights={nav.highlights}
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={allFloors} follow={view === "follow"} activeStep={nav.activeStep}
+                  onStep={focusStep} onSpaceClick={setSelected} />
+              </Suspense>}
+          </ErrorBoundary>
+        </div>
+        {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
+        {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span><button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
+        {view === "follow" && nav.route && <div className="follow-instruction"><span>Waypoint {nav.activeStep + 1} / {steps.length}</span><p>{steps[nav.activeStep]?.text}</p></div>}
+        {nav.weakPoints.length > 0 && view !== "follow" && <section className="weak-points" aria-label="Weak points">
+          <h2>Single closure simulation</h2>
+          {nav.weakPoints.map((item, i) => <button key={i} onClick={() => {nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}>
+            <b>{item.name}</b><span>{item.rooms_lost} of {item.of_rooms} rooms would lose step-free exit access</span>
+          </button>)}
+        </section>}
+        {selected && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
+          onHere={() => { nav.setHere(selected.id); setSelected(null); nav.setNotice(null); }}
+          onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} />}
+        {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking();}} />}
       </main>
+      {buildingImport && <BuildDialog onClose={() => setBuildingImport(false)} onBuilt={id => {setBuildingImport(false);setParams({building:id});api.buildings().then(setBuildings);}} />}
+
     </div>
   );
 }
@@ -237,13 +231,13 @@ function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examp
   onPick: (q: string) => void; onAsk: (t: string) => void; hasHere: boolean; buildingName: string; examples: string[];
 }) {
   return (
-    <section className="px-4 pb-2 pt-5">
-      <h1 className="font-sign text-[34px] font-bold leading-[1.05]">Where do you<br />want to go?</h1>
+    <section className="welcome-panel px-5 pb-2 pt-7">
+      <h1 className="font-sign text-[34px] font-bold leading-[1.05]">Know your building.<br />Find your way.</h1>
       <p className="mt-2 max-w-[34ch] text-[15px] text-ink-4">
-        {hasHere ? "Pick a place, or just ask." : `Choose where you are in ${buildingName}, or just ask.`}
+        {hasHere ? "Pick a place, or just ask." : `Explore ${buildingName}, or describe where you want to go.`}
       </p>
       {cats.length > 0 && (
-        <div className="mt-5 grid grid-cols-3 gap-px bg-ink-2">
+        <div className="destination-shortcuts mt-5 grid grid-cols-3 gap-px bg-ink-2">
           {cats.slice(0, 6).map((c) => (
             <button key={c.key} onClick={() => onPick(c.query)}
               className="flex flex-col items-start gap-3 bg-ink px-3 py-3 text-left hover:bg-ink-2">
@@ -300,7 +294,7 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
         ))}
       </ol>
       <div className="flex gap-2 px-4 py-3">
-        <button onClick={onStepMode} className="flex-1 bg-mark py-2.5 font-sign text-[17px] font-bold text-ink hover:brightness-95">Start step by step</button>
+        <button disabled={route.preview_available === false} onClick={onStepMode} className="flex-1 bg-mark py-2.5 font-sign text-[17px] font-bold text-ink hover:brightness-95">{route.preview_available === false ? "Preview unavailable: check geometry" : "Start step by step"}</button>
       </div>
     </section>
   );
@@ -330,10 +324,10 @@ function Conversation({ messages, busy, onOption, onDecide }: {
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
 }) {
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [messages, busy]);
+  useEffect(() => { const panel = end.current?.parentElement; if (panel) panel.scrollTop = panel.scrollHeight; }, [messages, busy]);
   if (!messages.length && !busy) return null;
   return (
-    <section aria-label="Conversation" aria-live="polite" className="space-y-3 px-4 py-4">
+    <section aria-label="Conversation" aria-live="polite" style={{maxHeight:320,overflowY:"auto"}} className="space-y-3 px-4 py-4">
       {messages.map((m) => {
         if (m.role === "user") return <p key={m.id} className="ml-10 border-r-4 border-concrete pr-3 text-right text-[15.5px] text-concrete">{m.text}</p>;
         if (m.role === "activity") return <p key={m.id} className="flex items-center gap-2 text-[13px] text-ink-4"><span className="h-1.5 w-1.5 bg-ink-3" />{m.text}</p>;
@@ -358,7 +352,7 @@ function Conversation({ messages, busy, onOption, onDecide }: {
               <p className="mt-1 text-[15px]">{m.text}</p>
               {m.state === "pending" ? (
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => onDecide(m, true)} className="bg-white px-3 py-1.5 font-sign font-bold text-ink">Apply</button>
+                  <button onClick={() => onDecide(m, true)} className="bg-white px-3 py-1.5 font-sign font-bold text-ink">Apply to model</button>
                   <button onClick={() => onDecide(m, false)} className="border border-ink-3 px-3 py-1.5 font-sign">Discard</button>
                 </div>
               ) : <p className="mt-2 text-sm text-ink-4">{m.state === "applied" ? "Applied." : "Discarded."}</p>}
@@ -379,6 +373,9 @@ function Conversation({ messages, busy, onOption, onDecide }: {
 function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const stopListening = useRef<(() => void) | null>(null);
+  useEffect(() => () => {stopListening.current?.();}, []);
   const submit = (value: string) => {
     const t = value.trim();
     if (!t || busy) return;
@@ -386,10 +383,11 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void
     setText("");
   };
   return (
-    <form onSubmit={(e) => { e.preventDefault(); submit(text); }} className="flex gap-2 border-t border-ink-2 p-3">
+    <form onSubmit={(e) => { e.preventDefault(); submit(text); }} className="relative flex gap-2 border-t border-ink-2 p-3">
+      {voiceError && <p role="status" className="absolute bottom-full left-0 right-0 bg-ink-2 p-3 text-sm">{voiceError}</p>}
       {canListen() && (
-        <button type="button" aria-label={listening ? "Listening" : "Speak"} aria-pressed={listening}
-          onClick={() => { if (listening) return; setListening(true); listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false)); }}
+        <button type="button" disabled={busy} aria-label={listening ? "Stop listening" : "Speak"} aria-pressed={listening}
+          onClick={() => { if (listening) {stopListening.current?.();setListening(false);return;} setVoiceError("");setListening(true);stopListening.current=listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false), setVoiceError); }}
           className={`grid h-12 w-12 shrink-0 place-items-center ${listening ? "bg-signal text-white" : "bg-white text-ink hover:bg-concrete"}`}>
           <Pictogram name="mic" size={22} />
         </button>

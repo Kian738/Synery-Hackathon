@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isRoute } from "../lib/validation";
+import { impactText } from "../lib/impact";
 import { ApiError, api, chat } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
-import type { Geometry, Opening, Route, UiEvent } from "../lib/types";
+import type { Geometry, Opening, Route, UiEvent, WeakPoint } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
@@ -9,7 +11,7 @@ export type Message =
   | { id: number; role: "activity"; text: string }
   | { id: number; role: "error"; text: string }
   | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" }
-  | { id: number; role: "change"; text: string; first: string; second: string; state: "pending" | "applied" | "discarded" };
+  | { id: number; role: "change"; text: string; first: string; second: string; widenings?: {opening_id:string;to_m:number}[]; kind?: "widen"; openingId?: string; width?: number; start?: string; destination?: string; state: "pending" | "applied" | "discarded" };
 
 type NewMessage = Message extends infer M ? (M extends Message ? Omit<M, "id"> : never) : never;
 
@@ -48,6 +50,10 @@ export function useNavigator(buildingId: string) {
   const [geometry, setGeometry] = useState<Geometry | null>(null);
   const [floorId, setFloorId] = useState("");
   const [route, setRoute] = useState<Route | null>(null);
+  const [previousRoute, setPreviousRoute] = useState<Route | null>(null);
+  const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
+  const routeRef = useRef<Route | null>(null); routeRef.current = route;
+  const generation = useRef(0);
   const [routeMeta, setRouteMeta] = useState<{ from: string; to: string; alternatives?: { room: string; walk_m: number }[] } | null>(null);
   const [highlights, setHighlights] = useState<Set<string>>(new Set());
   const [closed, setClosed] = useState<Set<string>>(new Set());
@@ -65,7 +71,9 @@ export function useNavigator(buildingId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    setGeometry(null);
+    generation.current++;
+    setSessionId(null); setBusy(false); setNotice(null); setGeometry(null);
+    setPreviousRoute(null); setWeakPoints([]);
     (async () => {
       const { session_id } = await api.newSession(buildingId);
       const g = await api.sessionGeometry(session_id);
@@ -84,7 +92,12 @@ export function useNavigator(buildingId: string) {
   }, [buildingId]);
 
   const showRoute = useCallback((r: Route) => {
+    if (!isRoute(r)) {
+      setNotice("The route response was incomplete. Please try again."); return;
+    }
     setRoute(r);
+    const building = geometryRef.current;
+    if (building) setRouteMeta({from:labelOf(building,r.stops[0]),to:labelOf(building,r.stops[r.stops.length-1])});
     setPreviewDoor(null);
     setActiveStep(0);
     if (r.polyline.length) setFloorId(r.polyline[0].floor_id);
@@ -93,13 +106,23 @@ export function useNavigator(buildingId: string) {
   const apply = useCallback((events: UiEvent[]) => {
     const g = geometryRef.current;
     for (const e of events) {
+      if (!e || typeof e.type !== "string") { setNotice("An invalid update was ignored. Please retry."); continue; }
       if (e.type === "route") showRoute(e.route);
       else if (e.type === "highlight") {
         setHighlights(new Set(e.ids));
         const first = g?.spaces.find((s) => s.id === e.ids[0]) ?? g?.assets.find((a) => a.id === e.ids[0]);
         if (first) setFloorId(first.floor_id);
       } else if (e.type === "closure") {
+        setPreviousRoute(routeRef.current); setRoute(null);
         setClosed((c) => { const n = new Set(c); e.closed ? n.add(e.id) : n.delete(e.id); return n; });
+        setNotice(impactText(e.impact));
+        setHighlights(new Set(e.impact.step_free?.cut_off_ids ?? e.impact.cut_off_ids ?? []));
+      } else if (e.type === "fix_preview") {
+        setPreviewDoor(e.opening); setFloorId(e.opening.floor_id);
+        push({role: "change", kind: "widen", text: `${e.fix.reason} ${e.fix.widen.map(w => `${w.from_m} m → ${w.to_m} m`).join(", ")}`,
+              first: "", second: "", widenings:e.fix.widen, openingId: e.opening.id, width: e.opening.width_m, start: e.start, destination: e.destination, state: "pending"});
+      } else if (e.type === "weak_points") {
+        setWeakPoints(e.items);
       } else if (e.type === "preview_door") {
         setPreviewDoor(e.door);
         setFloorId(e.door.floor_id);
@@ -107,7 +130,7 @@ export function useNavigator(buildingId: string) {
         setPreviewDoor(null);
         if (sessionIdRef.current) api.sessionGeometry(sessionIdRef.current).then(setGeometry);
       } else if (e.type === "profile") {
-        if (e.profile.step_free) setStepFree(true);
+        setStepFree(e.profile.step_free);
         if (e.profile.location) setHere(e.profile.location);
       }
     }
@@ -124,8 +147,11 @@ export function useNavigator(buildingId: string) {
       return;
     }
     try {
+      const current = generation.current;
       const { result, events } = await api.route(sessionId, { start, destination, step_free: stepFreeOverride ?? stepFree });
+      if (current !== generation.current) return;
       if (result.error) {
+        setPreviousRoute(routeRef.current); setRoute(null); apply(events);
         setNotice(result.error);
         return;
       }
@@ -145,26 +171,40 @@ export function useNavigator(buildingId: string) {
     const { result, events } = await api.close(sessionId, id, !closed.has(id));
     apply(events);
     const impact = result.impact;
-    setNotice(`${result.element} ${result.closed ? "closed" : "reopened"}. ` +
-      (impact.cut_off_count ? `${impact.cut_off_count} rooms lose their way out. ` : "") +
-      (impact.longer_way_out_count ? `${impact.longer_way_out_count} rooms have a longer way out.` : "No room is cut off."));
+    setNotice(impactText(impact));
   }, [sessionId, closed, apply]);
 
   const decideChange = useCallback(async (message: Extract<Message, { role: "change" }>, accept: boolean) => {
-    setMessages((all) => all.map((m) => (m.id === message.id ? { ...m, state: accept ? "applied" : "discarded" } as Message : m)));
-    if (!accept || !sessionId) { setPreviewDoor(null); return; }
-    const { events } = await api.door(sessionId, message.first, message.second, true);
-    apply(events);
+    if (!accept) {
+      setMessages(all => all.map(m => m.id === message.id ? {...m, state: "discarded"} as Message : m));
+      setPreviewDoor(null); return;
+    }
+    if (!sessionId) return;
+    try {
+      if (message.kind === "widen" && message.openingId && message.width) {
+        for(const widening of message.widenings ?? [{opening_id:message.openingId,to_m:message.width}]) {
+          const {events} = await api.widen(sessionId, widening.opening_id, widening.to_m); apply(events);
+        }
+        if (message.start && message.destination) {
+          const next = await api.route(sessionId, {start:message.start, destination:message.destination, step_free:true, min_door_width_m:message.width});
+          apply(next.events); if (next.result.error) setNotice(next.result.error);
+        }
+      } else { const {events} = await api.door(sessionId, message.first, message.second, true); apply(events); }
+      setMessages(all => all.map(m => m.id === message.id ? {...m, state: "applied"} as Message : m));
+    } catch (error) { setNotice(String(error)); }
+
   }, [sessionId, apply]);
 
   const ask = useCallback(async (text: string) => {
     if (!sessionId) return;
     push({ role: "user", text });
     setBusy(true);
+    const current = generation.current;
     const g = geometryRef.current;
-    const context = [here ? `(I am in ${labelOf(g!, here)}.)` : "", stepFree ? "(I need step-free routes.)" : ""].filter(Boolean).join(" ");
+
     try {
-      await chat(sessionId, context ? `${text} ${context}` : text, (event) => {
+      await chat(sessionId, text, (event) => {
+        if (current !== generation.current || !event || typeof event !== "object") return;
         if (event.type === "tool") push({ role: "activity", text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
         else if (event.type === "ui") {
           apply([event.data]);
@@ -172,24 +212,32 @@ export function useNavigator(buildingId: string) {
             const d = event.data.door;
             push({ role: "change", text: `New door between ${labelOf(g!, d.space_ids[0])} and ${labelOf(g!, d.space_ids[1])}. ${event.data.impact.shorter_way_out_count} rooms get a shorter way out.`, first: d.space_ids[0], second: d.space_ids[1], state: "pending" });
           }
-          if (event.data.type === "route") {
+          if (event.data.type === "route" && isRoute(event.data.route)) {
             const r = event.data.route;
             setRouteMeta({ from: labelOf(g!, r.stops[0]), to: labelOf(g!, r.stops[r.stops.length - 1]) });
           }
-        } else if (event.type === "reply") push({ role: "agent", text: event.data.text, model: event.data.model });
-        else if (event.type === "error") push({ role: "error", text: event.data.message });
+        } else if (event.type === "reply" && typeof event.data?.text === "string") push({ role: "agent", text: event.data.text, model: event.data.model });
+        else if (event.type === "error") push({ role: "error", text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
       });
     } catch (e) {
-      push({ role: "error", text: String(e) });
+      if (current === generation.current) push({ role: "error", text: String(e) });
     } finally {
-      setBusy(false);
+      if (current === generation.current) setBusy(false);
     }
   }, [sessionId, here, stepFree, apply]);
 
+  useEffect(() => {
+    if (sessionId && geometry) api.profile(sessionId, {step_free:stepFree, location:here}).then(response => {apply(response.events);if(response.route_update?.error){setPreviousRoute(routeRef.current);setRoute(null);setNotice(response.route_update.error);}}).catch(e => setNotice(e.message));
+  }, [sessionId, geometry?.building.id, here, stepFree]);
+  const inspectWeakPoints = async () => {
+    if (!sessionId) return; setBusy(true);
+    try { const response = await api.weakPoints(sessionId); apply(response.events); }
+    catch(e) { setNotice(String(e)); } finally { setBusy(false); }
+  };
   const clearRoute = () => { setRoute(null); setRouteMeta(null); setActiveStep(0); };
 
   return {
-    sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
+    previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
     goTo, ask, toggleClosed, decideChange,
   };

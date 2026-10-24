@@ -24,10 +24,13 @@ const post = (url: string, body: unknown) =>
 type WithEvents<T> = { result: T; events: UiEvent[] };
 
 export const api = {
+  profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
+  widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
+  weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
   buildings: () => fetch("/api/buildings").then(json<BuildingRow[]>),
   geometry: (building: string) => fetch(`/api/buildings/${building}`).then(json<Geometry>),
   newSession: (building_id: string) => post("/api/sessions", { building_id }).then(json<{ session_id: string }>),
-  sessionGeometry: (sessionId: string) => fetch(`/api/sessions/${sessionId}/geometry`).then(json<Geometry>),
+  sessionGeometry: (sessionId: string) => fetch(`/api/sessions/${sessionId}/scene`).then(json<Geometry>),
   route: (sessionId: string, body: Record<string, unknown>) =>
     post(`/api/sessions/${sessionId}/route`, body).then(json<WithEvents<any>>),
   close: (sessionId: string, element: string, closed: boolean) =>
@@ -47,20 +50,31 @@ export type ChatEvent =
 
 /** Read a server-sent-events body line by line. */
 export async function readEvents<T>(response: Response, onEvent: (e: T) => void) {
-  if (!response.body) throw new ApiError("no stream");
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new ApiError(`Chat request failed (${response.status}): ${detail.slice(0, 160)}`);
+  }
+  if (!response.body) throw new ApiError("Chat stream unavailable");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   for (;;) {
     const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    buffer += decoder.decode(value, { stream: !done });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    if (done && buffer.trim()) buffer += "\n\n";
     let index;
     while ((index = buffer.indexOf("\n\n")) >= 0) {
       const chunk = buffer.slice(0, index);
       buffer = buffer.slice(index + 2);
-      if (chunk.startsWith("data: ")) onEvent(JSON.parse(chunk.slice(6)));
+      const data = chunk.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+      if (data) {
+        let event: T;
+        try { event = JSON.parse(data); } catch { throw new ApiError("Chat returned an invalid event. Please retry."); }
+        onEvent(event);
+      }
     }
+    if (done) break;
   }
 }
 

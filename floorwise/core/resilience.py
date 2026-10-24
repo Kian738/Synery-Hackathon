@@ -18,14 +18,28 @@ class WeakPoint:
 def chaos_test(building: Building, constraints: Constraints = Constraints()) -> dict:
     constraints = replace(constraints, outside='free')
     rooms = {s for s, r in building.spaces.items() if r['type'] == 'room'}
-    baseline = RouteGraph(building, constraints).reachable(OUTSIDE) & rooms
+    route_graph = RouteGraph(building, constraints)
+    graph = route_graph.graph
+    baseline = route_graph.reachable(OUTSIDE) & rooms
+    edges_by_element = {}
+    for u, v, key, attributes in graph.edges(keys=True, data=True):
+        edges_by_element.setdefault(attributes['via'], []).append((u, v, key, dict(attributes)))
     groups = {}
     elements = list(building.connectors.values()) + list(building.openings.values())
     for element in elements:
         if element['id'] in constraints.closed:
             continue
-        after = RouteGraph(building, replace(constraints, closed=constraints.closed | {element['id']})).reachable(OUTSIDE)
-        lost = tuple(sorted(baseline - after))
+        removed = edges_by_element.get(element['id'], [])
+        if not removed:
+            continue
+        try:
+            for u, v, key, attributes in removed:
+                graph.remove_edge(u, v, key)
+            after = route_graph.reachable(OUTSIDE)
+            lost = tuple(sorted(baseline - after))
+        finally:
+            for u, v, key, attributes in removed:
+                graph.add_edge(u, v, key=key, **attributes)
         if lost:
             groups.setdefault(lost, []).append(element)
     result = []

@@ -40,9 +40,11 @@ Remembering the person:
 - If they say where they are, call remember_person with the location; later routes may omit the start.
 
 Changes:
+- Exit-impact distances use route-model metres including lift/stair penalties. Never call those physical walking metres.
 - Closures (lift out of service, blocked aisle): apply with set_closed and always report the step_free impact counts, even when general cut_off_count is zero.
 - Proposed door widenings are hypothetical building edits requiring physical work. Show the verified fix, and call apply_fix only after the person explicitly agrees.
 - Never assess survivability of jumping from windows or guide unsafe actions. Offer ordinary mapped exits instead.
+- Use find_places to combine room type, floor relation and contained equipment. A room must satisfy every descriptor; if no room matches, say so and offer real alternatives.
 - Use count_items, shared_walls, distance_3d, errand and door_effect for those questions. Never compute numbers yourself.
 - New doors: call add_door with confirm=false first, explain the effect, and apply with confirm=true only after the person agrees.
 - "This machine is now in room X": move_item.
@@ -89,7 +91,10 @@ class ChatAgent:
                     on_event("ui", event)
             seen = len(self.session.events)
 
-        reply = self.conversation.ask(user_text, on_event=relay)
+        context = {"profile": self.session.profile.__dict__, "closed": sorted(self.session.closed),
+                   "last_route_stops": self.session.last_route.stops if self.session.last_route else None}
+        grounded_input = user_text + "\n\nCurrent map session (fallback context only; an explicit origin in the request takes precedence): " + json.dumps(context, ensure_ascii=False)
+        reply = self.conversation.ask(grounded_input, on_event=relay)
         relay("step", {})
         return reply
 

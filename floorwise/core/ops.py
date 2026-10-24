@@ -117,7 +117,7 @@ def distances_to_exit(building: Building, constraints: Constraints = Constraints
     return graph.distances_from(OUTSIDE)
 
 
-def what_if_door(building: Building, first: str, second: str, floor_id: str, threshold_m: float = 1.0) -> dict:
+def what_if_door(building: Building, first: str, second: str, floor_id: str, threshold_m: float = 1.0, constraints: Constraints = Constraints()) -> dict:
     position = geometry.wall_midpoint(building, first, second)
     if position is None:
         return {"error": "these two spaces do not share a wall"}
@@ -131,8 +131,8 @@ def what_if_door(building: Building, first: str, second: str, floor_id: str, thr
         "step_free": True,
         "synthetic": True,
     }
-    before = distances_to_exit(building)
-    after = distances_to_exit(building, Constraints(extra_openings=(door,)))
+    before = distances_to_exit(building, constraints)
+    after = distances_to_exit(building, replace(constraints, extra_openings=constraints.extra_openings + (door,)))
     improved = []
     for space in building.spaces_on(floor_id):
         space_id = space["id"]

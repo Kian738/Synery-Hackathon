@@ -32,6 +32,8 @@ class Route:
     floors: list[str] = field(default_factory=list)
     polyline: list[dict] = field(default_factory=list)  # [{floor_id, x, y}] for drawing
     guide: dict = field(default_factory=dict)  # structured steps + spoken overview
+    preview_available: bool = True
+    warnings: list[str] = field(default_factory=list)
     walk_m: float | None = None  # humane walking length along the drawn path (navigation only)
 
     def to_dict(self) -> dict:
@@ -89,6 +91,13 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     else:
         route.polyline = polyline(building, graph, all_nodes)
     route.floors = list(dict.fromkeys(p["floor_id"] for p in route.polyline))
+    if humane:
+        from floorwise.core.scene import compile_scene
+        unsupported = set(compile_scene(building)['unmatched_openings'])
+        used = {e for leg in route.legs for e in leg.element_path}
+        if unsupported & used:
+            route.preview_available = False
+            route.warnings.append("Some route openings cannot be aligned with the supplied room boundaries. Use the floor plan; eye-level playback is unavailable.")
     return route
 
 

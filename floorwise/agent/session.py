@@ -213,6 +213,7 @@ class Session:
 
     def route(self, start: str, destination: str, via: list[str] | None = None, **constraint_args) -> dict:
         b = self.building
+        self.last_route_request = (start, destination, via, dict(constraint_args))
         assumed = None
         if not start and not self.profile.location:
             if not self.default_start:
@@ -238,16 +239,16 @@ class Session:
             from floorwise.core.fixes import smallest_fix
             fix = smallest_fix(b, first, last, constraints)
             if fix.verified:
-                for widening in fix.widen:
-                    self.emit("fix_preview", opening={**b.openings[widening.opening_id], "width_m": widening.to_m},
-                              fix=asdict(fix), start=first, destination=last)
+                widening = fix.widen[0]
+                self.emit("fix_preview", opening={**b.openings[widening.opening_id], "width_m": widening.to_m},
+                          fix=asdict(fix), start=first, destination=last)
             return {"error": str(error), "without_extra_constraints_m": relaxed.length_m if relaxed else None, "why": asdict(fix)}
         self.last_route = route
         self.emit("route", route=route.to_dict())
         return {
             "from": b.label(stops[0]), "to": b.label(stops[-1]), "via": [b.label(s) for s in stops[1:-1]],
             "length_m": route.walk_m if route.walk_m is not None else route.length_m,
-            "about_minutes": max(1, round((route.walk_m or route.length_m) / 1.2 / 60)), "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
+            "about_minutes": max(1, round((route.walk_m if route.walk_m is not None else route.length_m) / 1.2 / 60) + sum(s['kind'] == 'floor' for s in route.guide['steps'])), "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
             "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m,
             **({"assumed_start": f"Start not given: assumed the main entrance, {b.label(assumed)}. Say so in one line."} if assumed else {}),
             **({"other_matches_further_away": alternatives} if alternatives else {}),
@@ -312,7 +313,13 @@ class Session:
         else:
             name = element_id
         self.emit("closure", id=element_id, closed=closed, impact=impact)
-        return {"element": name, "id": element_id, "closed": closed, "all_closed": sorted(self.closed), "impact": impact}
+        result = {"element": name, "id": element_id, "closed": closed, "all_closed": sorted(self.closed), "impact": impact}
+        request = getattr(self, "last_route_request", None)
+        self.last_route = None
+        if request:
+            start, target, via, kwargs = request
+            result["route_update"] = self.route(start, target, via, **kwargs)
+        return result
 
     def door_preview(self, first: str, second: str) -> dict:
         b = self.building
@@ -340,6 +347,8 @@ class Session:
         self.building.openings[door["id"]] = door
         self.building.data["openings"].append(door)
         self.edits.append({"op": "add_door", "door": door})
+        from floorwise.core.walk import invalidate
+        invalidate(self.building)
         self.emit("edit", op="add_door", door=door)
         return {"added": door["id"], "between": preview["between"], "impact": preview["impact"]}
 
@@ -360,6 +369,9 @@ class Session:
         old = record["space_id"]
         record.update(space_id=space_id, floor_id=b.spaces[space_id]["floor_id"], position=[round(x, 3), round(y, 3)])
         self.edits.append({"op": "move_asset", "asset": asset_id, "from": old, "to": space_id})
+        from floorwise.core.walk import invalidate
+        invalidate(self.building)
+        self.last_route = None
         self.emit("edit", op="move_asset", asset=asset_id, to=space_id)
         return {"moved": record["name"], "from": b.label(old), "to": b.label(space_id)}
 
@@ -417,6 +429,7 @@ class Session:
         longer = sorted(((after[s] - before[s], s) for s in rooms if s in before and s in after and after[s] - before[s] > 1), reverse=True)
         shorter = sorted(((before[s] - after[s], s) for s in rooms if s in before and s in after and before[s] - after[s] > 1), reverse=True)
         return {
+            "distance_basis": "route-model metres including connector penalties, not physical walking distance",
             "of_rooms": sum(s in before for s in rooms), "cut_off_ids": cut_off,
             "reconnected_ids": reconnected,
             "rooms_cut_off_from_exits": [b.label(s) for s in cut_off][:MAX_RESULTS], "cut_off_count": len(cut_off),

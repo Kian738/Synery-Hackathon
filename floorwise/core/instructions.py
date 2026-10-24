@@ -101,6 +101,8 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
     segments = segments or {}
     steps: list[Step] = []
     start = nodes[0]
+    if segments.get(0):
+        points[start] = (points[start][0], *segments[0][0])
     steps.append(Step("start", "start", f"Start in {building.label(start)}.", f"From {building.spaces[start]['name']}.",
                       0.0, building.spaces[start]["floor_id"], list(points[start][1:]), space_id=start))
     # Distances run door to door (room anchors are graph artefacts, not where people walk).
@@ -176,6 +178,7 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
             # Walking into a lift or stairwell only to ride it: say it once, in the floor step.
             next_is_connector = index + 1 < len(nodes) and graph.edge_via(current, nodes[index + 1])["via"] in building.connectors
             if space["type"] in ("lift", "stair") and next_is_connector:
+                walked += _length(segments.get(index, []))
                 index += 1
                 continue
             if came_from_outside:
@@ -185,9 +188,12 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
             lead = _lead(building, walked, passed)
             if is_last:
                 ref = f" ({space['ref']})" if space.get("ref") and space["ref"] not in space["name"] else ""
-                text = f"{lead}Go through {target} into {space['name']}{ref}. You have arrived."
-                steps.append(Step("arrive", "arrive", text, f"arrive at {space['name']}", round(walked, 1),
-                                  space["floor_id"], list(points[current][1:]), landmark, current))
+                inside = segments.get(index, [])
+                interior = _length(inside)
+                finish = f" Continue about {interior:.0f} m inside to the marked destination." if interior >= 1 else ""
+                text = f"{lead}Go through {target} into {space['name']}{ref}.{finish} You have arrived."
+                steps.append(Step("arrive", "arrive", text, f"arrive at {space['name']}", round(walked + interior, 1),
+                                  space["floor_id"], list(inside[-1]) if inside else list(points[current][1:]), landmark, current))
             else:
                 then = {"left": ", then turn left", "right": ", then turn right", "back": ", then turn around"}.get(turn, "")
                 text = f"{lead}Go through {target} into {space['name']}{then}."
@@ -229,7 +235,7 @@ def spoken(steps: list[Step]) -> str:
     moves = [s for s in steps if s.kind in ("walk", "floor", "outside", "arrive")]
     total = sum(s.metres for s in steps)
     floors = sum(1 for s in steps if s.kind == "floor")
-    minutes = max(1, round(total / WALKING_SPEED_MPS / 60))
+    minutes = max(1, round(total / WALKING_SPEED_MPS / 60) + floors)
     parts = [s.short.rstrip(".") for s in moves]
     if len(parts) > 4:
         parts = parts[:3] + [parts[-1]]

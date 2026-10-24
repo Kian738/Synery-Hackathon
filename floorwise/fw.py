@@ -97,22 +97,26 @@ def check() -> int:
     return code or run([sys.executable, "-m", "eval", "gates"])
 
 
-def ui_test() -> int:
+def ui_test(extra: list[str] | None = None) -> int:
     import time
     import urllib.request
 
     if web_is_stale() and run(["npm", "run", "build"], ROOT / "web"):
         return 1
-    server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.app:app", "--port", "8011"], cwd=ROOT)
+    import socket
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.app:app", "--port", str(port)], cwd=ROOT)
     try:
         for _ in range(40):
             try:
-                urllib.request.urlopen("http://localhost:8011/api/lab/suites", timeout=1)
+                urllib.request.urlopen(f"http://localhost:{port}/api/lab/suites", timeout=1)
                 break
             except OSError:
                 time.sleep(0.5)
-        os.environ["FLOORWISE_URL"] = "http://localhost:8011"
-        return run(["npx", "playwright", "test"], ROOT / "web")
+        os.environ["FLOORWISE_URL"] = f"http://localhost:{port}"
+        return run(["npx", "playwright", "test", *(extra or [])], ROOT / "web")
     finally:
         server.terminate()
 
@@ -140,7 +144,7 @@ def main() -> None:
     if command == "check":
         sys.exit(check())
     if command == "ui-test":
-        sys.exit(ui_test())
+        sys.exit(ui_test(rest))
     if command == "submit":
         sys.exit(submit())
     if command == "bench":

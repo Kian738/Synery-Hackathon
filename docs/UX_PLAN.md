@@ -114,3 +114,8 @@ Each rule comes from the research report (sources there).
    - P2: interaction transcripts with judge verdicts; build overlay.
 5. Playwright flows for both surfaces and screenshot review at 1440 px and 390 px.
 6. Stretch: QR-seeded WebXR glance-AR (Android Chrome) with a 2D/compass fallback, isometric stack view.
+
+
+## 2026-10-24 implementation update
+
+The team selected a cinematic industrial presentation (see DESIGN.md), replacing the original fixed light-plan composition. Navigator defaults to a dark 3D building stage, with Floor plan and Follow route modes. Controls and text retain high contrast; 2D remains the bright fallback. Follow route is an explicitly started preview, not live positioning. Closure impact and verified hypothetical widenings are contextual overlays, not dashboard metrics. Projector inspection and uncoached human usability testing remain manual release checks.

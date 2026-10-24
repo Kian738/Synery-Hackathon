@@ -37,7 +37,7 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/agent/answer.py` | benchmark entry `answer(dir, text)` | verified (kit evaluator 138/138 dev) |
 | `floorwise/agent/session.py` | per-user state: closures, edits, profile, UI events | unit-tested |
 | `floorwise/agent/tools.py` | LLM tools wrapping `Session` | live on Groq |
-| `floorwise/agent/chat.py` | `ChatAgent` (provider-neutral) | live on Groq; untested on Claude |
+| `floorwise/agent/chat.py` | `ChatAgent` (provider-neutral) | live on Groq and Claude; five route/closure rehearsals verified |
 | `floorwise/llm/` | provider layer: `anthropic` (prod), `groq`/`openrouter` (testing) | Groq verified |
 | `floorwise/build/` | floor plan images → `building.json` (CV + learned palette + optional vision labels) | procedural 100 %; OSM/Swiss weaker |
 | `floorwise/cli.py` | `run_benchmark` (Sunday command) | verified offline |

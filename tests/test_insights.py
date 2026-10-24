@@ -77,3 +77,23 @@ def test_insight_rest_routes():
     assert response.status_code == 200
     assert response.json()['events'][0]['type'] == 'edit'
     assert client.post(f'/api/sessions/{sid}/widen', json={'opening_id': 'missing', 'width_m': 1.1}).status_code == 422
+
+
+def test_step_distances_include_connector_approach_and_final_room(campus):
+    for closed in (False, True):
+        if closed:
+            campus.set_closed('Lift 2', True)
+        campus.route('Lab 2.17', 'Lab 4.26', step_free=True)
+        route = campus.last_route
+        assert abs(sum(step['metres'] for step in route.guide['steps']) - route.walk_m) < 0.3
+        assert 'inside to the marked destination' in route.guide['steps'][-1]['text']
+
+
+def test_profile_toggle_replans_active_route_through_rest():
+    client = TestClient(app)
+    sid = client.post('/api/sessions', json={'building_id': 'proc-campus-dev-000'}).json()['session_id']
+    result = client.post(f'/api/sessions/{sid}/route', json={'start':'Lab 2.17','destination':'Lab 4.26'}).json()
+    assert 'error' not in result['result']
+    updated = client.post(f'/api/sessions/{sid}/profile', json={'step_free':True}).json()
+    routes = [e['route'] for e in updated['events'] if e['type']=='route']
+    assert routes and 'step-free' in routes[-1]['constraints']

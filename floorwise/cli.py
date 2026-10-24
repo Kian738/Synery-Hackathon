@@ -47,6 +47,7 @@ def structured(qid: str, reply: str, trace: dict) -> dict:
         if result.get("reachable"):
             entry["length_m"] = result["length_m"]
             entry["route"] = result["space_path"]
+            entry["route_nodes"] = [n for i, leg in enumerate(result["legs"]) for n in (leg["nodes"] if i == 0 else leg["nodes"][1:])]
             entry["route_elements"] = [e for leg in result["legs"] for e in leg["element_path"]]
             entry["legs"] = result["legs"]
     elif kind == "locate":
