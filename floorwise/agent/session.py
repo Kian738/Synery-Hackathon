@@ -4,6 +4,7 @@ Tools (for Claude) and the REST API (for the app) both go through this object, s
 and what the map shows can never disagree."""
 
 import copy
+import re
 import itertools
 from dataclasses import dataclass, field
 
@@ -48,18 +49,50 @@ class Session:
     def space(self, mention: str) -> str:
         return R.resolve_space(self.building, mention).id
 
-    def place(self, mention: str) -> str:
-        """A space, or the room an asset stands in."""
+    def place(self, mention: str, near: str | None = None) -> str:
+        """A space, the room an item stands in, or the nearest room with an item/room type.
+
+        Ask-gate (research: ask only when candidates lead to materially different answers): if every
+        candidate is in the same room, or we know where the person is, pick without asking and keep the
+        alternatives in self.alternatives so the agent can mention them."""
         b = self.building
+        self.alternatives = []
         if mention in b.assets:
             return b.assets[mention]["space_id"]
         try:
             return self.space(mention)
         except R.ResolveError as error:
-            key = R.normalise(mention)
-            assets = [a for a in b.assets.values() if R.normalise(a["name"]) == key]
-            if len(assets) == 1:
-                return assets[0]["space_id"]
+            key = R.normalise(re.sub(r"^(the|a|an|nearest|closest)\s+", "", R.normalise(mention)))
+            rooms = {a["space_id"] for a in b.assets.values() if R.normalise(a["name"]) == key}
+            if not rooms:
+                rooms = {a["space_id"] for a in b.assets.values()
+                         if key in R.normalise(a["name"]) or key in R.normalise(a["type"])}
+            if not rooms:
+                try:
+                    rooms = {a["space_id"] for a in b.assets.values() if a["type"] == R.resolve_asset_type(b, key)}
+                except R.ResolveError:
+                    pass
+            if not rooms:
+                try:
+                    room_type = R.resolve_room_type(b, key)
+                    rooms = {s["id"] for s in b.spaces.values() if s["room_type"] == room_type}
+                except R.ResolveError:
+                    pass
+            if len(rooms) == 1:
+                return next(iter(rooms))
+            if len(rooms) > 1 and near:
+                from floorwise.core.graph import RouteGraph
+
+                distances = RouteGraph(b, self.constraints(), keep=frozenset({near})).distances_from(near)
+                ranked = sorted((distances[r], r) for r in rooms if r in distances)
+                if ranked:
+                    self.alternatives = [{"room": b.label(r), "walk_m": round(d)} for d, r in ranked[1:4]]
+                    return ranked[0][1]
+            if len(rooms) > 1:
+                raise R.ResolveError(
+                    f"'{mention}' is in {len(rooms)} rooms; where is the person, or which one?",
+                    [{"id": r, "label": b.label(r)} for r in sorted(rooms)][:6],
+                ) from error
             raise error
 
     def constraints(self, step_free: bool | None = None, min_door_width_m: float | None = None,
@@ -172,7 +205,15 @@ class Session:
 
     def route(self, start: str, destination: str, via: list[str] | None = None, **constraint_args) -> dict:
         b = self.building
-        stops = [self.place(start), *[self.place(v) for v in via or []], self.place(destination)]
+        if not start and not self.profile.location:
+            return {"error": "Start unknown. Ask where the person is: offer 2-3 visible landmarks or entrances."}
+        first = self.place(start or self.profile.location)
+        middle = []
+        for stop in via or []:
+            middle.append(self.place(stop, near=(middle or [first])[-1]))
+        last = self.place(destination, near=(middle or [first])[-1])
+        alternatives = self.alternatives
+        stops = [first, *middle, last]
         constraints = self.constraints(**constraint_args)
         try:
             route = plan_route(b, stops, constraints)
@@ -189,7 +230,8 @@ class Session:
         return {
             "from": b.label(stops[0]), "to": b.label(stops[-1]), "via": [b.label(s) for s in stops[1:-1]],
             "length_m": route.length_m, "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
-            "steps": route.steps,
+            "steps": route.steps, "spoken_overview": route.guide.get("spoken"),
+            **({"other_matches_further_away": alternatives} if alternatives else {}),
         }
 
     def reachable(self, start: str, floor: str, **constraint_args) -> dict:

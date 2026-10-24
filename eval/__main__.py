@@ -25,6 +25,7 @@ def run(suite: str, args: list[str]) -> None:
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if len(sys.argv) < 2 or sys.argv[1] not in SUITES + ["gates"]:
         sys.exit(__doc__)
     if sys.argv[1] == "gates":

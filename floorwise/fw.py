@@ -103,6 +103,8 @@ def submit() -> int:
 
 def main() -> None:
     load_env()
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")  # Windows consoles default to cp1252
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help", "help"):
         print(__doc__)

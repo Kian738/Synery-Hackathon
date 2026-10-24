@@ -59,8 +59,8 @@ def make_tools(session: Session, allow_edits: bool = True) -> list:
 
     @beta_tool
     def find_route(
-        start: str,
         destination: str,
+        start: str | None = None,
         via: list[str] | None = None,
         step_free: bool | None = None,
         min_door_width_m: float | None = None,
@@ -72,8 +72,8 @@ def make_tools(session: Session, allow_edits: bool = True) -> list:
         """Shortest walking route with turn-by-turn steps and metres; draws it on the map.
 
         Args:
-            start: Where the person is: room name/number or an item name.
-            destination: Where they want to go: room name/number or an item ("the 3D printer").
+            destination: Where they want to go: room name/number, an item ("the 3D printer") or a kind of room ("toilet"); the nearest match is chosen.
+            start: Where the person is: room name/number or an item name. Omit if remembered.
             via: Places to visit in order on the way (multi-stop tour).
             step_free: True for wheelchair, pram, trolley, crutches or "no stairs". Omit to use the person's profile.
             min_door_width_m: Every door must be at least this wide (wide loads).
