@@ -47,6 +47,29 @@ def committed(reply: str) -> str:
     return matches[-1].strip() if matches else ""
 
 
+def _single_number(text: str) -> float | None:
+    numbers = re.findall(r"-?\d+(?:\.\d+)?", text)
+    return float(numbers[0]) if len(numbers) == 1 else None
+
+
+def pick_reading(answers: list[str], tolerance: float = 0.01) -> str:
+    """Choose among the answers of several readings of an ambiguous question.
+
+    Numbers: the value that agrees (within tolerance) with the most readings; ties go to the one closest
+    to the median, which minimises the worst-case error. Text: plain majority, first on ties."""
+    values = [_single_number(a) for a in answers]
+    if any(v is None for v in values):
+        return Counter(answers).most_common(1)[0][0]
+    ordered = sorted(values)
+    median = ordered[len(ordered) // 2] if len(ordered) % 2 else (ordered[len(ordered) // 2 - 1] + ordered[len(ordered) // 2]) / 2
+
+    def support(v: float) -> int:
+        return sum(1 for w in values if abs(w - v) <= max(abs(v) * tolerance, 1e-9))
+
+    best = max(range(len(answers)), key=lambda i: (support(values[i]), -abs(values[i] - median)))
+    return answers[best]
+
+
 def answer_with_trace(building_directory: Path | str, question: str) -> tuple[str, dict]:
     building = load_building(str(building_directory))
     trace: dict = {"building": building.id}
@@ -58,17 +81,19 @@ def answer_with_trace(building_directory: Path | str, question: str) -> tuple[st
         trace["spec"] = spec.model_dump(exclude_none=True)
         readings = resolve_spec_all(building, spec)
         trace["readings"] = readings
-        replies = []
+        solved = []
         for inputs in readings:
             try:
-                replies.append(solve(building, spec.kind, inputs)[1])
+                solved.append(solve(building, spec.kind, inputs))
             except SolveError as error:
                 trace.setdefault("solve_errors", []).append(str(error))
-        if not replies:
+        if not solved:
             return fallback(building, question, trace, "; ".join(trace.get("solve_errors", [])))
-        votes = Counter(committed(reply) for reply in replies)
-        winner = votes.most_common(1)[0][0]
-        reply = next(r for r in replies if committed(r) == winner)
+        votes = Counter(committed(reply) for _, reply in solved)
+        winner = pick_reading(list(votes.elements()))
+        result, reply = next(item for item in solved if committed(item[1]) == winner)
+        trace["kind"] = spec.kind
+        trace["result"] = result
         if len(readings) > 1:
             trace["votes"] = dict(votes)
             reply = (

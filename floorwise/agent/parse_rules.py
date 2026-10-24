@@ -55,8 +55,45 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
 ]
 
 
+BASIC: list[tuple[str, re.Pattern]] = [
+    ("locate", re.compile(r"^where is (?:the |a |an )?(?P<item>[^?]+?)\??$", re.I)),
+    ("count", re.compile(rf"^how many (?P<item>.+?) items are on {FLOOR}\??$", re.I)),
+    ("tour", re.compile(r"^starting at (?P<stops>.+?) in this order\.", re.I)),
+    (
+        "route",
+        re.compile(
+            rf"^(?:(?P<closed>.+?) is closed for maintenance\.\s*)?(?P<prefix>how do i get|is there a step-free route)"
+            rf" from {_space('start')} to {_space('destination')}\?",
+            re.I,
+        ),
+    ),
+]
+
+
+def parse_basic(text: str) -> QuerySpec | None:
+    for kind, pattern in BASIC:
+        match = pattern.search(text)
+        if not match:
+            continue
+        groups = match.groupdict()
+        if kind in ("locate", "count"):
+            return QuerySpec(kind=kind, item=groups["item"].strip(), floor=groups.get("floor"))
+        if kind == "tour":
+            first, rest = re.split(r",\s*visit\s+", groups["stops"], maxsplit=1, flags=re.I)
+            stops = [first] + re.split(r",\s*then\s+|,\s*(?=[A-Z])", rest)
+            return QuerySpec(kind="tour", stops=[stop.strip() for stop in stops if stop.strip()])
+        return QuerySpec(
+            kind="route", start=groups["start"], destination=groups["destination"], closed=groups.get("closed"),
+            step_free="step-free" in groups["prefix"].lower(),
+        )
+    return None
+
+
 def parse_rules(question: str) -> QuerySpec | None:
     text = " ".join(question.split())
+    basic = parse_basic(text)
+    if basic is not None:
+        return basic
     for kind, pattern in PATTERNS:
         match = pattern.search(text)
         if not match:

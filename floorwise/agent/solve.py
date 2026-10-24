@@ -5,7 +5,10 @@ so a person (or a judge) can check it."""
 
 from floorwise.agent.answer_format import number, space_label
 from floorwise.core import ops
+from floorwise.core.graph import Constraints
 from floorwise.core.model import Building
+from floorwise.core.resolve import normalise
+from floorwise.core.routing import NoRoute, plan_route
 
 KINDS = (
     "largest_room",
@@ -17,6 +20,10 @@ KINDS = (
     "shared_walls_count",
     "straight_line_3d",
     "what_if_door",
+    "locate",
+    "count",
+    "route",
+    "tour",
 )
 
 
@@ -97,9 +104,65 @@ def solve(building: Building, kind: str, inputs: dict) -> tuple[dict, str]:
             f"{result['count']} rooms on {b.floor_name(inputs['floor_id'])} get a walk out of the building that is "
             f"more than 1 m shorter.\nAnswer: {result['count']}"
         )
+    elif kind == "locate":
+        result = locate(b, inputs)
+        _check(result)
+        where = "; ".join(f"{m['name']} in {m['room']}" for m in result["matches"][:6])
+        more = f" (and {len(result['matches']) - 6} more)" if len(result["matches"]) > 6 else ""
+        first = result["matches"][0]
+        reply = f"I found {len(result['matches'])}: {where}{more}.\nAnswer: {first['room']}"
+    elif kind == "count":
+        result = ops_count(b, inputs)
+        reply = (
+            f"There are {result['count']} {_type(inputs['asset_type'])} items on {b.floor_name(inputs['floor_id'])}."
+            f"\nAnswer: {result['count']}"
+        )
+    elif kind in ("route", "tour"):
+        stops = inputs["stops"] if kind == "tour" else [inputs["start"], inputs["destination"]]
+        constraints = Constraints(
+            step_free=inputs.get("step_free", False),
+            closed=frozenset({inputs["closed"]}) if inputs.get("closed") else frozenset(),
+        )
+        try:
+            route = plan_route(b, stops, constraints)
+        except NoRoute as error:
+            result = {"reachable": False, "stops": stops}
+            reply = f"{error}. There is no such route.\nAnswer: no route"
+            return result, reply
+        result = {
+            "reachable": True, "stops": stops, "length_m": route.length_m,
+            "space_path": [n for leg in route.legs for n in (leg.space_path if leg is route.legs[0] else leg.space_path[1:])],
+            "legs": [{"from": leg.from_space_id, "to": leg.to_space_id, "length_m": leg.length_m,
+                      "space_path": leg.space_path, "element_path": leg.element_path} for leg in route.legs],
+        }
+        understood = " → ".join(b.label(s) for s in stops)
+        notes = f" ({', '.join(route.constraints)})" if route.constraints else ""
+        steps = "\n".join(f"{i}. {step}" for i, step in enumerate(route.steps, 1))
+        reply = f"Route {understood}{notes}: {number(route.length_m)} m.\n{steps}\nAnswer: {number(route.length_m)}"
     else:
         raise SolveError(f"unknown kind {kind}")
     return result, reply
+
+
+def locate(b: Building, inputs: dict) -> dict:
+    if inputs.get("asset_type"):
+        assets = [a for a in b.assets.values() if a["type"] == inputs["asset_type"]]
+    else:
+        key = normalise(inputs["item"])
+        assets = [a for a in b.assets.values() if key in normalise(a["name"])]
+    if not assets:
+        return {"error": f"nothing called {inputs['item']} in this building"}
+    assets.sort(key=lambda a: (b.level(a["floor_id"]), a["name"]))
+    return {
+        "asset_ids": [a["id"] for a in assets],
+        "matches": [{"asset_id": a["id"], "name": a["name"], "space_id": a["space_id"], "room": b.label(a["space_id"]),
+                     "position": a["position"]} for a in assets],
+    }
+
+
+def ops_count(b: Building, inputs: dict) -> dict:
+    assets = [a for a in b.assets.values() if a["type"] == inputs["asset_type"] and a["floor_id"] == inputs["floor_id"]]
+    return {"count": len(assets), "asset_ids": [a["id"] for a in assets]}
 
 
 def _check(result: dict) -> None:

@@ -151,8 +151,30 @@ def resolve_room_type(building: Building, text: str) -> str:
     return _vocab_match(text, room_types(building), "room type")
 
 
+def asset_aliases(building: Building) -> dict[str, str]:
+    """Words people use for an item type, from asset names: 'Seating row 0.18-A' -> lecture_seating_row."""
+    aliases: dict[str, set[str]] = {}
+    for asset in building.assets.values():
+        words = [w for w in normalise(asset["name"]).split() if not any(ch.isdigit() for ch in w)]
+        if words:
+            aliases.setdefault(" ".join(words), set()).add(asset["type"])
+    return {alias: next(iter(types)) for alias, types in aliases.items() if len(types) == 1}
+
+
 def resolve_asset_type(building: Building, text: str) -> str:
-    return _vocab_match(text, asset_types(building), "item type")
+    vocabulary = asset_types(building)
+    try:
+        return _vocab_match(text, vocabulary, "item type")
+    except ResolveError as error:
+        key = normalise(re.sub(r"^(a|an|the)\s+", "", normalise(text)))
+        aliases = asset_aliases(building)
+        for attempt in (key, " ".join(_singular(w) for w in key.split())):
+            if attempt in aliases:
+                return aliases[attempt]
+        suffix = [v for v in vocabulary if normalise(v).endswith(" " + key) or normalise(v).endswith(" " + _singular(key))]
+        if len(suffix) == 1:
+            return suffix[0]
+        raise error
 
 
 # ---------- connectors and closable elements ----------
