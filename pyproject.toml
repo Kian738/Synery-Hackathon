@@ -19,7 +19,10 @@ dependencies = [
 run_benchmark = "floorwise.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.3"]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.3",
+]
 
 [build-system]
 requires = ["hatchling"]

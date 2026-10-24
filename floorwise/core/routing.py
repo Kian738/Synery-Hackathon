@@ -9,7 +9,7 @@ from floorwise.core.graph import DOOR_PREFIX, Constraints, RouteGraph
 from floorwise.core.model import OUTSIDE, Building
 
 LANDMARK_RADIUS_M = 4.0
-LANDMARK_CATEGORIES = ("machine", "equipment", "fixture")
+LANDMARK_CATEGORIES = ("machine", "equipment")
 
 
 @dataclass
@@ -101,14 +101,14 @@ def _turn(previous: tuple[float, float], here: tuple[float, float], following: t
     return "turn left" if delta > 0 else "turn right"
 
 
-def landmark_near(building: Building, floor_id: str, x: float, y: float, exclude_space: str | None = None) -> str | None:
+def landmark_near(building: Building, floor_id: str, x: float, y: float) -> str | None:
     best, best_distance = None, LANDMARK_RADIUS_M
     for asset in building.assets.values():
         if asset["floor_id"] != floor_id or asset.get("category") not in LANDMARK_CATEGORIES:
             continue
         distance = math.dist(asset["position"], (x, y))
         if distance < best_distance:
-            best, best_distance = asset["name"], distance
+            best, best_distance = asset["type"].replace("_", " "), distance
     return best
 
 
@@ -134,16 +134,24 @@ def directions(building: Building, graph: RouteGraph, nodes: list[str]) -> list[
             walked = 0.0
         elif not current.startswith(DOOR_PREFIX):
             opening = building.openings.get(element) or {"kind": "door"}
-            passage = {"door": "through the door", "entrance": "in through the entrance"}.get(opening["kind"], "through the opening")
-            hint = ""
+            space = building.spaces[current]
             door_point = points.get(previous)
-            before = points.get(nodes[index - 2]) if index >= 2 else None
-            here = points.get(current)
-            if door_point and before and here and before[0] == door_point[0] == here[0]:
-                hint = _turn(before[1:], door_point[1:], here[1:])
-                landmark = landmark_near(building, door_point[0], door_point[1], door_point[2])
-                hint = f", then {hint}" + (f" at the {landmark}" if landmark else "")
-            steps.append(f"Walk about {walked:.0f} m {passage} into {building.spaces[current]['name']}{hint}.")
+            landmark = landmark_near(building, *door_point) if door_point else None
+            target = f"the {opening['kind']}" if opening["kind"] in ("door", "entrance") else "the opening"
+            target += f" by the {landmark}" if landmark else ""
+            turn = ""
+            is_last = index == len(nodes) - 1
+            if not is_last and space["type"] not in ("lift", "stair") and door_point:
+                # Heading into the door vs heading towards the next door: anchors are not where people walk.
+                before = points.get(nodes[index - 2]) if index >= 2 else None
+                after = points.get(nodes[index + 1]) if index + 1 < len(nodes) else None
+                if before and after and before[0] == door_point[0] == after[0]:
+                    turn = _turn(before[1:], door_point[1:], after[1:])
+            if space["type"] in ("lift", "stair"):
+                steps.append(f"Walk about {walked:.0f} m to {target} of {space['name']}.")
+            else:
+                then = f", then {turn}" if turn and turn != "go straight" else (", then go straight on" if turn else "")
+                steps.append(f"Walk about {walked:.0f} m to {target} into {space['name']}{then}.")
             walked = 0.0
     steps.append(f"You have arrived at {building.label(nodes[-1])}.")
     return steps
