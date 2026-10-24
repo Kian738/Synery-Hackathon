@@ -31,7 +31,7 @@ def hazard_blocks(hazard: Hazard | Sequence[Hazard] | None) -> tuple[dict[str, f
     elements: dict[str, float] = {}
     for item in hazards:
         for space in item.spaces:
-            spaces[space] = min(spaces.get(space, math.inf), item.from_s)
+            spaces[space] = min(spaces.get(space, math.inf), item.from_s + item.escape_s)
         for element in item.elements:
             elements[element] = min(elements.get(element, math.inf), item.from_s)
     return spaces, elements

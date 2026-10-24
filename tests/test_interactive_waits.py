@@ -132,8 +132,6 @@ def test_dynamic_claude_tools_preserve_history_and_allow_invalid_binding_drop(mo
     conversation=Conversation('system',[enable],provider='anthropic')
     assert conversation.ask('load a tool')=='Ready'
     assert len(requests)==2
-
-
 def test_chat_failure_ends_stream_and_session_can_retry(monkeypatch):
     import json
     from fastapi.testclient import TestClient

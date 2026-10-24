@@ -80,11 +80,14 @@ class Occupants:
 
 @dataclass(frozen=True)
 class Hazard:
-    """Spaces and elements (opening or connector ids) that are impassable from from_s seconds on."""
+    """Spaces and elements (opening or connector ids) that are impassable from from_s seconds on.
+    escape_s: people already inside a hazard space may keep leaving for this many seconds after from_s (0 = none).
+    It is an assumption, never a measurement; the space stays usable for everyone during that window."""
 
     spaces: tuple[str, ...] = ()
     elements: tuple[str, ...] = ()
     from_s: float = 0.0
+    escape_s: float = 0.0
 
 
 @dataclass(frozen=True)

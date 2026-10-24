@@ -336,6 +336,6 @@ export function useNavigator(buildingId: string) {
   return {
     visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, hereSource, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
-    goTo, ask, toggleClosed, decideChange,busyLabel,apply,
+    goTo, ask, toggleClosed, decideChange,busyLabel,apply,applyEvents:apply,
   };
 }

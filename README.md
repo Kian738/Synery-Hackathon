@@ -24,6 +24,7 @@ Synera Track 01, Industrial Agents Hackathon 2026. You give Floorwise a floor pl
 | L3 `e2e` | train+dev | 653/655 (2 misses: 9 rooms all named "Büro") |
 | L3b `e2e_basic` | locate/count/route/step-free/closure/tour from text | 2124/2130 (remaining misses: duplicate OSM names) |
 | L4 `robust` | perturbed wording (case, floor synonyms, ref-only rooms, typos) | 630/630 dev |
+| L6 `unseen` | test questions (no gold): rule-parsed, one reading, no errand near-tie, no new kind | 145/145 |
 | L5 `metamorphic` | translate/shuffle/rotate invariance + route properties | 898/898 |
 | L7 `build` | floors rebuilt from plan images (procedural buildings) | rooms 1.00 · IoU 0.98 · doors 1.00 |
 
@@ -90,5 +91,8 @@ Ask "fire in room X: who gets out how fast, how do responders get in without mee
 
 - Re-solved means the engine re-ran its own model on the edited building. It is self-consistency, not validation against Pathfinder, PyroSim or a real drill.
 - Occupants are an estimate (one per seat); there is no fire or smoke model; walking times are optimistic; this is not a compliance check.
-- Sensitivity: `uv run python -m eval.sensitivity` re-runs one scenario at specific flow 1.0, 1.316 and 1.6 persons/s/m and occupancy x0.5, x1, x1.5. On campus-dev-000 (Canteen 0.28) the same door is the top fix in all 9 cases; absolute seconds move (145 to 175 s at x1), the ranking does not.
+- People already inside the hazard room get `escape_s` seconds to leave (default 30 s, an assumption you can set per hazard; 0 means none, and then they are reported as stranded).
+- Sensitivity: `uv run python -m eval.sensitivity` re-runs one scenario at specific flow 1.0, 1.316 and 1.6 persons/s/m and occupancy x0.5, x1, x1.5. On campus-dev-000 (Canteen 0.28, 358 people, 30 s escape window) the same door is the top fix in all 6 cases up to the estimated occupancy; at x1.5 occupancy it is a different door at flow 1.0, none at 1.316, and the first door again at 1.6. Absolute seconds move (145 to 175 s at x1), so the fix ranking is only stable up to the estimated headcount.
+- How good is the plan: on campus-dev-000 the exact plan takes 155 s (110 s walking plus 45 s queueing). Against the classic CCRP heuristic (165 s) it is about 6% faster; against everyone using their nearest exit (260 s) it is 40% faster. The second figure compares to a naive baseline, so quote the first for state-of-the-art claims.
+- Across the dataset (`uv run python -m eval.ccrp_gap 40`, one fire per building, 40 sampled train/dev buildings): the exact plan matches CCRP in 26 of 27 comparable scenarios (best 4.2% faster), so the value is not raw speed. It is that the plan names the doors that limit the evacuation, reserves a responder route, and finds a verified door change in 9 of 40 buildings (median 8% faster evacuation, best 14%) and says so plainly when nothing helps in the other 31. Times are in 5 s steps.
 - Stress test across the dataset: `uv run python -m eval scenarios` (determinism, people conserved, exact never slower than the CCRP heuristic, every suggested fix verified and better). It tests robustness on generated and inferred kit data, not real buildings.

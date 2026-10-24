@@ -174,8 +174,6 @@ Regression coverage includes transport-schema validation, deadline scope, both p
 Phone setup now generates a local QR from the LAN phone URL, with address/code fallback and confirmation retained. Chrome-generated QR pixels were decoded using OpenCV and matched the active pairing URL; New code regenerated the image. Actual Navigator pairing/remote control regression passed. Physical phone hardware remains unverified.
 
 Current and previous route strips use separate floor offsets and unlit, depth-tested materials without writing coplanar depth, reducing route-overlay interference while preserving wall occlusion. A generic walking repair excludes fully enclosed, separately recorded spaces from a containing hall's free area, including source furniture clearance; it preserves door endpoints and withholds a preview if no valid detour exists. On the reported CIT room-to-toilet route, the initial polyline crossed two stairwell walls; the repaired polyline crossed none. No stair flights or new geometry facts were invented. Two synthetic nested-space regression fixtures and the combined offline/UI checks cover this pass; concurrent route-model changes remain separate.
-
-
 ## Cognitive-load audit and submission release (25 October 2026)
 
 Audited the running UI against the requested Laws of UX article and docs/UX_PLAN.md before editing; findings are in docs/UX_COGNITIVE_LOAD_AUDIT.md. Secondary actions (including scenarios) share a labelled Tools disclosure; examples are grouped; origin assumptions and manual/linked starts are disclosed; room search includes floor names and omitted-match counts. The phone first-use layout keeps all six labelled destination shortcuts above the composer at 390 × 844.

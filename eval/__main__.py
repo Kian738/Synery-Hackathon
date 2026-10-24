@@ -5,12 +5,13 @@ import importlib
 import os
 import sys
 
-SUITES = ["atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "sunday", "generated", "rules", "roundtrip", "walls", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "scenarios", "rehearse", "report"]
+SUITES = ["atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "sunday", "generated", "rules", "roundtrip", "walls", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "scenarios", "unseen", "rehearse", "report"]
 GATES = [
     ["routes", "--split", "train,dev"],
     ["solver", "--split", "train,dev"],
     ["parser", "--split", "train,dev"],
     ["parser", "--split", "test"],
+    ["unseen"],
     ["e2e", "--split", "train,dev"],
     ["e2e_basic", "--split", "train,dev"],
     ["sunday", "--split", "train,dev"],

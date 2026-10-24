@@ -28,6 +28,7 @@ interface Props {
   pins?: Pin[];
   previewDoor?: Opening | null;
   selected?: string | null;
+  scenario?: { hazard: string; doors: string[] } | null;
   focus?: XY | null;
   showItems?: boolean;
   onSpaceClick?: (space: Space) => void;
@@ -48,7 +49,7 @@ const ZONE_FILL: Record<string, string> = {
 const flip = ([x, y]: XY): XY => [x, -y];
 const pts = (polygon: XY[]) => polygon.map((p) => flip(p).join(",")).join(" ");
 
-export function PlanView({ geometry, floorId, route, highlights, closed, pins = [], previewDoor, selected, focus,
+export function PlanView({ geometry, floorId, route, highlights, closed, pins = [], previewDoor, selected, focus, scenario,
   showItems = true, onSpaceClick, compact,visualResult,followPosition=false,focusKey }: Props) {
   const spaces = useMemo(() => geometry.spaces.filter((s) => s.floor_id === floorId), [geometry, floorId]);
   const openings = useMemo(() => geometry.openings.filter((o) => o.floor_id === floorId), [geometry, floorId]);
@@ -202,6 +203,9 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
               strokeWidth={scale * (selected === s.id ? 0.55 : 0.4)} pointerEvents="none"
               strokeDasharray={highlights?.has(s.id) && selected !== s.id ? `${scale * 1.2} ${scale * 0.7}` : undefined} />
           ))}
+          {scenario && <defs><pattern id="hazard-hatch" width={scale * 1.2} height={scale * 1.2} patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width={scale * 1.2} height={scale * 1.2} fill="#182329" fillOpacity="0.35" /><line x1="0" y1="0" x2="0" y2={scale * 1.2} stroke="#ff8a8f" strokeWidth={scale * 0.35} /></pattern></defs>}
+          {scenario && spaces.filter((s) => s.id === scenario.hazard).map((s) => { const [x, y] = flip(centroid(s.polygon)); return <g key="hz" pointerEvents="none"><polygon points={pts(s.polygon)} fill="url(#hazard-hatch)" stroke="#ff8a8f" strokeWidth={scale * 0.4} /><text x={x} y={y} fontSize={font} textAnchor="middle" fontWeight="700" fill="#edf3f5" stroke="#182329" strokeWidth={font * 0.3} paintOrder="stroke">Fire: {s.name}</text></g>; })}
+          {scenario && openings.filter((o) => scenario.doors.includes(o.id)).map((o) => { const [x, y] = flip(o.position); return <g key={`bd-${o.id}`} pointerEvents="none"><circle cx={x} cy={y} r={scale * 0.9} fill="#ffd45c" stroke="#182329" strokeWidth={scale * 0.2} /><text x={x} y={y - scale * 1.2} fontSize={font * 0.85} textAnchor="middle" fontWeight="700" fill="#10171c" stroke="#ffd45c" strokeWidth={font * 0.3} paintOrder="stroke">Slow door</text></g>; })}
           {spaces.filter((s) => closedSpaces.has(s.id)).map((s) => {
             const [x, y] = flip(centroid(s.polygon));
             return <text key={`c-${s.id}`} x={x} y={y} fontSize={font * 0.9} textAnchor="middle" dominantBaseline="middle"
