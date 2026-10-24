@@ -15,6 +15,7 @@ from floorwise.agent.session import Session
 from floorwise.agent.tools import make_tools
 from floorwise.core.model import Building
 from floorwise.llm.loop import Conversation
+from floorwise.llm.budget import interactive_turn
 
 EFFORT = os.environ.get("FLOORWISE_CHAT_EFFORT", "low")
 
@@ -136,6 +137,7 @@ class ChatAgent:
                     if name in self._tool_catalog and name not in self.conversation.by_name:
                         self.conversation.tools.append(self._tool_catalog[name]);self.conversation.by_name[name]=self._tool_catalog[name]
 
+    @interactive_turn
     def ask(self, user_text: str, on_event=None) -> str:
         """One user turn. on_event(kind, payload) streams tool calls and UI events to the app."""
         seen = len(self.session.events)
@@ -143,7 +145,7 @@ class ChatAgent:
         def relay(kind, payload):
             nonlocal seen
             if on_event:
-                if kind in ("tool", "tool_result"):
+                if kind in ("tool", "tool_result", "progress"):
                     on_event(kind, payload)
                 for event in self.session.events[seen:]:
                     on_event("ui", event)
@@ -158,9 +160,11 @@ class ChatAgent:
             from floorwise.agent.local import dispatch, execute_spec
             from floorwise.core.resolve import ResolveError
             try:
+                relay('progress',{'stage':'compute','message':'Checking building data'})
                 reply=dispatch(self.session,user_text)
                 complex_request=re.search(r'\b(?:closed|blocked|maintenance|reopen|avoid|without|except|prefer|widen|move|moved|apply|approve|via|then|fetch|carry|upstairs|downstairs|containing)\b|\bwith\b|next to|add (?:a )?door|pick up',user_text,re.I)
                 if reply is None and not complex_request and llm.info().available:
+                    relay('progress',{'stage':'parse','message':'Understanding your request'})
                     from floorwise.agent.parse_llm import LLMParser
                     spec,usage=LLMParser(provider=self._provider).parse(self.session.building,user_text)
                     self._usage.update(usage)
@@ -180,6 +184,7 @@ class ChatAgent:
             self._finish_usage(started,before,'deterministic' if self.last_model=='deterministic' else 'parser',models)
             return reply
         self._prepare_conversation(user_text)
+        relay('progress',{'stage':'model','message':'Planning with the building tools'})
         self.last_model=f'{self.conversation.provider}:{self.conversation.model}'
         context = {"profile": self.session.profile.__dict__, "closed": sorted(self.session.closed),
                    "last_route_stops": self.session.last_route.stops if self.session.last_route else None}

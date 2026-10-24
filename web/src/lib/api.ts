@@ -43,6 +43,7 @@ export const api = {
 };
 
 export type ChatEvent =
+  | { type: "progress"; data: {stage:string;message:string} }
   | { type: "tool"; data: { name: string; input: Record<string, any> } }
   | { type: "tool_result"; data:{name:string;content:string;is_error:boolean} }
   | { type: "ui"; data: UiEvent }

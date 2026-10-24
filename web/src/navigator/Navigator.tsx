@@ -32,7 +32,6 @@ export default function Navigator() {
   useEffect(()=>{const q=matchMedia("(max-width:1023px)");const changed=()=>{setCompact(q.matches);setToolsOpen(false);};q.addEventListener("change",changed);return()=>q.removeEventListener("change",changed);},[]);
   const [lookOffset,setLookOffset]=useState({yaw:0,pitch:0});
   const [focusRequest,setFocusRequest]=useState<{id:string;revision:number}|null>(null);
-  const [heading,setHeading]=useState<string>("");
   const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow">(params.get("view") === "2d" ? "2d" : "3d");
@@ -48,7 +47,7 @@ export default function Navigator() {
   const [buildingImport, setBuildingImport] = useState(false);
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
-  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setHeading("");setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null); }, [buildingId]);
+  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null); }, [buildingId]);
   // Deep link (shareable, QR at a door): ?building=…&at=<space id>&to=<place>&step_free=1
   const linked = useRef(false);
   useEffect(() => {
@@ -99,7 +98,7 @@ export default function Navigator() {
     if(following&&previewPosition)out.push({id:"preview",at:[previewPosition.x,previewPosition.y],floor_id:previewPosition.floor_id,label:"Preview avatar (not your location)",tone:"info"});
     const at = (id: string) => g.spaces.find((s) => s.id === id);
     const here = nav.here ? at(nav.here) : null;
-    if (here) out.push({ id: "here", at: here.anchor??centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start",heading:heading?Number(heading):undefined });
+    if (here) out.push({ id: "here", at: here.anchor??centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start" });
     if (nav.route?.polyline.length) {
       const first = nav.route.polyline[0], last = nav.route.polyline[nav.route.polyline.length - 1];
       if(nav.route.stops[0]!==nav.here)out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Route start", tone: "start" });
@@ -109,7 +108,7 @@ export default function Navigator() {
         out.push({ id: "step", at: step.point, floor_id: step.floor_id, label: step.text, tone: "info", n: nav.activeStep });
     }
     return out;
-  }, [g, nav.here, nav.route, nav.activeStep, steps,following,previewPosition,heading]);
+  }, [g, nav.here, nav.route, nav.activeStep, steps,following,previewPosition]);
 
   const focusStep = (i: number) => {
     nav.setActiveStep(i);
@@ -153,7 +152,6 @@ export default function Navigator() {
             </span>
             <span className="shrink-0 text-sm text-ink-4 underline underline-offset-4">change</span>
           </button>
-          {nav.here&&<label className="location-heading">Facing <select aria-label="Facing direction" value={heading} onChange={e=>setHeading(e.target.value)}><option value="">Not set</option><option value="0">North</option><option value="90">East</option><option value="180">South</option><option value="270">West</option></select><span>set manually</span></label>}
           {picking && (
             <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
           )}
@@ -168,7 +166,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -216,7 +214,7 @@ export default function Navigator() {
               pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
                 <Building3D geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
@@ -394,7 +392,8 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom }: {
+function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel }: {
+  busyLabel:string;
   geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
 }) {
@@ -452,7 +451,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom }: {
           </div>
         );
       })}
-      {busy && <p className="flex items-center gap-2 text-[13px] text-ink-4"><span className="h-1.5 w-1.5 animate-pulse bg-mark" />Working…</p>}
+      {busy && <p className="flex items-center gap-2 text-[13px] text-ink-4"><span className="h-1.5 w-1.5 animate-pulse bg-mark" />{busyLabel}</p>}
       <div ref={end} />
     </section>
   );
