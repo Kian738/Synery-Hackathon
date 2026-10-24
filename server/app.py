@@ -12,7 +12,10 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import re
+import tempfile
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -217,6 +220,37 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                 break
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+# ---------- Level 4: build a building from plan images ----------
+
+@app.post("/api/build")
+async def build_from_plans(
+    files: list[UploadFile] = File(...),
+    levels: str = Form(..., description="comma-separated floor level per file, e.g. 0,1,2"),
+    width_m: float = Form(..., description="width of the ground floor in metres"),
+    name: str = Form("New building"),
+    vision: bool = Form(False),
+) -> dict:
+    from floorwise.build.builder import build
+
+    level_list = [int(v) for v in levels.split(",")]
+    if len(level_list) != len(files):
+        raise HTTPException(422, "one level per file")
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "building"
+    building_id = f"built-{slug}-{uuid.uuid4().hex[:4]}"
+    with tempfile.TemporaryDirectory() as folder:
+        images = {}
+        for level, upload in zip(level_list, files):
+            path = Path(folder) / f"floor_{level}.png"
+            path.write_bytes(await upload.read())
+            images[level] = path
+        building, report = await asyncio.to_thread(
+            build, images, width_m=width_m, name=name, building_id=building_id, vision=vision)
+    target = ROOT / "buildings" / building_id
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "building.json").write_text(json.dumps(building, indent=1, ensure_ascii=False), encoding="utf-8")
+    return {"building_id": building_id, "report": report}
 
 
 # ---------- static web app (after `npm run build` in web/) ----------

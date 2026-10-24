@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, chatStream } from "./api";
+import { BuildDialog } from "./components/BuildDialog";
 import { ChatPanel, toolLabel } from "./components/ChatPanel";
 import { FloorPlan, StackView } from "./components/FloorPlan";
 import type { BuildingRow, ChatItem, Geometry, Opening, Profile, Route, Space, UiEvent } from "./types";
@@ -28,6 +29,7 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
   const routeFloorAuto = useRef(true);
 
   const add = (item: Omit<ChatItem, "id">) => setItems((all) => [...all, { ...item, id: nextId++ }]);
@@ -202,6 +204,7 @@ export default function App() {
         <label className="toggle"><input type="checkbox" checked={stepFree} onChange={(e) => setStepFree(e.target.checked)} /> Step-free</label>
         <label className="toggle"><input type="checkbox" checked={showItems} onChange={(e) => setShowItems(e.target.checked)} /> Items</label>
         {profile?.step_free && <span className="chip accent">Remembered: step-free</span>}
+        <button className="ghost" onClick={() => setBuilding(true)}>+ From floor plans</button>
       </header>
       <main className="main">
         <ChatPanel items={items} busy={busy} onSend={send} onApplyPreview={applyPreview} voiceOut={voiceOut} setVoiceOut={setVoiceOut} />
@@ -246,6 +249,18 @@ export default function App() {
           </div>
         </section>
       </main>
+      {building && (
+        <BuildDialog
+          onClose={() => setBuilding(false)}
+          onBuilt={async (id, report) => {
+            setBuilding(false);
+            setBuildings(await api.buildings());
+            setBuildingId(id);
+            setNotice(`Built ${report.floors} floors: ${report.rooms} rooms, ${report.doors} doors, ${report.stairs_and_lifts} stairs/lifts` +
+              (report.unreachable_from_entrances.length ? ` · unreachable: ${report.unreachable_from_entrances.slice(0, 3).join(", ")}` : " · every space reachable"));
+          }}
+        />
+      )}
     </div>
   );
 }

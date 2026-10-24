@@ -1,0 +1,3002 @@
+{
+ "#f3efe6": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.307,
+  "n": 4380,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#dcdcdc": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.587,
+  "n": 1328,
+  "also": [
+   "corridor|stairwell",
+   "room|bathroom"
+  ]
+ },
+ "#cfe8c4": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 888,
+  "also": []
+ },
+ "#595754": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.431,
+  "n": 123,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#a19e98": {
+  "type": "room",
+  "room_type": "office",
+  "share": 0.263,
+  "n": 95,
+  "also": [
+   "room|kitchen",
+   "room|lab",
+   "room|seminar_room"
+  ]
+ },
+ "#f1ede4": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.507,
+  "n": 73,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#605f5b": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.371,
+  "n": 62,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#85837e": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.226,
+  "n": 62,
+  "also": [
+   "room|bedroom",
+   "room|office",
+   "room|lab"
+  ]
+ },
+ "#ede9e0": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.322,
+  "n": 59,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#e1ded5": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.246,
+  "n": 57,
+  "also": [
+   "room|toilet",
+   "room|office",
+   "room|generic_room"
+  ]
+ },
+ "#6f6d69": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.5,
+  "n": 56,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#e5e1d9": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.291,
+  "n": 55,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#555350": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.364,
+  "n": 55,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#51504d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.364,
+  "n": 55,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|storage"
+  ]
+ },
+ "#e9e5dc": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.519,
+  "n": 54,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#9d9a94": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.5,
+  "n": 54,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#5a5956": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 51,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#999791": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.51,
+  "n": 51,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|office"
+  ]
+ },
+ "#f4b183": {
+  "type": "stair",
+  "room_type": "stairwell",
+  "share": 1.0,
+  "n": 50,
+  "also": []
+ },
+ "#bfbcb5": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.408,
+  "n": 49,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|generic_room"
+  ]
+ },
+ "#dad6ce": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.25,
+  "n": 48,
+  "also": [
+   "room|generic_room",
+   "room|kitchen",
+   "room|office"
+  ]
+ },
+ "#dedad2": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.298,
+  "n": 47,
+  "also": [
+   "room|generic_room",
+   "room|living_room",
+   "room|kitchen"
+  ]
+ },
+ "#f0ece3": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.362,
+  "n": 47,
+  "also": [
+   "room|living_room",
+   "room|bathroom",
+   "room|generic_room"
+  ]
+ },
+ "#b0ada6": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.304,
+  "n": 46,
+  "also": [
+   "room|bedroom",
+   "room|office",
+   "room|generic_room"
+  ]
+ },
+ "#f2eee5": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.356,
+  "n": 45,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#8a8882": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.267,
+  "n": 45,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#bbb8b1": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.341,
+  "n": 44,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#7e7c78": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.455,
+  "n": 44,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#b3b0a9": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.233,
+  "n": 43,
+  "also": [
+   "room|office",
+   "room|server_room",
+   "room|bedroom"
+  ]
+ },
+ "#86847f": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.429,
+  "n": 42,
+  "also": [
+   "room|bathroom",
+   "room|living_room",
+   "room|kitchen"
+  ]
+ },
+ "#cbc7c0": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.452,
+  "n": 42,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|meeting_room"
+  ]
+ },
+ "#777570": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.39,
+  "n": 41,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|bathroom"
+  ]
+ },
+ "#eae6dd": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.325,
+  "n": 40,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#eeeae1": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.375,
+  "n": 40,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#7b7974": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.325,
+  "n": 40,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#73716d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.41,
+  "n": 39,
+  "also": [
+   "room|office",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#d2cfc7": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.316,
+  "n": 38,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|meeting_room"
+  ]
+ },
+ "#817f7a": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.216,
+  "n": 37,
+  "also": [
+   "room|living_room",
+   "room|bedroom",
+   "room|generic_room"
+  ]
+ },
+ "#ffffff": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.324,
+  "n": 37,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "outdoor|balcony"
+  ]
+ },
+ "#cecbc3": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.389,
+  "n": 36,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#5c5b57": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.389,
+  "n": 36,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#b4b1aa": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 35,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#ebe7de": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.371,
+  "n": 35,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#8e8b86": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.371,
+  "n": 35,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|office"
+  ]
+ },
+ "#e0ddd4": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.206,
+  "n": 34,
+  "also": [
+   "room|bathroom",
+   "room|bedroom",
+   "room|generic_room"
+  ]
+ },
+ "#64625f": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.471,
+  "n": 34,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#c3c0b8": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.455,
+  "n": 33,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#c7c3bc": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.545,
+  "n": 33,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#65635f": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.242,
+  "n": 33,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#53514e": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.364,
+  "n": 33,
+  "also": [
+   "room|bedroom",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#aca9a3": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.581,
+  "n": 31,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#e6e2da": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.419,
+  "n": 31,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|office"
+  ]
+ },
+ "#505050": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 31,
+  "also": []
+ },
+ "#d7d3cb": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.194,
+  "n": 31,
+  "also": [
+   "room|generic_room",
+   "room|toilet",
+   "room|lab"
+  ]
+ },
+ "#74726e": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.645,
+  "n": 31,
+  "also": [
+   "room|kitchen",
+   "room|meeting_room",
+   "room|living_room"
+  ]
+ },
+ "#95938d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 30,
+  "also": [
+   "room|bathroom",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#e2dfd6": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.233,
+  "n": 30,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#686662": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 30,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|bathroom"
+  ]
+ },
+ "#504f4c": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.433,
+  "n": 30,
+  "also": [
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#787671": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.414,
+  "n": 29,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|generic_room"
+  ]
+ },
+ "#d6d2ca": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.379,
+  "n": 29,
+  "also": [
+   "room|kitchen",
+   "room|meeting_room",
+   "room|generic_room"
+  ]
+ },
+ "#b4a7d6": {
+  "type": "lift",
+  "room_type": "lift",
+  "share": 1.0,
+  "n": 28,
+  "also": []
+ },
+ "#ece8df": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.714,
+  "n": 28,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#a4a29c": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.407,
+  "n": 27,
+  "also": [
+   "room|generic_room",
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#93918b": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.296,
+  "n": 27,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|toilet"
+  ]
+ },
+ "#a09d97": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.37,
+  "n": 27,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#a8a59f": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.296,
+  "n": 27,
+  "also": [
+   "room|living_room",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#e8e4dc": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.37,
+  "n": 27,
+  "also": [
+   "room|toilet",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#9e9b95": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.407,
+  "n": 27,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#c8c4bd": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.269,
+  "n": 26,
+  "also": [
+   "room|bathroom",
+   "room|office",
+   "room|kitchen"
+  ]
+ },
+ "#676561": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.423,
+  "n": 26,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|generic_room"
+  ]
+ },
+ "#aba8a2": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.269,
+  "n": 26,
+  "also": [
+   "room|office",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#b7b4ae": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.269,
+  "n": 26,
+  "also": [
+   "room|kitchen",
+   "room|bedroom",
+   "room|living_room"
+  ]
+ },
+ "#97958f": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.308,
+  "n": 26,
+  "also": [
+   "room|living_room",
+   "room|bedroom",
+   "room|generic_room"
+  ]
+ },
+ "#b5b2ab": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 25,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|bathroom"
+  ]
+ },
+ "#585653": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 25,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|toilet"
+  ]
+ },
+ "#565451": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 25,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#72706c": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.4,
+  "n": 25,
+  "also": [
+   "room|bedroom",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#d3d0c8": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.375,
+  "n": 24,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|office"
+  ]
+ },
+ "#e7e3db": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.458,
+  "n": 24,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|office"
+  ]
+ },
+ "#6b6a66": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.583,
+  "n": 24,
+  "also": [
+   "room|bathroom",
+   "room|living_room",
+   "room|office"
+  ]
+ },
+ "#bab7b0": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.217,
+  "n": 23,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|bedroom"
+  ]
+ },
+ "#c1beb7": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.478,
+  "n": 23,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#595855": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.304,
+  "n": 23,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#cbc8c1": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.435,
+  "n": 23,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#575552": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.304,
+  "n": 23,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#6a6864": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.522,
+  "n": 23,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|bathroom"
+  ]
+ },
+ "#9a9792": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.391,
+  "n": 23,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#82807b": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.435,
+  "n": 23,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#807e79": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.5,
+  "n": 22,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#efebe2": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.409,
+  "n": 22,
+  "also": [
+   "room|bedroom",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#767470": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.455,
+  "n": 22,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#615f5c": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.5,
+  "n": 22,
+  "also": [
+   "room|bedroom",
+   "room|generic_room",
+   "room|office"
+  ]
+ },
+ "#54524f": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.5,
+  "n": 22,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#918f8a": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.364,
+  "n": 22,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#96948e": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.286,
+  "n": 21,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#ddd9d1": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.286,
+  "n": 21,
+  "also": [
+   "room|generic_room",
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#a6a49d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 21,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|lab"
+  ]
+ },
+ "#d8d4cc": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.333,
+  "n": 21,
+  "also": [
+   "room|bedroom",
+   "room|office",
+   "room|bathroom"
+  ]
+ },
+ "#d4d1c9": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.35,
+  "n": 20,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|office"
+  ]
+ },
+ "#666460": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 20,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#d1cec6": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.3,
+  "n": 20,
+  "also": [
+   "room|bedroom",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#e3e0d7": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.3,
+  "n": 20,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#c5c2ba": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 20,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#52514d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.3,
+  "n": 20,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|bathroom"
+  ]
+ },
+ "#4f4e4b": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.25,
+  "n": 20,
+  "also": [
+   "room|seminar_room",
+   "room|office",
+   "room|meeting_room"
+  ]
+ },
+ "#4b5447": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 20,
+  "also": []
+ },
+ "#a9a6a0": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.421,
+  "n": 19,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|lab"
+  ]
+ },
+ "#92908b": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.263,
+  "n": 19,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|print_room"
+  ]
+ },
+ "#63615e": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.579,
+  "n": 19,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|storage"
+  ]
+ },
+ "#7a7873": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.368,
+  "n": 19,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#dedbd3": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.474,
+  "n": 19,
+  "also": [
+   "room|kitchen",
+   "room|storage",
+   "room|generic_room"
+  ]
+ },
+ "#494845": {
+  "type": "room",
+  "room_type": "office",
+  "share": 0.316,
+  "n": 19,
+  "also": [
+   "room|kitchen",
+   "room|bedroom",
+   "room|bathroom"
+  ]
+ },
+ "#e4e0d8": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.263,
+  "n": 19,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|bathroom"
+  ]
+ },
+ "#696763": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.222,
+  "n": 18,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#aaa7a1": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.444,
+  "n": 18,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#7d7b76": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.389,
+  "n": 18,
+  "also": [
+   "room|toilet",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#4d4c49": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.278,
+  "n": 18,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|toilet"
+  ]
+ },
+ "#5f5e5a": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.444,
+  "n": 18,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#9c9994": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.222,
+  "n": 18,
+  "also": [
+   "room|toilet",
+   "room|storage",
+   "room|living_room"
+  ]
+ },
+ "#a29f99": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.556,
+  "n": 18,
+  "also": [
+   "room|kitchen",
+   "room|bathroom",
+   "room|generic_room"
+  ]
+ },
+ "#dfdcd3": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.389,
+  "n": 18,
+  "also": [
+   "room|living_room",
+   "room|office",
+   "room|kitchen"
+  ]
+ },
+ "#797772": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.611,
+  "n": 18,
+  "also": [
+   "room|living_room",
+   "room|lab",
+   "room|kitchen"
+  ]
+ },
+ "#d9d5cd": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.412,
+  "n": 17,
+  "also": [
+   "room|generic_room",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#a3a09a": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.412,
+  "n": 17,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#c2bfb8": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.353,
+  "n": 17,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#706e6a": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.294,
+  "n": 17,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "stair|stairwell"
+  ]
+ },
+ "#6c6b67": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.412,
+  "n": 17,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#8c8984": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.412,
+  "n": 17,
+  "also": [
+   "room|storage",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#75736f": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.438,
+  "n": 16,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#c2c2c2": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.688,
+  "n": 16,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#7c7a75": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.438,
+  "n": 16,
+  "also": [
+   "room|living_room",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#aeaba5": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.375,
+  "n": 16,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|office"
+  ]
+ },
+ "#878580": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.438,
+  "n": 16,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|bedroom"
+  ]
+ },
+ "#dbd7cf": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.312,
+  "n": 16,
+  "also": [
+   "room|office",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#84827d": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.188,
+  "n": 16,
+  "also": [
+   "room|office",
+   "room|seminar_room",
+   "room|kitchen"
+  ]
+ },
+ "#bdbab3": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.562,
+  "n": 16,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#d0cdc5": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.438,
+  "n": 16,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#5b5a56": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.438,
+  "n": 16,
+  "also": [
+   "room|office",
+   "room|kitchen",
+   "room|meeting_room"
+  ]
+ },
+ "#808080": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.812,
+  "n": 16,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#d5d1ca": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 15,
+  "also": [
+   "room|kitchen",
+   "room|toilet",
+   "room|generic_room"
+  ]
+ },
+ "#716f6b": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 15,
+  "also": [
+   "room|kitchen",
+   "room|toilet",
+   "room|bathroom"
+  ]
+ },
+ "#62605d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 15,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#fff2b3": {
+  "type": "hall",
+  "room_type": "lobby",
+  "share": 0.8,
+  "n": 15,
+  "also": [
+   "hall|warehouse_zone",
+   "hall|logistics_zone"
+  ]
+ },
+ "#bcb9b2": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.533,
+  "n": 15,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|meeting_room"
+  ]
+ },
+ "#ccc9c1": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.467,
+  "n": 15,
+  "also": [
+   "room|office",
+   "room|living_room",
+   "room|storage"
+  ]
+ },
+ "#dadada": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.6,
+  "n": 15,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#dcd8d0": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.2,
+  "n": 15,
+  "also": [
+   "room|kitchen",
+   "room|bedroom",
+   "room|bathroom"
+  ]
+ },
+ "#8b8983": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 15,
+  "also": [
+   "room|kitchen",
+   "room|office",
+   "room|generic_room"
+  ]
+ },
+ "#a7a59e": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.667,
+  "n": 15,
+  "also": [
+   "room|generic_room",
+   "room|office",
+   "room|kitchen"
+  ]
+ },
+ "#6b6965": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 15,
+  "also": [
+   "room|living_room",
+   "room|bathroom",
+   "room|generic_room"
+  ]
+ },
+ "#9b9893": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 15,
+  "also": [
+   "room|office",
+   "room|living_room",
+   "room|kitchen"
+  ]
+ },
+ "#7e7b77": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 15,
+  "also": [
+   "room|living_room",
+   "room|kitchen",
+   "room|meeting_room"
+  ]
+ },
+ "#cdcac2": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.5,
+  "n": 14,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|office"
+  ]
+ },
+ "#888681": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.429,
+  "n": 14,
+  "also": [
+   "room|kitchen",
+   "room|living_room",
+   "room|toilet"
+  ]
+ },
+ "#cac6bf": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.357,
+  "n": 14,
+  "also": [
+   "room|bedroom",
+   "room|office",
+   "room|generic_room"
+  ]
+ },
+ "#d6d6d6": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.786,
+  "n": 14,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#8d8a85": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.286,
+  "n": 14,
+  "also": [
+   "room|bedroom",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#a4a19b": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.357,
+  "n": 14,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|office"
+  ]
+ },
+ "#b1aea7": {
+  "type": "room",
+  "room_type": "toilet",
+  "share": 0.286,
+  "n": 14,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|bedroom"
+  ]
+ },
+ "#606060": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.714,
+  "n": 14,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#c0bdb6": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.357,
+  "n": 14,
+  "also": [
+   "room|bedroom",
+   "room|kitchen",
+   "room|generic_room"
+  ]
+ },
+ "#a6a6a6": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.643,
+  "n": 14,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#c6debc": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 14,
+  "also": []
+ },
+ "#656565": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.571,
+  "n": 14,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#6f6f6f": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.643,
+  "n": 14,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#7c8b75": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 14,
+  "also": []
+ },
+ "#919191": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.846,
+  "n": 13,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#bebbb4": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.538,
+  "n": 13,
+  "also": [
+   "room|generic_room",
+   "room|living_room",
+   "room|canteen"
+  ]
+ },
+ "#5d5c58": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.385,
+  "n": 13,
+  "also": [
+   "room|bathroom",
+   "room|generic_room",
+   "room|kitchen"
+  ]
+ },
+ "#898782": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.308,
+  "n": 13,
+  "also": [
+   "room|bedroom",
+   "room|living_room",
+   "room|generic_room"
+  ]
+ },
+ "#6d6c67": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.538,
+  "n": 13,
+  "also": [
+   "room|generic_room",
+   "room|living_room",
+   "room|kitchen"
+  ]
+ },
+ "#5e5e5e": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 13,
+  "also": []
+ },
+ "#4b4a47": {
+  "type": "room",
+  "room_type": "bathroom",
+  "share": 0.385,
+  "n": 13,
+  "also": [
+   "room|generic_room",
+   "room|kitchen",
+   "room|bedroom"
+  ]
+ },
+ "#d3d3d3": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.615,
+  "n": 13,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#4f4f4f": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 13,
+  "also": []
+ },
+ "#4e4e4e": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 13,
+  "also": []
+ },
+ "#6e6c68": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.385,
+  "n": 13,
+  "also": [
+   "room|office",
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#a5a39d": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.462,
+  "n": 13,
+  "also": [
+   "room|living_room",
+   "room|office",
+   "room|kitchen"
+  ]
+ },
+ "#cbe4c0": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 13,
+  "also": []
+ },
+ "#b8b5af": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.417,
+  "n": 12,
+  "also": [
+   "room|generic_room",
+   "room|kitchen",
+   "room|office"
+  ]
+ },
+ "#83817c": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.333,
+  "n": 12,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|bedroom"
+  ]
+ },
+ "#686868": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 12,
+  "also": []
+ },
+ "#767676": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.917,
+  "n": 12,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#c6c2bb": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.417,
+  "n": 12,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#9f9c96": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.583,
+  "n": 12,
+  "also": [
+   "room|bathroom",
+   "room|canteen",
+   "room|kitchen"
+  ]
+ },
+ "#545454": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.917,
+  "n": 12,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#cfccc4": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.5,
+  "n": 12,
+  "also": [
+   "room|kitchen",
+   "room|generic_room",
+   "room|living_room"
+  ]
+ },
+ "#989690": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 12,
+  "also": [
+   "room|living_room",
+   "room|bathroom",
+   "room|generic_room"
+  ]
+ },
+ "#c9c9c9": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.667,
+  "n": 12,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#cfcfcf": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.833,
+  "n": 12,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#cbcbcb": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.5,
+  "n": 12,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#adaaa4": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.4,
+  "n": 10,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|lab"
+  ]
+ },
+ "#d1d1d1": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.5,
+  "n": 10,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#c4c1b9": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 10,
+  "also": [
+   "room|generic_room",
+   "room|bathroom",
+   "room|living_room"
+  ]
+ },
+ "#b6b3ac": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 10,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|library"
+  ]
+ },
+ "#7f7d79": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 10,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|bathroom"
+  ]
+ },
+ "#c9c5be": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.4,
+  "n": 10,
+  "also": [
+   "room|generic_room",
+   "room|bedroom",
+   "room|office"
+  ]
+ },
+ "#afaca6": {
+  "type": "room",
+  "room_type": "office",
+  "share": 0.4,
+  "n": 10,
+  "also": [
+   "room|bathroom",
+   "room|bedroom",
+   "room|seminar_room"
+  ]
+ },
+ "#4c4b48": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.4,
+  "n": 10,
+  "also": [
+   "room|kitchen",
+   "room|seminar_room",
+   "room|lab"
+  ]
+ },
+ "#8f8c87": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.6,
+  "n": 10,
+  "also": [
+   "room|kitchen",
+   "room|bathroom"
+  ]
+ },
+ "#636363": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 10,
+  "also": []
+ },
+ "#525252": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.8,
+  "n": 10,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#585858": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 9,
+  "also": []
+ },
+ "#3c3b39": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.556,
+  "n": 9,
+  "also": [
+   "room|generic_room",
+   "room|toilet",
+   "room|kitchen"
+  ]
+ },
+ "#918e89": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.556,
+  "n": 9,
+  "also": [
+   "room|generic_room",
+   "room|lecture_hall",
+   "room|kitchen"
+  ]
+ },
+ "#908d88": {
+  "type": "room",
+  "room_type": "living_room",
+  "share": 0.444,
+  "n": 9,
+  "also": [
+   "room|generic_room",
+   "room|quality_lab",
+   "room|bathroom"
+  ]
+ },
+ "#4a4946": {
+  "type": "room",
+  "room_type": "print_room",
+  "share": 0.222,
+  "n": 9,
+  "also": [
+   "room|living_room",
+   "room|generic_room",
+   "room|office"
+  ]
+ },
+ "#4d4d4d": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 9,
+  "also": []
+ },
+ "#b9b6af": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.444,
+  "n": 9,
+  "also": [
+   "room|bathroom",
+   "room|kitchen",
+   "room|living_room"
+  ]
+ },
+ "#d7d7d7": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 9,
+  "also": []
+ },
+ "#94928c": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.25,
+  "n": 8,
+  "also": [
+   "room|office",
+   "room|bedroom",
+   "room|toilet"
+  ]
+ },
+ "#9e9e9e": {
+  "type": "stair",
+  "room_type": "stairwell",
+  "share": 0.75,
+  "n": 8,
+  "also": [
+   "lift|lift",
+   "corridor|corridor"
+  ]
+ },
+ "#8b8b8b": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.75,
+  "n": 8,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#8b81a5": {
+  "type": "lift",
+  "room_type": "lift",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#aaaaaa": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.875,
+  "n": 8,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#6a6a6a": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#d9d9d9": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.875,
+  "n": 8,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#b1b1b1": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#b5b5b5": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#868686": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#dbdbdb": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.75,
+  "n": 8,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#676767": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#b0b0b0": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.625,
+  "n": 8,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#5d5d5d": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.875,
+  "n": 8,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#5b6757": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#586354": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#484744": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.5,
+  "n": 8,
+  "also": [
+   "room|living_room",
+   "room|bedroom"
+  ]
+ },
+ "#cce5c1": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#d8d8d8": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 8,
+  "also": []
+ },
+ "#3f3e3c": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.429,
+  "n": 7,
+  "also": [
+   "room|living_room",
+   "room|canteen",
+   "room|bedroom"
+  ]
+ },
+ "#979797": {
+  "type": "corridor",
+  "room_type": "stairwell",
+  "share": 0.571,
+  "n": 7,
+  "also": [
+   "corridor|corridor"
+  ]
+ },
+ "#b2afa8": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.571,
+  "n": 7,
+  "also": [
+   "room|bathroom",
+   "room|generic_room"
+  ]
+ },
+ "#4e4d4a": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.429,
+  "n": 7,
+  "also": [
+   "room|generic_room",
+   "room|bedroom"
+  ]
+ },
+ "#524c62": {
+  "type": "lift",
+  "room_type": "lift",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#9c9c9c": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.571,
+  "n": 7,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#6f7c69": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#525c4d": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#cae2bf": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#626e5d": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#86967e": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#6c7966": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#515b4d": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#848484": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.714,
+  "n": 7,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#616161": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.571,
+  "n": 7,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#cae3c0": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#727272": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#484848": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#6c6c6c": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.714,
+  "n": 7,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#4f594b": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#576253": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 7,
+  "also": []
+ },
+ "#3f3f3f": {
+  "type": "corridor",
+  "room_type": "stairwell",
+  "share": 0.571,
+  "n": 7,
+  "also": [
+   "corridor|corridor"
+  ]
+ },
+ "#cdcdcd": {
+  "type": "corridor",
+  "room_type": "stairwell",
+  "share": 0.714,
+  "n": 7,
+  "also": [
+   "corridor|corridor"
+  ]
+ },
+ "#cccccc": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.857,
+  "n": 7,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#464442": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.5,
+  "n": 6,
+  "also": [
+   "room|office",
+   "room|living_room",
+   "room|bedroom"
+  ]
+ },
+ "#9f9f9f": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.833,
+  "n": 6,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#878787": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#515151": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#474644": {
+  "type": "room",
+  "room_type": "generic_room",
+  "share": 0.5,
+  "n": 6,
+  "also": [
+   "room|bedroom",
+   "room|bathroom"
+  ]
+ },
+ "#adadad": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.833,
+  "n": 6,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#787878": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#bebebe": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#666666": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#575757": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.667,
+  "n": 6,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#a9bea0": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#5e5d59": {
+  "type": "room",
+  "room_type": "kitchen",
+  "share": 0.667,
+  "n": 6,
+  "also": [
+   "room|living_room",
+   "room|bedroom"
+  ]
+ },
+ "#c2d9b7": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#535e4f": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#acc1a3": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#8d9e85": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#6e6e6e": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#b6b6b6": {
+  "type": "corridor",
+  "room_type": "stairwell",
+  "share": 0.833,
+  "n": 6,
+  "also": [
+   "corridor|corridor"
+  ]
+ },
+ "#a3a3a3": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#b7b4ad": {
+  "type": "room",
+  "room_type": "bedroom",
+  "share": 0.333,
+  "n": 6,
+  "also": [
+   "room|bathroom",
+   "room|kitchen"
+  ]
+ },
+ "#d5d5d5": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.833,
+  "n": 6,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#717f6b": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#92a48b": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#75846f": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#c0c0c0": {
+  "type": "corridor",
+  "room_type": "stairwell",
+  "share": 1.0,
+  "n": 6,
+  "also": []
+ },
+ "#d2d2d2": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.6,
+  "n": 5,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#a2a2a2": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.8,
+  "n": 5,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#898989": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#553e2d": {
+  "type": "stair",
+  "room_type": "stairwell",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#a7a7a7": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.8,
+  "n": 5,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#625b75": {
+  "type": "lift",
+  "room_type": "lift",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#959595": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#424242": {
+  "type": "corridor",
+  "room_type": "stairwell",
+  "share": 0.6,
+  "n": 5,
+  "also": [
+   "corridor|corridor"
+  ]
+ },
+ "#494949": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.6,
+  "n": 5,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#504c38": {
+  "type": "hall",
+  "room_type": "logistics_zone",
+  "share": 0.4,
+  "n": 5,
+  "also": [
+   "hall|warehouse_zone",
+   "hall|assembly_zone"
+  ]
+ },
+ "#485144": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#5f6a5a": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#c2dab8": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#464e42": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#bcd3b2": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#83937c": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#72806c": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#777777": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#9bae93": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#7b8a74": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#3d3d3d": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#c5ddba": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#9fb397": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#bdd3b3": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#717171": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.8,
+  "n": 5,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#b8ceae": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#8d8d8d": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 0.8,
+  "n": 5,
+  "also": [
+   "corridor|stairwell"
+  ]
+ },
+ "#b2b2b2": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#b0c5a6": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#b9d0b0": {
+  "type": "outdoor",
+  "room_type": "balcony",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ },
+ "#5c5c5c": {
+  "type": "corridor",
+  "room_type": "corridor",
+  "share": 1.0,
+  "n": 5,
+  "also": []
+ }
+}
