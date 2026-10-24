@@ -13,17 +13,23 @@ from functools import lru_cache
 import cv2
 import numpy as np
 from matplotlib.path import Path as MplPath
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from floorwise.core.model import Building
 
-CELL_M = 0.4
+CELL_M = 0.2
 DESIRED_CLEARANCE_M = 0.9
 CLEARANCE_WEIGHT = 2.5
 OBSTACLE_MARGIN_M = 0.2
 WALKABLE_CLEARANCE_M = 0.2
 BLOCKING_CATEGORIES = {"furniture", "machine", "equipment", "fixture"}
 DOOR_CLEAR_M = 0.3
+
+
+class WalkBlocked(ValueError):
+    def __init__(self, space_id: str):
+        self.space_id = space_id
+        super().__init__(f"No validated walking passage through {space_id}")
 
 
 class Grid:
@@ -132,6 +138,8 @@ class Grid:
                 r, c = here[0] + dr, here[1] + dc
                 if not (0 <= r < self.h and 0 <= c < self.w) or not passable[r, c]:
                     continue
+                if dr and dc and (not passable[here[0], c] or not passable[r, here[1]]):
+                    continue
                 cost = best[here] + length * penalty[r, c]
                 if cost < best.get((r, c), float("inf")):
                     best[(r, c)] = cost
@@ -201,8 +209,24 @@ def walk_in_space(building: Building, space_id: str, a: tuple[float, float], b: 
                   a_door: bool = True, b_door: bool = True) -> list[tuple[float, float]]:
     """Walking line from a to b inside one space. a/b are door positions (kept exactly) or room points
     (start/end of a route, after a lift), which are moved to the nearest free spot."""
-    return list(_walk(id(building), building, space_id, (round(a[0], 3), round(a[1], 3)), (round(b[0], 3), round(b[1], 3)),
-                      a_door, b_door))
+    points = list(_walk(id(building), building, space_id, (round(a[0], 3), round(a[1], 3)), (round(b[0], 3), round(b[1], 3)), a_door, b_door))
+    if len(points) < 2:
+        return points
+    line = LineString(points)
+    if not building.polygons[space_id].buffer(0.35).covers(line):
+        raise WalkBlocked(space_id)
+    for asset in building.assets.values():
+        if asset['space_id'] != space_id or asset.get('category') not in BLOCKING_CATEGORIES:
+            continue
+        f = asset.get('footprint') or {}
+        w, d = f.get('width_m', 0.5), f.get('depth_m', 0.5)
+        angle = math.radians(f.get('rotation_deg', 0))
+        x, y = asset['position']
+        obstacle = Polygon([(x + dx*math.cos(angle)-dy*math.sin(angle), y + dx*math.sin(angle)+dy*math.cos(angle))
+                            for dx,dy in [(-w/2,-d/2),(w/2,-d/2),(w/2,d/2),(-w/2,d/2)]])
+        if line.intersection(obstacle.buffer(-0.01)).length > 0.02:
+            raise WalkBlocked(space_id)
+    return points
 
 
 @lru_cache(maxsize=20000)
@@ -211,11 +235,11 @@ def _walk(_key: int, building: Building, space_id: str, a: tuple[float, float], 
     try:
         g = grid(building, space_id)
     except Exception:  # noqa: BLE001 - degenerate polygons: fall back to a straight line
-        return (a, b)
+        raise WalkBlocked(space_id)
     start = g.nearest_free(g.cell(*a))
     goal = g.nearest_free(g.cell(*b))
     if start is None or goal is None:
-        return (a, b)
+        raise WalkBlocked(space_id)
     if g.components[start] != g.components[goal]:
         if a_door and b_door:
             # The data's furniture walls these two doors off. Squeeze through with the least furniture overlap.
@@ -225,7 +249,7 @@ def _walk(_key: int, building: Building, space_id: str, a: tuple[float, float], 
             if cells:
                 raw = [a] + [g.point(c) for c in cells] + [b]
                 return tuple(_dedupe(raw[:1] + raw[1:-1:2] + raw[-1:]))
-            return (a, b)
+            raise WalkBlocked(space_id)
         # A route end (not a door) in a boxed-in pocket: use the nearest spot reachable from the door.
         if a_door:
             goal = g.nearest_free(g.cell(*b), g.components[start])
@@ -238,7 +262,7 @@ def _walk(_key: int, building: Building, space_id: str, a: tuple[float, float], 
         cells = g.astar(start, goal, g.open | g.free)
         strict = False
         if not cells:
-            return (a, b)
+            raise WalkBlocked(space_id)
     raw = ([a] if a_door else []) + [g.point(c) for c in cells] + ([b] if b_door else [])
     points = g.smooth_points(raw, relaxed=not strict)
     return tuple(_dedupe(points))

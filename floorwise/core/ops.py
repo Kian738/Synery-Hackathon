@@ -1,6 +1,8 @@
 """Spatial operators: one function per question family. Inputs are resolved ids; outputs are plain
 dicts with the answer plus the evidence the agent needs to explain it."""
 
+from dataclasses import replace
+
 from floorwise.core import geometry
 from floorwise.core.graph import Constraints, RouteGraph
 from floorwise.core.model import OUTSIDE, Building
@@ -111,7 +113,7 @@ def straight_line_3d(building: Building, first: str, second: str) -> dict:
 
 
 def distances_to_exit(building: Building, constraints: Constraints = Constraints()) -> dict[str, float]:
-    graph = RouteGraph(building, constraints)
+    graph = RouteGraph(building, replace(constraints, outside="free"))
     return graph.distances_from(OUTSIDE)
 
 

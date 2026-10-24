@@ -12,7 +12,7 @@ GATES = [
     ["parser", "--split", "train,dev"],
     ["parser", "--split", "test"],
     ["e2e", "--split", "train,dev"],
-    ["e2e_basic", "--split", "dev"],
+    ["e2e_basic", "--split", "train,dev"],
     ["robust", "--split", "dev"],
     ["metamorphic", "--split", "dev"],
     ["walkability", "--split", "dev", "--pairs", "4"],
@@ -33,7 +33,18 @@ def main() -> None:
         os.environ.setdefault("FLOORWISE_OFFLINE", "1")
         for gate in GATES:
             print(f"\n##### {' '.join(gate)}")
+            from pathlib import Path
+            import json
+            before = set(Path("runs").glob("*/summary.json"))
             run(gate[0], gate[1:])
+            if gate[0] != "report":
+                created = set(Path("runs").glob("*/summary.json")) - before
+                if len(created) != 1:
+                    raise SystemExit(f"Gate {gate[0]} did not produce exactly one summary")
+                summary = json.loads(created.pop().read_text(encoding="utf-8"))
+                threshold = {"e2e": 0.99, "e2e_basic": 0.99}.get(gate[0], 1.0)
+                if not summary["total"] or summary["accuracy"] is None or summary["accuracy"] < threshold:
+                    raise SystemExit(f"FAILED {gate[0]}: {summary['accuracy']} below {threshold}")
         return
     run(sys.argv[1], sys.argv[2:])
 

@@ -1,6 +1,6 @@
 # Status: what works, what is untested, what is missing
 
-Last updated: 2026-10-24 (evening). **verified** = measured by an eval or test in this repo; **live-tested** = ran against a real LLM; **untested** = written but never run; **missing** = not built.
+Last updated: 2026-10-24 (implementation milestone 1). **verified** = measured by an eval or test in this repo; **live-tested** = ran against a real LLM; **untested** = written but never run; **missing** = not built.
 
 ## Challenge levels
 
@@ -59,3 +59,15 @@ Last updated: 2026-10-24 (evening). **verified** = measured by an eval or test i
 1. Sunday format is unknown, and question kinds outside our 15 families have unknown quality.
 2. Interaction quality is only measured on Groq models, not Claude.
 3. Building from scanned (non-generated) plans is weak.
+
+
+## Verified building demo: milestone 1
+
+- Profile-aware closure impact verified: factory Office lift reports general 0 cut off, step-free 29/56, and reopening reconnects 29.
+- Door-width repair verified on campus print room: O0015, 0.9 to 1.1 m, preview does not mutate; apply restores graph connectivity. This is a hypothetical edit requiring physical work, not certification of a trolley path.
+- Weak-point analysis groups closures by stranded room sets. Unlike the handoff's assumption, ordinary room doors are also weak points (one room each on the demo factory).
+- Claude now has typed tools for exact counts, shared walls, 3D distance, errands, read-only door effects and weak points.
+- Human routes no longer fall back to free outside hops. Exact furniture validation withholds guidance when a safe modeled passage cannot be established.
+- Offline check: 21 unit tests; route model 2130/2130; solver and train/dev parser 655/655; test parser 145/145; e2e 653/655; basic train+dev 2124/2130; robust 630/630; metamorphic 898/898.
+- Walkability: 134 validated routes, 26 cases with guidance withheld, zero invalid routes in 160 sampled pairs. This is not 100% route availability. Earlier 145/149 results omitted unreachable cases and tolerated dataset-blocked furniture crossings.
+- Normal Claude coffee requests succeeded; the reported white-screen crash has not yet been reproduced. Frontend recovery/validation work is in progress. Voice remains unverified on physical hardware.

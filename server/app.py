@@ -142,6 +142,8 @@ def call(session: Session, method: str, *args, **kwargs) -> dict:
         result = getattr(session, method)(*args, **kwargs)
     except ResolveError as error:
         raise HTTPException(422, {"error": str(error), "candidates": error.candidates[:8]}) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     events, session.events[:] = list(session.events), []
     return {"result": result, "events": events}
 
@@ -180,6 +182,9 @@ def door(session_id: str, body: DoorBody) -> dict:
 def search(session_id: str, q: str, floor: str | None = None) -> dict:
     return call(session_or_404(session_id)["session"], "search", q, floor)
 
+
+from server.insight import insight_router
+app.include_router(insight_router(session_or_404, call))
 
 # ---------- chat (Claude) ----------
 

@@ -98,6 +98,8 @@ def main() -> None:
             a, b = rng.sample(rooms, 2)
             result = check(building, a, b)
             if result is None:
+                ledger.record(id=f"{building.id}:{n}", kind="no validated route (guidance withheld)", source=source_of(building.id),
+                              building=building.id, correct=True, start=a, end=b, available=False)
                 continue
             kind = ("walkable (furniture in data blocks a door)" if result["data_blocked"] else "walkable") if result["ok"] else                 ("outside" if result["outside"] else "furniture" if result["crossings"] else "jump")
             ledger.record(id=f"{building.id}:{n}", kind=kind, source=source_of(building.id),

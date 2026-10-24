@@ -65,7 +65,14 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     # The dataset sums rounded legs; doing the same keeps tours equal to the centimetre.
     route = Route(stops=stops, length_m=round(sum(leg.length_m for leg in legs), 2), legs=legs,
                   constraints=constraints.describe())
-    segments = walking_segments(building, graph, all_nodes) if humane else None
+    try:
+        segments = walking_segments(building, graph, all_nodes) if humane else None
+    except walk.WalkBlocked as error:
+        if error.space_id in stops:
+            raise NoRoute(f"No validated walking passage at {building.label(error.space_id)}; furniture or geometry blocks this route.") from error
+        # Exclude the blocked space and re-plan; every retry strictly reduces available spaces.
+        from dataclasses import replace
+        return plan_route(building, stops, replace(constraints, closed=constraints.closed | {error.space_id}), humane=True)
     route.guide = guide(building, graph, all_nodes, segments)
     route.steps = [step["text"] for step in route.guide["steps"]]
     if segments:

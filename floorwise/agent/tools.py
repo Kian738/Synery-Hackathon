@@ -181,4 +181,5 @@ def make_tools(session: Session, allow_edits: bool = True) -> list:
             return guarded(session.move_asset)(item, to_room)
 
         tools += [set_closed, add_door, move_item]
-    return tools
+    from floorwise.agent.insight_tools import make_insight_tools
+    return tools + make_insight_tools(session, allow_edits)
