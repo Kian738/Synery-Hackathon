@@ -123,3 +123,5 @@ The team selected a cinematic industrial presentation (see DESIGN.md), replacing
 ## Guidance and preview redesign (2026-10-24)
 
 Guide me is the default: one decision with a landmark and a linked plan. Route preview is optional, with a media dock, seekable simulated-time timeline, instruction chapters, speed and replay. Preview time is not a real-world ETA. Manual position and preview position remain separate. Current floor / Route floors / Whole building make visibility explicit. Unsurveyed connector interiors use disclosed landing transitions rather than invented traversable stairs.
+
+The linked inset focuses on the current decision or preview avatar instead of fitting the entire elongated floor. Mobile guidance collapses the inset until expanded and offers an expanded building stage. Read-aloud guidance speaks the current decision; microphone activation stops speech and pauses playback. Timeline time is explicitly simulated. See `docs/UX_AUDIT.md` for all 25 implemented changes and verification limits.

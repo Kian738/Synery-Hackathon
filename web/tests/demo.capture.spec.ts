@@ -11,6 +11,10 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await page.route("**/api/sessions/*/chat", async route=>{
     const sid=route.request().url().split("/").at(-2)!;
     const text=route.request().postDataJSON().text as string;
+    if(text.includes("chairs")){
+      const response=await page.request.post(`/api/sessions/${sid}/chat`,{data:{text}});
+      await route.fulfill({contentType:"text/event-stream",body:await response.text()});return;
+    }
     const response=text.includes("closed")
       ?await page.request.post(`/api/sessions/${sid}/close`,{data:{element:"Lift 2",closed:true}})
       :await page.request.post(`/api/sessions/${sid}/route`,{data:{start:"Main lobby",destination:"Print room 0.16",step_free:true,min_door_width_m:1.1}});
@@ -28,6 +32,7 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await page.getByRole("button",{name:"Guide me",exact:true}).click();
   await expect(page.locator("canvas")).toHaveAttribute("data-camera-position", /\[/);
   await page.screenshot({path:path.join(out,"first-person.png")});
+  await page.getByRole("button",{name:"Preview route",exact:true}).click();
   await page.getByRole("button",{name:"Play preview",exact:true}).click();
   await page.waitForTimeout(6000);
   await page.getByRole("button",{name:"Pause preview",exact:true}).click();
@@ -50,6 +55,11 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await expect(page.getByRole("region",{name:"Route"})).toContainText("Print room 0.16");
   await page.waitForTimeout(4000);
   await page.screenshot({path:path.join(out,"verified-fix.png")});
+  await page.getByRole("textbox",{name:"Message"}).fill("Which room has the most chairs?");
+  await page.getByRole("button",{name:"Send",exact:true}).click();
+  await expect(page.getByRole("region",{name:"Visual answer"})).toContainText("Rooms ranked by chairs");
+  await page.waitForTimeout(2500);
+  await page.screenshot({path:path.join(out,"visual-answer.png")});
   const video=page.video();await page.close();if(video)await video.saveAs(path.join(out,"fallback.webm"));
   await fs.writeFile(path.join(out,"README.txt"),"Recorded deterministic fallback: real backend tools and geometry, scripted chat transport, no live Claude or microphone audio. Live Claude was evaluated separately with fw eval rehearse.\n");
 });

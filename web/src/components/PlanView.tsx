@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { routeRuns } from "../lib/playback";
 import { area, bounds, centroid, zoneOf } from "../lib/geometry";
-import type { Geometry, Opening, Route, Space, XY } from "../lib/types";
+import type { Geometry, Opening, Route, Space, XY, VisualResult } from "../lib/types";
 import { Pictogram } from "./Pictogram";
 
 /** Architect's-drawing plan of one floor: ink outlines, quiet zone tints, the route as floor-marking tape.
@@ -13,10 +14,12 @@ export interface Pin {
   label: string;
   tone: "start" | "end" | "match" | "info";
   n?: number;
+  heading?: number;
 }
 
 interface Props {
   geometry: Geometry;
+  visualResult?:VisualResult|null;
   floorId: string;
   route?: Route | null;
   highlights?: Set<string>;
@@ -43,7 +46,7 @@ const flip = ([x, y]: XY): XY => [x, -y];
 const pts = (polygon: XY[]) => polygon.map((p) => flip(p).join(",")).join(" ");
 
 export function PlanView({ geometry, floorId, route, highlights, closed, pins = [], previewDoor, selected, focus,
-  showItems = true, onSpaceClick, compact }: Props) {
+  showItems = true, onSpaceClick, compact,visualResult }: Props) {
   const spaces = useMemo(() => geometry.spaces.filter((s) => s.floor_id === floorId), [geometry, floorId]);
   const openings = useMemo(() => geometry.openings.filter((o) => o.floor_id === floorId), [geometry, floorId]);
   const assets = useMemo(() => geometry.assets.filter((a) => a.floor_id === floorId), [geometry, floorId]);
@@ -58,12 +61,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
   const drag = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
 
   useEffect(() => setView(fit), [fit]);
-  useEffect(() => {
-    if (!focus) return;
-    const w = Math.min(fit.w, Math.max(size * 0.35, 18));
-    const h = (w * fit.h) / fit.w;
-    setView({ x: focus[0] - w / 2, y: -focus[1] - h / 2, w, h });
-  }, [focus, fit, size]);
+
 
   // Sizes are set in screen pixels, then converted to metres, so labels stay readable in any building.
   const [screen, setScreen] = useState({ w: 800, h: 600 });
@@ -75,6 +73,11 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  useEffect(()=>{
+    if(!focus)return;
+    const w=Math.max(12,Math.min(24,size*.25)),h=w*screen.h/Math.max(1,screen.w);
+    setView({x:focus[0]-w/2,y:-focus[1]-h/2,w,h});
+  },[focus,screen.w,screen.h,size]);
   const pxPerM = Math.max(0.01, Math.min(screen.w / view.w, screen.h / view.h));
   const scale = 8 / pxPerM; // 8 screen px, in metres: base unit for strokes and markers
   const font = 12.5 / pxPerM; // labels are 12.5 px on screen
@@ -89,26 +92,8 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     setView((v) => ({ x: cx - (cx - v.x) * factor, y: cy - (cy - v.y) * factor, w: v.w * factor, h: v.h * factor }));
   const pan = (dx: number, dy: number) => setView((v) => ({ ...v, x: v.x + dx * v.w, y: v.y + dy * v.h }));
 
-  const runs = useMemo(() => {
-    if (!route) return [] as XY[][];
-    const out: XY[][] = [];
-    let current: XY[] = [];
-    for (const p of route.polyline as (typeof route.polyline[number] & { gap?: boolean })[]) {
-      if (p.gap && current.length) {
-        out.push(current);
-        current = [];
-      }
-      if (p.floor_id === floorId) current.push([p.x, p.y]);
-      else if (current.length) {
-        out.push(current);
-        current = [];
-      }
-    }
-    if (current.length) out.push(current);
-    return out.filter((r) => r.length > 1);
-  }, [route, floorId]);
+  const runs=useMemo(()=>route?routeRuns(route,new Set([floorId])).map(run=>run.map(p=>[p.x,p.y] as XY)):[],[route,floorId]);
 
-  const length = (run: XY[]) => run.reduce((sum, p, i) => (i ? sum + Math.hypot(p[0] - run[i - 1][0], p[1] - run[i - 1][1]) : 0), 0);
 
   return (
     <div ref={box_} className="relative h-full w-full select-none overflow-hidden" onKeyDown={(e) => {
@@ -183,7 +168,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
               fill={closed?.has(o.id) ? "var(--color-signal)" : o.step_free ? "white" : "var(--color-mark)"}
               stroke="var(--color-ink)" strokeWidth={scale * 0.1}><title>{`${o.kind}, ${o.width_m} m${o.step_free ? "" : ", has steps"}`}</title></rect>;
           })}
-          {showItems && assets.filter((a) => a.category === "machine" || a.category === "equipment").map((a) => {
+          {showItems && assets.filter((a) => highlights?.has(a.id)||a.category === "machine" || a.category === "equipment").map((a) => {
             const [x, y] = flip(a.position);
             const w = a.footprint?.width_m ?? 0.6, d = a.footprint?.depth_m ?? 0.6;
             return <rect key={a.id} x={x - w / 2} y={y - d / 2} width={w} height={d}
@@ -207,14 +192,19 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
           })()}
           {runs.map((run, i) => {
             const d = run.map((p) => flip(p).join(",")).join(" ");
-            const len = length(run) + 1;
             return (
               <g key={`${route?.length_m}-${i}`} pointerEvents="none">
                 <polyline points={d} fill="none" stroke="var(--color-ink)" strokeWidth={font * 0.95} strokeLinecap="round" strokeLinejoin="round" />
                 <polyline points={d} fill="none" stroke="var(--color-mark)" strokeWidth={font * 0.6} strokeLinecap="round" strokeLinejoin="round"
-                  className="route-draw" style={{ ["--len" as string]: len }} />
+                  />
               </g>
             );
+          })}
+          {visualResult?.kind==="intervention"&&(()=>{const o=visualResult.measurements.proposed_opening as Opening|undefined;return o?.floor_id===floorId?<circle cx={o.position[0]} cy={-o.position[1]} r={font} fill="none" stroke="var(--color-mandatory)" strokeWidth={scale*.4} strokeDasharray={`${scale} ${scale*.4}`}><title>Proposed opening, not applied</title></circle>:null;})()}
+          {visualResult?.lines?.map((line,i)=>{
+            const floor=geometry.floors.find(f=>Math.abs(f.elevation_m-line.a[2])<.01);
+            if(floor&&floor.id!==floorId)return null;
+            return <line key={`measurement-${i}`} x1={line.a[0]} y1={-line.a[1]} x2={line.b[0]} y2={-line.b[1]} stroke="var(--color-mandatory)" strokeWidth={scale*.4} strokeDasharray={`${scale} ${scale*.4}`}><title>{visualResult.title}</title></line>;
           })}
           {pins.filter((p) => p.floor_id === floorId).map((p) => {
             const [x, y] = flip(p.at);
@@ -231,6 +221,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
                   fill={p.tone === "end" ? "var(--color-mark)" : "white"} fontWeight={700} fontFamily="var(--font-sign)">
                   {p.n ?? (p.tone === "start" ? "●" : p.tone === "end" ? "▸" : "")}
                 </text>
+                {p.heading!==undefined&&<path d={`M${x} ${y-r*2.2}L${x-r*.55} ${y-r*1.1}L${x+r*.55} ${y-r*1.1}Z`} fill={fill} transform={`rotate(${p.heading} ${x} ${y})`}/>}
                 <title>{p.label}</title>
               </g>
             );

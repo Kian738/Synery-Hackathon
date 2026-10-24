@@ -31,21 +31,21 @@ def guarded(function):
     return call
 
 
-def make_tools(session: Session, allow_edits: bool = True) -> list:
+def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = False) -> list:
     @beta_tool
     def building_overview() -> str:
         """Floors, stairs and lifts, entrances, room types, current closures and what we know about the person."""
         return guarded(session.overview)()
 
     @beta_tool
-    def search(query: str, floor: str | None = None) -> str:
+    def search(query: str, floor: str | None = None, offset: int = 0, limit: int = 12) -> str:
         """Find rooms and things (furniture, machines, equipment) by name, room number or type.
 
         Args:
             query: Words to look for, e.g. "3d printer", "2.03", "toilet", "coffee machine", "press".
             floor: Optional floor, e.g. "ground floor", "floor 2", "basement 1".
         """
-        return guarded(session.search)(query, floor)
+        return guarded(session.search)(query, floor, offset, limit)
 
     @beta_tool
     def room_info(room: str) -> str:
@@ -182,4 +182,4 @@ def make_tools(session: Session, allow_edits: bool = True) -> list:
 
         tools += [set_closed, add_door, move_item]
     from floorwise.agent.insight_tools import make_insight_tools
-    return tools + make_insight_tools(session, allow_edits)
+    return tools + make_insight_tools(session, allow_edits, exact_items=exact_items)

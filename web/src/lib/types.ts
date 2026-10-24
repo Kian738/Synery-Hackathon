@@ -16,6 +16,7 @@ export interface Space {
   name: string;
   ref: string | null;
   polygon: XY[];
+  anchor?: XY;
 }
 
 export interface Opening {
@@ -50,7 +51,7 @@ export interface Asset {
 
 export interface Geometry {
   building: { id: string; name: string; source: string };
-  scene?: { revision: string; walls: { floor_id: string; space_id: string; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
+  scene?: { revision: string; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];
@@ -115,6 +116,7 @@ export interface FixProposal { reachable_before: boolean; reason: string; verifi
 export interface WeakPoint { name: string; element_ids: string[]; room_ids: string[]; rooms_lost: number; of_rooms: number; kind: string }
 
 export type UiEvent =
+  | { type: "visual_result"; result: VisualResult; total_rows: number }
   | { type: "fix_preview"; opening: Opening; fix: FixProposal; start: string; destination: string }
   | { type: "weak_points"; items: WeakPoint[]; profile: string }
   | { type: "route"; route: Route }
@@ -130,4 +132,16 @@ export interface BuildingRow {
   source: string;
   name: string;
   floors: string;
+}
+
+export interface VisualResult {
+  id:string;
+  kind:"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
+  title:string;
+  entities:{id:string;floor_id:string;kind:string}[];
+  floor_ids:string[];
+  measurements:Record<string,unknown>;
+  lines:{a:[number,number,number];b:[number,number,number]}[];
+  warnings:string[];
+  provenance:string;
 }

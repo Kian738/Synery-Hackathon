@@ -203,3 +203,13 @@ test("reduced motion uses static waypoint guidance", async ({page}) => {
   await expect(page.getByRole("button",{name:"Next instruction"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Play preview"})).toHaveCount(0);
 });
+
+test("an incomplete visual answer cannot blank the conversation",async({page})=>{
+  await page.route("**/api/sessions/*/chat",route=>route.fulfill({contentType:"text/event-stream",body:'data: {"type":"ui","data":{"type":"visual_result","result":{"id":"broken","entities":[],"floor_ids":[]},"total_rows":0}}\n\ndata: {"type":"reply","data":{"text":"Please retry the visual answer.","model":"fixture","usage":{}}}\n\ndata: {"type":"done","data":null}\n\n'}));
+  await page.goto(CAMPUS);
+  await page.getByRole("textbox",{name:"Message"}).fill("Show me equipment");
+  await page.getByRole("button",{name:"Send",exact:true}).click();
+  await expect(page.getByText("Please retry the visual answer.")).toBeVisible();
+  await expect(page.getByText("An incomplete visual answer was ignored. Please retry.")).toBeVisible();
+  await expect(page.getByRole("textbox",{name:"Message"})).toBeEnabled();
+});

@@ -36,6 +36,7 @@ class Session:
     events: list[dict] = field(default_factory=list)
     edits: list[dict] = field(default_factory=list)
     last_route: Route | None = None
+    visual_results: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def for_building(cls, building: Building) -> "Session":
@@ -168,23 +169,93 @@ class Session:
             "profile": self.profile.__dict__,
         }
 
-    def search(self, query: str, floor: str | None = None) -> dict:
+    def publish_visual(self, kind: str, title: str, ids: list[str], measurements=None, rows=None, lines=None, warnings=None) -> dict:
+        """Complete entity references go to the UI; the model receives only a compact summary."""
+        import uuid
         b = self.building
+        ids = list(dict.fromkeys(ids))
+        entities = []
+        for identifier in ids:
+            entity = b.spaces.get(identifier) or b.assets.get(identifier) or b.openings.get(identifier)
+            if entity:
+                entities.append({'id': identifier, 'floor_id': entity['floor_id'],
+                                 'kind': 'room' if identifier in b.spaces else 'asset' if identifier in b.assets else 'opening'})
+        measurements=dict(measurements or {})
+        values={r['id']:r.get('count',r.get('area_m2')) for r in rows or [] if 'id' in r and isinstance(r.get('count',r.get('area_m2')), (int,float))}
+        if values:measurements['entity_values']=values
+        result = {'id': uuid.uuid4().hex[:12], 'kind': kind, 'title': title, 'entities': entities,
+                  'floor_ids': sorted({e['floor_id'] for e in entities}), 'measurements': measurements or {},
+                  'rows': rows or [], 'lines': lines or [], 'warnings': warnings or [],
+                  'provenance': 'Computed from supplied building data; current session edits apply.'}
+        self.visual_results[result['id']] = result
+        while len(self.visual_results)>16:
+            del self.visual_results[next(iter(self.visual_results))]
+        self.emit('highlight', ids=ids)
+        self.emit('visual_result', result={k:v for k,v in result.items() if k!='rows'}, total_rows=len(result['rows']))
+        return result
+
+    def result_page(self, result_id: str, offset: int = 0, limit: int = 25) -> dict:
+        if offset<0 or not 1<=limit<=100:
+            raise ValueError('offset must be nonnegative; limit must be 1 to 100')
+        result = self.visual_results[result_id]
+        return {'id': result_id, 'total': len(result['rows']), 'offset': offset,
+                'rows': result['rows'][offset:offset+limit],
+                'next_offset': offset+limit if offset+limit<len(result['rows']) else None}
+
+    def search(self, query: str, floor: str | None = None, offset: int = 0, limit: int = 12) -> dict:
+        b = self.building
+        if offset<0 or not 1<=limit<=100:
+            raise ValueError('offset must be nonnegative; limit must be 1 to 100')
         floor_id = R.resolve_floor(b, floor) if floor else None
         words = [w for w in R.normalise(query).split() if w]
         spaces, assets = [], []
-        for s in b.spaces.values():
-            text = R.normalise(f"{s['name']} {s.get('ref') or ''} {s['room_type']} {s['type']}")
-            if (floor_id is None or s["floor_id"] == floor_id) and all(w in text or R._singular(w) in text for w in words):
-                spaces.append({"id": s["id"], "name": s["name"], "type": s["room_type"], "floor": b.floor_name(s["floor_id"])})
-        for a in b.assets.values():
-            text = R.normalise(f"{a['name']} {a['type']}")
-            if (floor_id is None or a["floor_id"] == floor_id) and all(w in text or R._singular(w) in text for w in words):
-                assets.append({"id": a["id"], "name": a["name"], "type": a["type"], "in": b.label(a["space_id"])})
-        if spaces or assets:
-            self.emit("highlight", ids=[x["id"] for x in (spaces + assets)[:MAX_RESULTS]])
-        return {"spaces": spaces[:MAX_RESULTS], "assets": assets[:MAX_RESULTS],
-                "total": len(spaces) + len(assets)}
+        for entity in [*b.spaces.values(), *b.assets.values()]:
+            text = R.normalise(f"{entity['name']} {entity.get('ref') or ''} {entity.get('room_type', '')} {entity['type']}")
+            if (floor_id is None or entity['floor_id']==floor_id) and all(w in text or R._singular(w) in text for w in words):
+                row = {'id': entity['id'], 'label': b.label(entity['id']) if entity['id'] in b.spaces else entity['name'],
+                       'name': entity['name'], 'type': entity.get('room_type',entity['type']), 'floor_id': entity['floor_id'], 'floor': b.floor_name(entity['floor_id']),
+                       'in': b.label(entity['space_id']) if 'space_id' in entity else None}
+                (assets if 'space_id' in entity else spaces).append(row)
+        rows = spaces+assets
+        visual = self.publish_visual('matches', f'{len(rows)} matches for {query}', [r['id'] for r in rows], {'count': len(rows)}, rows)
+        page=rows[offset:offset+limit]
+        from collections import Counter
+        grouped=Counter(b.assets[r['id']]['space_id'] for r in assets)
+        return {'spaces': [r for r in page if r['id'] in b.spaces], 'assets': [r for r in page if r['id'] in b.assets],
+                'total': len(rows), 'result_id': visual['id'], 'offset': offset,
+                'next_offset': offset+limit if offset+limit<len(rows) else None,
+                'grouped_by_room': [{'id': sid, 'label': b.label(sid), 'count': n} for sid,n in grouped.most_common(12)]}
+
+    def count_items(self, item_type: str, floor: str | None = None, room: str | None = None, *, exact: bool = False) -> dict:
+        from floorwise.core.analytics import count_items
+        result = count_items(self.building, item_type, floor, room, inclusive=not exact)
+        visual = self.publish_visual('count', f"{result['count']} {item_type}", result['ids'],
+                                     {k:v for k,v in result.items() if k not in ('ids','per_room')}, result['per_room'])
+        return {k:v for k,v in result.items() if k not in ('ids','per_room')} | {'result_id': visual['id'], 'rooms': result['per_room'][:12]}
+
+    def rank_by_items(self, item_type: str, floor: str | None = None, room_type: str | None = None, offset: int = 0, limit: int = 12) -> dict:
+        from floorwise.core.analytics import rank_by_items
+        if offset<0 or not 1<=limit<=100:
+            raise ValueError('Invalid page; offset >= 0 and limit 1 to 100 required.')
+        result = rank_by_items(self.building, item_type, floor, room_type)
+        visual = self.publish_visual('ranking', f'Rooms ranked by {item_type}', [r['id'] for r in result['rows']],
+                                     {**{k:v for k,v in result.items() if k!='rows'}, 'primary_ids':[r['id'] for r in result['rows'][:result['top_ties']]]}, result['rows'])
+        return {k:v for k,v in result.items() if k!='rows'} | {'rows': result['rows'][offset:offset+limit], 'result_id': visual['id'],
+                'next_offset': offset+limit if offset+limit<len(result['rows']) else None}
+
+    def filter_rooms(self, requirements: list[dict], floor: str | None = None, room_type: str | None = None) -> dict:
+        from floorwise.core.analytics import filter_rooms
+        result = filter_rooms(self.building, requirements, floor, room_type)
+        visual = self.publish_visual('matches', f"{result['count']} rooms match every requirement", [r['id'] for r in result['rows']],
+                                     {'count': result['count'], 'requirements': result['requirements']}, result['rows'])
+        return result | {'rows': result['rows'][:12], 'result_id': visual['id']}
+
+    def statistics(self, floor: str | None = None, room_type: str | None = None, group_by: str = 'floor') -> dict:
+        from floorwise.core.analytics import statistics
+        result = statistics(self.building, floor, room_type, group_by)
+        visual = self.publish_visual('area', 'Room areas and totals', result['ids'],
+                                     {k:v for k,v in result.items() if k not in ('ids','rows')}, result['rows'])
+        return {k:v for k,v in result.items() if k not in ('ids','rows')} | {'rows': result['rows'][:12], 'result_id': visual['id']}
 
     def room_info(self, mention: str) -> dict:
         b = self.building
@@ -202,7 +273,7 @@ class Session:
         above = geometry.stacked(b, space_id, "above")
         below = geometry.stacked(b, space_id, "below")
         x, y, z = geometry.centroid_3d(b, space_id)
-        self.emit("highlight", ids=[space_id])
+        self.publish_visual("area", b.label(space_id), [space_id], {"area_m2": round(geometry.area(b,space_id),2)}, [{"id": space_id,"label": b.label(space_id),"area_m2": round(geometry.area(b,space_id),2)}])
         return {
             "id": space_id, "name": s["name"], "type": s["room_type"], "floor": b.floor_name(s["floor_id"]),
             "area_m2": round(geometry.area(b, space_id), 2), "centre": [round(x, 2), round(y, 2), round(z, 2)],
@@ -249,7 +320,7 @@ class Session:
             "from": b.label(stops[0]), "to": b.label(stops[-1]), "via": [b.label(s) for s in stops[1:-1]],
             "length_m": route.walk_m if route.walk_m is not None else route.length_m,
             "about_minutes": max(1, round((route.walk_m if route.walk_m is not None else route.length_m) / 1.2 / 60) + sum(s['kind'] == 'floor' for s in route.guide['steps'])), "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
-            "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m,
+            "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m, "distance_basis": "walking metres" if route.walk_m is not None else "route-model metres; walking preview unavailable",
             **({"assumed_start": f"Start not given: assumed the main entrance, {b.label(assumed)}. Say so in one line."} if assumed else {}),
             **({"other_matches_further_away": alternatives} if alternatives else {}),
         }
@@ -262,8 +333,8 @@ class Session:
         result = ops.reachable_rooms_on_floor(b, start_id, floor_id, constraints)
         all_rooms = [s["id"] for s in b.spaces_on(floor_id) if s["type"] == "room"]
         unreachable = [b.spaces[s]["name"] for s in all_rooms if s not in result["space_ids"]]
-        self.emit("highlight", ids=result["space_ids"])
-        return {"reachable_rooms": result["count"], "of_rooms_on_floor": len(all_rooms), "constraints": result["constraints"],
+        visual=self.publish_visual("reachability", f"{result['count']} reachable rooms", all_rooms, {"count": result["count"], "unreachable_ids": [s for s in all_rooms if s not in result["space_ids"]]}, [{"id": s,"label": b.label(s),"reachable": s in result["space_ids"]} for s in all_rooms])
+        return {"result_id":visual["id"],"reachable_rooms": result["count"], "of_rooms_on_floor": len(all_rooms), "constraints": result["constraints"],
                 "unreachable_examples": unreachable[:MAX_RESULTS]}
 
     def rank_rooms(self, floor: str, room_type: str) -> dict:
@@ -271,10 +342,10 @@ class Session:
         floor_id, room_type_id = R.resolve_floor(b, floor), R.resolve_room_type(b, room_type)
         members = ops.rooms_of_type(b, floor_id, room_type_id)
         ranked = sorted(((geometry.area(b, m), m) for m in members), reverse=True)
-        self.emit("highlight", ids=members)
+        visual=self.publish_visual("area", "Rooms ranked by area", members, {"total_area_m2": round(sum(a for a,_ in ranked),2)}, [{"id": m,"label": b.label(m),"area_m2": round(a,2)} for a,m in ranked])
         return {
             "floor": b.floor_name(floor_id), "room_type": room_type_id, "count": len(members),
-            "total_area_m2": round(sum(a for a, _ in ranked), 2),
+            "total_area_m2": round(sum(a for a, _ in ranked), 2), "result_id":visual["id"],
             "largest_first": [{"name": b.spaces[m]["name"], "id": m, "area_m2": round(a, 2)} for a, m in ranked[:MAX_RESULTS]],
         }
 

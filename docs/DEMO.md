@@ -21,3 +21,7 @@ Output: runs/demo/fallback.webm and overview/first-person/closure/fix PNGs. This
 ## On-site checks
 
 Check the laptop microphone and speakers, browser permission, 1080p projector contrast, local app availability, and API credits. Have one unfamiliar teammate follow the directions. Never describe these checks as passed before doing them. Recheck Sunday input schema when released; `fw bench BUILDING QUESTIONS OUT` handles JSON, JSONL and CSV.
+
+## Visual-answer beat after the route demonstration
+
+Ask “Which room has the most chairs?” Show the complete deterministic ranking, click the leading room to link it to the model and inset, and point out “Computed locally · no model tokens.” Counts reflect recorded assets; lecture seating rows are not inferred seat capacities. The updated opt-in recording captures this real deterministic chat answer after the route, closure and verified-fix sequence.

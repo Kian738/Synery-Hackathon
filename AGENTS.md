@@ -22,6 +22,9 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 
 | Path | What it is | Status |
 |---|---|---|
+| `floorwise/core/analytics.py` | complete chat counts, item rankings/ties, content filters and grouped stats; benchmark semantics unchanged | unit-tested |
+| `floorwise/core/scene.py` | cached schematic walls and opening gaps; display-only wall deduplication | unit-tested |
+| `floorwise/agent/local.py` | free deterministic chat dispatch and validated parser-to-session adapter | unit-tested |
 | `floorwise/core/model.py` | `Building`: typed, cached view of one `building.json` | verified |
 | `floorwise/core/graph.py` | `RouteGraph`: the dataset's exact route model plus `Constraints` (step-free, min width, closed, avoid, soft-avoid, extra doors) | verified (L0 100 %) |
 | `floorwise/core/geometry.py` | areas, 3D centroids, shared walls (0.35 m, ≥1 m), stacking, wall midpoint | verified (L1 100 %) |
@@ -46,7 +49,7 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | tested; chat live on Groq |
 | `server/checks.py` | the Lab's inspection sheet: every check in plain words, target, cost, grading group | |
 | `server/lab.py` | Benchmark Lab API: runs, compare, dataset, launch suites with live logs | tested |
-| `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | Playwright 18/18 (desktop + phone) |
+| `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | desktop + phone regression coverage; see docs/STATUS.md |
 | `web/src/lab/` | Benchmark Lab UI (overview, launcher, runs, drill-down on plan, compare, dataset) | Playwright |
 | `docs/` | our docs plus the kit (`docs/industrial-agents-hackathon-2026`, read-only) | |
 | `research_notes/`, `reports/` | sourced research behind the decisions | |

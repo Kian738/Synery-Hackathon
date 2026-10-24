@@ -64,11 +64,12 @@ def session_or_404(session_id: str) -> dict:
 
 
 def geometry_payload(b: Building) -> dict:
+    anchors={sid: list(poly.representative_point().coords)[0] for sid,poly in b.polygons.items()}
     return {
         "building": b.info,
         "floors": sorted(b.data["floors"], key=lambda f: f["level"]),
         "spaces": [
-            {k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")} for s in b.spaces.values()
+            {**{k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")}, "anchor": anchors[s["id"]]} for s in b.spaces.values()
         ],
         "openings": [
             {k: o.get(k) for k in ("id", "floor_id", "space_ids", "kind", "position", "width_m", "step_free", "synthetic")}
@@ -196,10 +197,23 @@ def search(session_id: str, q: str, floor: str | None = None) -> dict:
 from server.insight import insight_router
 app.include_router(insight_router(session_or_404, call))
 
+@app.get("/api/sessions/{session_id}/results/{result_id}")
+def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: int = 25) -> dict:
+    entry=session_or_404(session_id)
+    with entry['lock']:
+        try:
+            return entry['session'].result_page(result_id, offset, limit)
+        except KeyError as error:
+            raise HTTPException(404, 'Result expired or belongs to another session') from error
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+
+
 # ---------- chat (Claude) ----------
 
 class ChatBody(BaseModel):
     text: str
+    selected_space: str | None = None
 
 
 @app.post("/api/sessions/{session_id}/chat")
@@ -216,17 +230,17 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
             try:
                 from floorwise import llm
 
-                status = llm.info()
-                if not status.available:
-                    raise RuntimeError(f"Chat needs an LLM key: {status.reason}. Add it to .env and restart.")
                 if entry["agent"] is None:
                     from floorwise.agent.chat import ChatAgent
 
                     entry["agent"] = ChatAgent(entry["session"])
                 agent = entry["agent"]
                 entry["session"].events.clear()
+                if body.selected_space is not None and body.selected_space not in entry["session"].building.spaces:
+                    raise ValueError("Selected room does not belong to this building")
+                entry["session"].ui_selection=body.selected_space
                 reply = agent.ask(body.text, on_event=push)
-                push("reply", {"text": reply, "usage": agent.usage, "model": agent.model})
+                push("reply", {"text": reply, "usage": agent.turn_usage, "model": agent.model})
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
                 push("error", {"message": f"{type(error).__name__}: {error}"})
             finally:

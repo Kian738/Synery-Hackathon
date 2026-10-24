@@ -1,13 +1,13 @@
 # Status: what works, what is untested, what is missing
 
-Last updated: 2026-10-24 (implementation milestone 1). **verified** = measured by an eval or test in this repo; **live-tested** = ran against a real LLM; **untested** = written but never run; **missing** = not built.
+Last updated: 2026-10-24 (UX overhaul milestones 1–3). **verified** = measured by an eval or test in this repo; **live-tested** = ran against a real LLM; **untested** = written but never run; **missing** = not built.
 
 ## Challenge levels
 
 | Level | Capability | Status | Evidence |
 |---|---|---|---|
 | 1 Locate | find items and rooms by name, type, number | verified | `e2e_basic` locate 553/553, count 239/239 |
-| 1 Locate | show them on a view | verified (old UI) | highlight events; screenshots |
+| 1 Locate | show them on a view | verified | complete visual events, linked views and desktop/phone regression tests |
 | 2 Route | shortest route, step-free, closures, tours | verified | `routes` 2130/2130 (to the cm) |
 | 2 Route | avoid X and Y, soft avoid, no stairs/lifts, min door width | verified in unit tests | `tests/test_core.py`; no gold exists |
 | 2 Route | humane drawn routes (inside rooms, around furniture, no entrance teleport) | validated/withheld | latest: 134 valid routes and 26 withheld cases in 160 dev samples; no collision-crossing fallback |
@@ -94,3 +94,23 @@ The recorded deterministic fallback and screenshots are under runs/demo; the cap
 ## UX overhaul milestone 1 (2026-10-24)
 
 Implemented a shared preview timeline, frame-independent progress, bounded camera rotation, seek/speed controls, distinct arrival state, landmark guidance, explicit floor scopes, persistent manual-position markers, a linked expandable plan, and a collapsed route itinerary. Preview never changes declared location. Verified: `fw check` (27 unit tests and all offline gates; existing ambiguous-name misses unchanged); 40 initial desktop/phone checks passed, four corrected-flow checks passed on rerun, and two new seek/arrival/replay checks passed. Physical voice and uncoached teammate testing remain manual.
+
+## UX overhaul milestones 2–3 (2026-10-24)
+
+The building workspace now has linked/focused plan and model selection, manual location/facing separate from preview position, compact mobile guidance with an expandable stage, camera memory, instanced oriented door frames, illustrative ceilings and recognizable equipment. Duplicate/coplanar display walls are unioned without changing analytical geometry. Supplied stair assets are illustrative; unsurveyed connector interiors use landing transitions, not invented continuous flights.
+
+Chat now dispatches supported counts, item rankings, highlights, area queries and references deterministically, including without an API key. Unknown simple wording uses the configured parser; edits, complex constraints and multi-step work use the full agent. Required parser fields are checked before execution. All geometry facts stay deterministic. Specialized tool schemas load on demand on both providers.
+
+Complete visual result events and session-scoped paged results support every question family. Search no longer limits computed highlights to 12. New analytics include inclusive, labeled chair-family counts, optional floor/room counts, room rankings with ties, AND equipment/minimum-count filters, and area/count groups. Source capacity, bookings, access and windows remain unavailable rather than inferred. Per-turn usage includes cache tokens and latency; price estimates require explicit `FLOORWISE_MODEL_PRICES_JSON` rates (USD per million tokens).
+
+The eval ledger now creates unique run directories and gates identify their own process's summaries, fixing same-second evidence overwrites. Latest verification details and the 25-issue mapping are in `docs/UX_AUDIT.md`. Physical voice, projector/FPS measurement and the three-person uncoached study remain manual; no claim of having completed them is made.
+
+### Latest measured evidence
+
+- `fw check`: 57 unit tests passed; all offline gates passed. Routing 2130/2130, solver/parser 655/655, test parser 145/145, robustness 630/630, metamorphic 898/898, differential 240/240. The eight pre-existing ambiguous-name e2e misses are unchanged.
+- `fw ui-test`: 64 desktop/phone checks passed; the two opt-in recording cases are skipped in routine runs.
+- All 280 supplied buildings compiled successfully: 175,456 display-wall segments in 11.11 seconds total on this machine. This is compilation throughput, not an FPS measurement.
+- Live Claude and Groq passed unfamiliar-count wording and closure tools; the final closure smoke passed with deferred tool schemas on both providers. Known simple chat questions are verified to make zero model calls.
+- Visual audit evidence: `runs/ux-overhaul/`; complete issue mapping and human acceptance script: `docs/UX_AUDIT.md`.
+
+The updated deterministic fallback recording passed its opt-in capture test and is saved at `runs/demo/fallback.webm`, including a real zero-model chair-ranking turn after the scripted route/closure/fix transport. It is not a live voice recording.

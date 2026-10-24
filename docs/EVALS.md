@@ -41,3 +41,9 @@ Goal: measure everything the jury measures, without overfitting to buildings we 
 `fw check` now enforces nonzero suite coverage and thresholds, adds train to the basic end-to-end gate and runs a differential smoke gate. Walkability separately reports withheld routes, requires zero emitted-path failures and at least 80% sampled route availability. It no longer counts collision-crossing fallback paths as valid guidance.
 
 `fw eval differential` compares 7200 deterministic cases across 240 train/dev buildings with the kit's independent graph implementation. `fw eval rehearse` runs bounded live model state checks and saves transcripts for wording review. `fw ui-test` launches a fresh server on a free port; it forwards Playwright filters such as `--project=desktop`.
+
+## UX overhaul verification (2026-10-24)
+
+`tests/test_visual_analytics.py` checks complete aggregates, chair families, ties, AND filters, all 15 visual families, no-key/basic chat, selected-room follow-ups and preservation of constraints. `tests/test_tool_loading.py` exercises dynamic tool schemas on both provider protocols. `tests/test_eval_ledger.py` protects evidence against same-second collisions. Playwright covers the shared playback model at 30/60/120 FPS, explicit floor scopes, real deterministic chat and complete paged results. Visual workspace screenshots go to `runs/ux-overhaul/`.
+
+Per-turn chat usage includes parser and agent models separately, cache creation/read tokens, dispatch path and latency. `estimated_cost_usd` is null unless every used model has configured input/output/cache rates in `FLOORWISE_MODEL_PRICES_JSON`. Configured rates are USD per million tokens, keyed by `provider:model`; estimates are not provider billing receipts. Fully deterministic turns report zero model usage/cost.

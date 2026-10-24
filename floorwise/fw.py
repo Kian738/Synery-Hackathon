@@ -68,7 +68,7 @@ def doctor() -> int:
     status = llm.info()
     line(status.available, f"LLM provider: {status.name} (chat {status.models['chat']}, parser {status.models['parser']})",
          "add ANTHROPIC_API_KEY (or GROQ_API_KEY for testing) to .env")
-    print("\nWithout an LLM key everything works except chat and the LLM parts of evals.")
+    print("\nWithout an LLM key supported deterministic chat still works; unfamiliar phrasing and agent actions need a key.")
     return 0 if ok else 1
 
 

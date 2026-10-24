@@ -25,9 +25,9 @@ def parse(role: str, system: str, user_content, schema: type[T], provider: str |
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user_content}],
         )
-        budget.add(response.usage.input_tokens, response.usage.output_tokens)
+        budget.add(response.usage.input_tokens+(response.usage.cache_read_input_tokens or 0)+(response.usage.cache_creation_input_tokens or 0), response.usage.output_tokens)
         usage.update({"input_tokens": response.usage.input_tokens, "output_tokens": response.usage.output_tokens,
-                      "cache_read_input_tokens": response.usage.cache_read_input_tokens or 0})
+                      "cache_read_input_tokens": response.usage.cache_read_input_tokens or 0, "cache_creation_input_tokens": response.usage.cache_creation_input_tokens or 0})
         return (None if response.stop_reason == "refusal" else response.parsed_output), usage
 
     json_schema = schema.model_json_schema()
