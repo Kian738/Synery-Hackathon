@@ -1,4 +1,5 @@
 import type { CompanionHost } from "./useCompanionHost";
+import {PairingQR} from "./PairingQR";
 import "./companion.css";
 
 export interface LaptopPairingProps {
@@ -57,10 +58,13 @@ export function LaptopPairing({ host, phonePath = "/phone", phoneOrigin, classNa
           ))}
           {!host.phoneOnline && host.code && (
             <div className="cmp-panel">
-              <p>On the phone, open this address on the same Wi-Fi and type the code:</p>
+              <p>Scan with your phone camera on the same Wi-Fi.</p>
+              <PairingQR url={url}/>
+              <details><summary>Or enter the code manually</summary>
               <p className="cmp-link">{url.replace(/#code=\d+$/, "")}</p>
               <p className="cmp-code" aria-label={`Pairing code ${host.code.split("").join(" ")}`}>{host.code}</p>
               <p className="cmp-small">One use, valid for two minutes.</p>
+              </details>
               <button className="cmp-btn quiet" onClick={host.newCode}>New code</button>
               {insecure && <p className="cmp-small">This page is not HTTPS, so phone motion look will be off; touch controls work. See the setup notes for HTTPS options.</p>}
             </div>

@@ -214,6 +214,11 @@ def walk_in_space(building: Building, space_id: str, a: tuple[float, float], b: 
     points = list(_walk(id(building), building, space_id, (round(a[0], 3), round(a[1], 3)), (round(b[0], 3), round(b[1], 3)), a_door, b_door))
     if len(points) < 2:
         return points
+    from floorwise.core.walk_domain import repair_nested_crossings
+    try:
+        points = repair_nested_crossings(building, space_id, points, a_door, b_door)
+    except ValueError:
+        raise WalkBlocked(space_id)
     line = LineString(points)
     if not building.polygons[space_id].buffer(0.35).covers(line):
         raise WalkBlocked(space_id)
