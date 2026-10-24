@@ -198,6 +198,8 @@ def search(session_id: str, q: str, floor: str | None = None) -> dict:
 
 from server.insight import insight_router
 app.include_router(insight_router(session_or_404, call))
+from server.scenario import scenario_router  # noqa: E402
+app.include_router(scenario_router(session_or_404))
 
 @app.get("/api/sessions/{session_id}/results/{result_id}")
 def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: int = 25) -> dict:
