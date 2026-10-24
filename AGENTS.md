@@ -27,6 +27,7 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/core/geometry.py` | areas, 3D centroids, shared walls (0.35 m, ≥1 m), stacking, wall midpoint | verified (L1 100 %) |
 | `floorwise/core/ops.py` | one operator per question family | verified (L1 100 %) |
 | `floorwise/core/routing.py` | `plan_route`, tours, polyline | verified (L0 100 %) |
+| `floorwise/core/walk.py` | humane walking lines per room: grid A* around furniture with clearance, door-exact smoothing; no entrance teleports for people (`Constraints(outside="none")`) | verified: walkability 100 % dev + train sample |
 | `floorwise/core/instructions.py` | followable directions: decision points, salient landmarks, floor-change steps, spoken overview (research §3) | unit-checked; wording reviewed by hand |
 | `floorwise/core/resolve.py` | entity linking: floors, rooms, room types, item types, lifts; fuzzy, with candidates | verified on train/dev/test text |
 | `floorwise/agent/spec.py` | `QuerySpec` (mentions) → solver inputs; ambiguity readings | verified |
@@ -43,6 +44,7 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/fw.py` | `fw`: the one command | verified |
 | `eval/` | eval suites L0–L7, ledger, report | see `docs/EVALS.md` |
 | `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | tested; chat live on Groq |
+| `server/checks.py` | the Lab's inspection sheet: every check in plain words, target, cost, grading group | |
 | `server/lab.py` | Benchmark Lab API: runs, compare, dataset, launch suites with live logs | tested |
 | `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | Playwright 18/18 (desktop + phone) |
 | `web/src/lab/` | Benchmark Lab UI (overview, launcher, runs, drill-down on plan, compare, dataset) | Playwright |
@@ -80,5 +82,6 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 
 - Coordinates are **metres** in one frame per building (some Swiss floors are centred per floor). Plan images have **no scale**: the builder needs one real dimension (or uses its door-width estimate).
 - Route anchors are `representative_point()`, not centroids. Centroids are only for `straight_line_3d`.
-- Stairs cost 12 m per floor; lifts cost 15 m plus 6 m per floor; entrances join at a free `outside` node.
+- Stairs cost 12 m per floor; lifts cost 15 m plus 6 m per floor; entrances join at a free `outside` node. **That free hop is benchmark-only**: navigation for people uses `outside="none"` and the walking layer, and reports walking metres.
+- LLM spend is capped per process (`FLOORWISE_MAX_TOKENS`, default 400k) with request timeouts. Lab jobs time out after 20 min and can be cancelled.
 - OSM buildings repeat names (e.g. 9 × "Büro" on one floor). The benchmark path then solves every reading and votes; chat asks back.
