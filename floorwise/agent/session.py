@@ -64,6 +64,8 @@ class Session:
         except R.ResolveError as error:
             key = R.normalise(re.sub(r"^(the|a|an|nearest|closest)\s+", "", R.normalise(mention)))
             rooms = {a["space_id"] for a in b.assets.values() if R.normalise(a["name"]) == key}
+            if key in ("exit", "entrance", "way out", "outside", "main entrance"):
+                rooms = {s for o in b.openings.values() if "outside" in o["space_ids"] for s in o["space_ids"] if s != "outside"}
             if not rooms:
                 rooms = {a["space_id"] for a in b.assets.values()
                          if key in R.normalise(a["name"]) or key in R.normalise(a["type"])}

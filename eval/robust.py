@@ -95,7 +95,7 @@ def main() -> None:
             reply, trace = answer_with_trace(directory, text)
             ledger.add_usage(trace.get("usage", {}))
             ok = score_reply(question["answer"], reply)
-            ledger.record(id=f"{question['id']}:{name}", kind=name, source=source_of(question["building_id"]), correct=ok,
+            ledger.record(id=f"{question['id']}:{name}", kind=name, source=source_of(question["building_id"]), building=question["building_id"], correct=ok,
                           parser=trace.get("parser"), fallback=trace.get("fallback"), text=text, reply=reply[-200:])
             if not ok and args.verbose:
                 print("BAD", question["id"], name, trace.get("parser"), trace.get("fallback"), "|", text[:140])

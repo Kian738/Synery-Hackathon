@@ -26,6 +26,12 @@ def correct(question: dict, trace: dict) -> bool:
     return abs(result["length_m"] - gold["optimal_length_m"]) <= max(ROUTE_TOLERANCE * gold["optimal_length_m"], ROUTE_TOLERANCE)
 
 
+def _slim(result: dict | None) -> dict | None:
+    if not result:
+        return result
+    return {k: v for k, v in result.items() if k not in ("matches", "legs")}
+
+
 def main() -> None:
     cli = argparse.ArgumentParser(prog="eval.e2e_basic")
     cli.add_argument("--split", default="dev")
@@ -35,8 +41,9 @@ def main() -> None:
     for directory, question in load_questions(args.split.split(","), "questions_basic.jsonl"):
         reply, trace = answer_with_trace(directory, question["question"])
         ok = correct(question, trace)
-        ledger.record(id=question["id"], kind=question["kind"], source=source_of(question["building_id"]), correct=ok,
-                      parser=trace.get("parser"), fallback=trace.get("fallback"), readings=len(trace.get("readings", [])))
+        ledger.record(id=question["id"], kind=question["kind"], source=source_of(question["building_id"]), building=question["building_id"], correct=ok,
+                      parser=trace.get("parser"), fallback=trace.get("fallback"), readings=len(trace.get("readings", [])),
+                      question=question["question"], expected=question["answer"], result=_slim(trace.get("result")))
         if not ok and args.verbose:
             print("BAD", question["id"], question["kind"], trace.get("fallback") or trace.get("resolve_error"), "|", question["question"][:120])
     ledger.finish()

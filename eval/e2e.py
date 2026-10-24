@@ -27,8 +27,11 @@ def main() -> None:
         correct = score_reply(question["answer"], reply) if "answer" in question else None
         ledger.record(
             id=question["id"], kind=question["kind"], source=source_of(question["building_id"]), correct=correct,
+            building=question["building_id"], question=question["question"], expected=question.get("answer"),
+            gold_inputs=question.get("inputs"), spec=trace.get("spec"), inputs=(trace.get("readings") or [None])[0],
+            readings=len(trace.get("readings", [])), result=trace.get("result"),
             seconds=round(time.time() - started, 3), parser=trace.get("parser"), fallback=trace.get("fallback"),
-            readings=len(trace.get("readings", [])), reply=reply,
+            reply=reply,
         )
         if correct is False and args.verbose:
             print("BAD", question["id"], question["kind"], trace.get("fallback"), "|", reply.splitlines()[-1])

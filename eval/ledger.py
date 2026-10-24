@@ -48,8 +48,11 @@ class Ledger:
             outcome = "correct" if row.get("correct") else "wrong"
             by_kind[row.get("kind", "?")][outcome] += 1
             by_source[row.get("source", "?")][outcome] += 1
+        from eval.stats import clustered, wilson
+
         total = len(self.rows)
         correct = sum(1 for row in self.rows if row.get("correct"))
+        cluster_ci = clustered(self.rows)
         summary = {
             "suite": self.suite,
             "config": self.config,
@@ -58,6 +61,9 @@ class Ledger:
             "total": total,
             "correct": correct,
             "accuracy": round(correct / total, 4) if total else None,
+            "ci95_wilson": [round(v, 4) for v in wilson(correct, total)],
+            "ci95_clustered": [round(v, 4) for v in cluster_ci] if cluster_ci else None,
+            "buildings": len({row.get("building") for row in self.rows if row.get("building")}),
             "by_kind": {k: dict(v) for k, v in sorted(by_kind.items())},
             "by_source": {k: dict(v) for k, v in sorted(by_source.items())},
             "usage": dict(self.usage),

@@ -63,7 +63,7 @@ def main() -> None:
                 all(_same(reading.get(key), value) for key, value in gold.items()) for reading in readings
             )
         ledger.record(
-            id=question["id"], kind=question["kind"], source=source_of(question["building_id"]), correct=correct,
+            id=question["id"], kind=question["kind"], source=source_of(question["building_id"]), building=question["building_id"], correct=correct,
             error=error, readings=len(readings), spec=spec.model_dump(exclude_none=True) if spec else None, inputs=inputs, gold=gold,
         )
         if not correct and args.verbose:

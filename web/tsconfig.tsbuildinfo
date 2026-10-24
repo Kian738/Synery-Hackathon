@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/voice.ts","./src/components/builddialog.tsx","./src/components/chatpanel.tsx","./src/components/floorplan.tsx"],"version":"5.6.3"}
+{"root":["./src/main.tsx","./src/components/floorrail.tsx","./src/components/pictogram.tsx","./src/components/planview.tsx","./src/lab/lab.tsx","./src/lab/rundetail.tsx","./src/lib/api.ts","./src/lib/geometry.ts","./src/lib/types.ts","./src/lib/voice.ts","./src/navigator/navigator.tsx","./src/navigator/usenavigator.ts"],"version":"5.9.3"}

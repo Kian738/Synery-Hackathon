@@ -57,6 +57,18 @@ export interface Geometry {
   assets: Asset[];
 }
 
+export interface GuideStep {
+  kind: "start" | "walk" | "floor" | "outside" | "arrive";
+  icon: "start" | "straight" | "left" | "right" | "back" | "lift" | "stairs" | "outside" | "arrive";
+  text: string;
+  short: string;
+  metres: number;
+  floor_id: string | null;
+  point: XY | null;
+  landmark: string | null;
+  space_id: string | null;
+}
+
 export interface RoutePoint {
   floor_id: string;
   x: number;
@@ -71,23 +83,8 @@ export interface Route {
   constraints: string[];
   floors: string[];
   polyline: RoutePoint[];
+  guide: { steps: GuideStep[]; spoken: string };
 }
-
-export interface BuildingRow {
-  building_id: string;
-  split: string;
-  source: string;
-  name: string;
-  floors: string;
-}
-
-export type UiEvent =
-  | { type: "route"; route: Route }
-  | { type: "highlight"; ids: string[] }
-  | { type: "closure"; id: string; closed: boolean; impact: Impact }
-  | { type: "preview_door"; door: Opening; impact: Impact }
-  | { type: "edit"; op: string; [key: string]: unknown }
-  | { type: "profile"; profile: Profile };
 
 export interface Impact {
   rooms_cut_off_from_exits: string[];
@@ -104,9 +101,18 @@ export interface Profile {
   location: string | null;
 }
 
-export interface ChatItem {
-  id: number;
-  role: "user" | "agent" | "tool" | "error" | "understood" | "preview";
-  text: string;
-  data?: any;
+export type UiEvent =
+  | { type: "route"; route: Route }
+  | { type: "highlight"; ids: string[] }
+  | { type: "closure"; id: string; closed: boolean; impact: Impact }
+  | { type: "preview_door"; door: Opening; impact: Impact }
+  | { type: "edit"; op: string; [key: string]: unknown }
+  | { type: "profile"; profile: Profile };
+
+export interface BuildingRow {
+  building_id: string;
+  split: string;
+  source: string;
+  name: string;
+  floors: string;
 }

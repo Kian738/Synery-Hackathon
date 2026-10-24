@@ -34,7 +34,7 @@ def run(splits: list[str], kinds: list[str] | None, verbose: bool) -> Counter:
         tally[(question["kind"], correct)] += 1
         tally[(source_of(question["building_id"]) + "|" + question["kind"], correct)] += 1
         ledger.record(
-            id=question["id"], kind=question["kind"], source=source_of(question["building_id"]),
+            id=question["id"], kind=question["kind"], source=source_of(question["building_id"]), building=question["building_id"],
             correct=correct, error=error, reply=reply, expected=question["answer"], result=_compact(result),
         )
         if not correct and verbose:

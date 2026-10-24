@@ -20,3 +20,16 @@ def test_map_flow_without_api_key():
     assert closed["result"]["closed"] is True
     missing = client.post(f"/api/sessions/{session_id}/route", json={"start": "Room 9.99", "destination": lab})
     assert missing.status_code == 422
+
+
+def test_lab_endpoints():
+    suites = client.get("/api/lab/suites").json()
+    assert "e2e" in suites["suites"]
+    runs = client.get("/api/lab/runs").json()
+    assert isinstance(runs, list)
+    if runs:
+        detail = client.get(f"/api/lab/runs/{runs[0]['run']}").json()
+        assert "rows" in detail
+    assert client.post("/api/lab/jobs", json={"suite": "rm -rf", "args": []}).status_code == 422
+    assert client.post("/api/lab/jobs", json={"suite": "routes", "args": ["--evil"]}).status_code == 422
+    assert client.get("/api/lab/dataset").json()["splits"]["train"] == 200
