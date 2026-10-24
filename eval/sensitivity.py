@@ -11,6 +11,8 @@ from floorwise.core.model import Building
 from floorwise.evacuation import Hazard, Occupants, best_doors, evacuate
 from floorwise.evacuation.types import DEFAULT_PARAMS
 from floorwise.paths import DATA
+from floorwise.reason import occupants as seats
+from floorwise.reason.evac_ops import DEFAULT_ESCAPE_S
 
 FLOWS = (1.0, 1.316, 1.6)
 SCALES = (0.5, 1.0, 1.5)
@@ -18,8 +20,8 @@ SCALES = (0.5, 1.0, 1.5)
 
 def run(name: str, room: str) -> list[tuple[float, float, int, int, str | None]]:
     building = Building.load(DATA / "dev" / name)
-    hazard = Hazard(spaces=(next(s["id"] for s in building.spaces.values() if s["name"] == room),))
-    base = Occupants.from_seats(building)
+    hazard = Hazard(spaces=(next(s["id"] for s in building.spaces.values() if s["name"] == room),), escape_s=DEFAULT_ESCAPE_S)
+    base = Occupants.explicit(dict(seats.build(building, None).by_space))  # the same estimate the app uses
     rows = []
     for flow in FLOWS:
         params = replace(DEFAULT_PARAMS, specific_flow=flow)
