@@ -12,7 +12,7 @@ from pathlib import Path
 
 from floorwise.agent.parse_rules import parse_rules
 from floorwise.agent.solve import SolveError, solve
-from floorwise.agent.spec import QuerySpec, resolve_spec_all
+from floorwise.agent.spec import QuerySpec, describe_ambiguity, resolve_spec_all
 from floorwise.core.model import Building
 from floorwise.core.resolve import ResolveError
 
@@ -105,9 +105,10 @@ def answer_with_trace(building_directory: Path | str, question: str, hints: dict
         trace["result"] = result
         if len(readings) > 1:
             trace["votes"] = dict(votes)
+            trace["ambiguity"] = describe_ambiguity(building, spec)
             reply = (
-                f"Note: the name in the question fits {len(readings)} spaces; "
-                f"{votes[winner]} of them give this answer.\n" + reply
+                f"Note: the question does not say which space it means; its wording fits {len(readings)} readings, "
+                f"{votes[winner]} of which give this answer. Treat it as a best guess.\n" + reply
             )
         return reply, trace
     except ResolveError as error:
