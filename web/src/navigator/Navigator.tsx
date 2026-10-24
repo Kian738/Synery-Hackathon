@@ -12,6 +12,7 @@ import { api } from "../lib/api";
 import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from "../lib/geometry";
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
+import { ScenarioPanel } from "./ScenarioPanel";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
@@ -25,6 +26,8 @@ export default function Navigator() {
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
   const [weakOpen,setWeakOpen]=useState(false);
+  const [scenarioOpen,setScenarioOpen]=useState(false);
+  const [scenarioMark,setScenarioMark]=useState<{hazard:string;doors:string[]}|null>(null);
   const [questionOpen,setQuestionOpen]=useState(false);
   const [phoneOpen,setPhoneOpen]=useState(false);
   const [compact,setCompact]=useState(()=>matchMedia("(max-width:1023px)").matches);
@@ -202,7 +205,7 @@ export default function Navigator() {
               onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
               onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
             {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>{setScope(e.target.value as typeof scope);if(compact)setToolsOpen(false);}}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
-            {following?<button aria-label="Read aloud" aria-pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}><Pictogram name="speaker" size={18}/>Read aloud</button>:<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}>Stress test</button><Link to="/lab">Evidence</Link></>}
+            {following?<button aria-label="Read aloud" aria-pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}><Pictogram name="speaker" size={18}/>Read aloud</button>:<><button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setWeakOpen(false);setToolsOpen(false);setPlanExpanded(false);}}>Fire / evacuation scenario</button><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}>Stress test</button><Link to="/lab">Evidence</Link></>}
               </div>
             </details>
           </div>
@@ -211,7 +214,7 @@ export default function Navigator() {
         <div className="model-viewport">
           <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
             {view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult}
-              pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
+              pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} scenario={scenarioMark} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
                 <Building3D geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
                   closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
@@ -221,7 +224,7 @@ export default function Navigator() {
         </div>
         {view!=="2d"&&planExpanded&&<section className="map-drawer" aria-label="Linked floor plan">
           <header><span>{g.floors.find(f=>f.id===displayFloor)?.name}</span><button aria-label="Close map" onClick={()=>setPlanExpanded(false)}><Pictogram name="close" size={18}/></button></header>
-          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
+          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={selected?.id} scenario={scenarioMark} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span><button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
@@ -234,7 +237,8 @@ export default function Navigator() {
           <details><summary>Evidence and assumptions</summary><p>Computed by removing each connector from the route graph and comparing exit reachability. This is a single-failure sensitivity check, not a fire or crowd-capacity simulation. Occupancy and door throughput are not supplied.</p></details>
           <button className="stress-rerun" disabled={nav.busy} onClick={nav.inspectWeakPoints}>Run again</button>
         </section>}
-        {selected && !following && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
+        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.applyEvents}/>}
+        {selected && !following && !scenarioOpen && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
           onHere={() => { nav.setHere(selected.id); nav.setFloorId(selected.floor_id); setSelected(null); nav.setNotice(`Location set: ${selected.name}. Your green marker is set manually.`); }}
           onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} onFocus={()=>focusRoom(selected)} />}
         {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking();}} />}

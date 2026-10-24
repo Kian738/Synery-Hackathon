@@ -308,3 +308,12 @@ body {
 .building-tools>summary{display:none}.building-tools-content{display:flex;gap:3px;align-items:center}.building-tools-content button{white-space:nowrap}.building-tools-content select{max-width:150px}
 @media(max-width:1023px){.model-toolbar{flex-wrap:nowrap;gap:4px!important}.mode-switch{gap:0;padding:3px}.mode-switch button{padding:6px 8px}.model-actions{gap:4px!important}.building-tools{position:relative}.building-tools>summary{display:grid;place-items:center;height:40px;min-width:38px;border:1px solid #485d68;background:#182329;color:#edf3f5;border-radius:4px;cursor:pointer;list-style:none;letter-spacing:2px}.building-tools>summary::-webkit-details-marker{display:none}.building-tools[open]>.building-tools-content{position:absolute;right:0;top:46px;z-index:30;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px;width:190px;background:#182329;border:1px solid #52636c;border-radius:6px;box-shadow:0 10px 30px #0006}.building-tools:not([open])>.building-tools-content{display:none}.building-tools-content select{max-width:none;width:100%}.building-tools-content>a{display:block!important;color:#edf3f5;padding:8px}.building-tools-content>button>span{display:inline!important}.stage-expanded .model-toolbar .stage-toggle{display:none}}
 .companion-close{color:#edf3f5;background:#263941;width:36px;height:36px;display:grid;place-items:center;border-radius:4px}
+.scenario-panel input { width:100%;margin:8px 0;padding:8px;background:#10171c;color:#edf3f5;border:1px solid #b6c5cc; }
+.scenario-audience { display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0; }
+.scenario-audience button, .scenario-panel summary { color:#edf3f5;border:1px solid #b6c5cc;padding:8px;background:transparent;cursor:pointer; }
+.scenario-audience button[aria-checked="true"] { background:#edf3f5;color:#10171c;font-weight:700; }
+.scenario-panel :is(button,input,summary):focus-visible { outline:3px solid #ffd45c;outline-offset:2px; }
+.scenario-headline { font-size:20px;margin:14px 0 8px;color:#edf3f5; }
+.scenario-bottleneck { color:#ffd45c; }
+.scenario-finding { margin:8px 0;padding:8px;border:1px solid #485d68;color:#edf3f5; }
+.scenario-panel small { color:#b6c5cc; }
