@@ -437,6 +437,8 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
 
                 reply = agent.ask(body.text, on_event=on_chat_event)
                 if streamer:
+                    if streamer.chunk_index == 0 and reply:
+                        streamer.feed_delta(reply)
                     streamer.flush_and_close()
 
                 push("reply", {"text": reply, "usage": agent.turn_usage, "model": agent.model})

@@ -93,3 +93,46 @@ def test_tts_streamer_mock():
     assert audio_chunks[1][1]["index"] == 1
 
 
+def test_tts_streamer_fallback_on_reply():
+    from server.app import TtsStreamer
+
+    chunks = []
+    streamer = TtsStreamer(lambda kind, data: chunks.append((kind, data)), api_key="test_key", voice_id="test_voice")
+    streamer._synthesize = lambda text: b"MPEG_AUDIO"
+
+    reply = "Here is the route. Walk straight ahead."
+    if streamer.chunk_index == 0 and reply:
+        streamer.feed_delta(reply)
+    streamer.flush_and_close(timeout=2.0)
+
+    audio_chunks = [c for c in chunks if c[0] == "audio_chunk"]
+    assert len(audio_chunks) == 2
+    assert audio_chunks[0][1]["text"] == "Here is the route."
+    assert audio_chunks[1][1]["text"] == "Walk straight ahead."
+
+
+def test_openai_loop_emits_text_delta(monkeypatch):
+    from unittest.mock import MagicMock
+    from floorwise.llm.loop import Conversation
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = "Walk to room 101. Turn left."
+    mock_choice.message.tool_calls = None
+    mock_resp.choices = [mock_choice]
+    mock_resp.usage = None
+    mock_client.chat.completions.create.return_value = mock_resp
+
+    monkeypatch.setattr("floorwise.llm.client", lambda provider: mock_client)
+
+    events = []
+    conv = Conversation("system", [], provider="groq")
+    conv.messages = []
+    reply = conv.ask("Where is room 101?", on_event=lambda kind, data: events.append((kind, data)))
+
+    assert reply == "Walk to room 101. Turn left."
+    text_deltas = [e[1]["text"] for e in events if e[0] == "text_delta"]
+    assert text_deltas == ["Walk to room 101.", " ", "Turn left."]
+
+

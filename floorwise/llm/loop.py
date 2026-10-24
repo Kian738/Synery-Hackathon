@@ -3,6 +3,7 @@
 The conversation history is kept in the provider's own message format inside Conversation."""
 
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Callable
@@ -124,7 +125,12 @@ class Conversation:
                 ]
             self.messages.append(entry)
             if not message.tool_calls:
-                return (message.content or "").strip()
+                text = (message.content or "").strip()
+                if on_event and text:
+                    for part in re.split(r'(\n+|(?<=[.!?])\s+)', text):
+                        if part:
+                            on_event("text_delta", {"text": part})
+                return text
             for c in message.tool_calls:
                 try:
                     arguments = json.loads(c.function.arguments or "{}")
