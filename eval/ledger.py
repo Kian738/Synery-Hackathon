@@ -26,7 +26,14 @@ class Ledger:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         self.directory = RUNS / f"{stamp}_{suite}{'_' + name if name else ''}"
         self.directory.mkdir(parents=True, exist_ok=True)
-        self.suite, self.config = suite, config
+        self.suite, self.config = suite, dict(config)
+        import os
+
+        if os.environ.get("FLOORWISE_OFFLINE") != "1":
+            from floorwise import llm
+
+            info = llm.info()
+            self.config["llm"] = f"{info.name}:{info.models['chat']}" if info.available else "none"
         self.handle = (self.directory / "results.jsonl").open("w", encoding="utf-8")
         self.rows: list[dict] = []
         self.started = time.time()

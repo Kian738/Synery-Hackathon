@@ -65,8 +65,19 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     setView({ x: focus[0] - w / 2, y: -focus[1] - h / 2, w, h });
   }, [focus, fit, size]);
 
-  const scale = view.w / 100; // metres per 1 % of width: drives stroke and type sizes
-  const font = Math.max(0.35, Math.min(2.2, scale * 1.6));
+  // Sizes are set in screen pixels, then converted to metres, so labels stay readable in any building.
+  const [screen, setScreen] = useState({ w: 800, h: 600 });
+  const box_ = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box_.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setScreen({ w: entry.contentRect.width, h: entry.contentRect.height }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const pxPerM = Math.max(0.01, Math.min(screen.w / view.w, screen.h / view.h));
+  const scale = 8 / pxPerM; // 8 screen px, in metres: base unit for strokes and markers
+  const font = 12.5 / pxPerM; // labels are 12.5 px on screen
   const closedSpaces = useMemo(() => {
     const ids = new Set<string>(closed ?? []);
     geometry.connectors.filter((c) => closed?.has(c.id)).forEach((c) => c.space_ids.forEach((s) => ids.add(s)));
@@ -100,7 +111,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
   const length = (run: XY[]) => run.reduce((sum, p, i) => (i ? sum + Math.hypot(p[0] - run[i - 1][0], p[1] - run[i - 1][1]) : 0), 0);
 
   return (
-    <div className="relative h-full w-full select-none overflow-hidden" onKeyDown={(e) => {
+    <div ref={box_} className="relative h-full w-full select-none overflow-hidden" onKeyDown={(e) => {
       const map: Record<string, [number, number]> = { ArrowLeft: [-0.15, 0], ArrowRight: [0.15, 0], ArrowUp: [0, -0.15], ArrowDown: [0, 0.15] };
       if (map[e.key]) { e.preventDefault(); pan(...map[e.key]); }
       if (e.key === "+" || e.key === "=") zoom(0.8);
@@ -182,7 +193,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
           })}
           {spaces.map((s) => {
             const a = area(s.polygon);
-            const minArea = (view.w * view.w) / 2200;
+            const minArea = 1500 / (pxPerM * pxPerM); // room must offer ~1500 px² on screen for a label
             const zone = zoneOf(s);
             const [x, y] = flip(centroid(s.polygon));
             if (zone === "core") return <g key={`l-${s.id}`} transform={`translate(${x - font} ${y - font}) scale(${font / 12})`} color="var(--color-ink)" pointerEvents="none"><Pictogram name={coreIcon(s)} size={24} /></g>;

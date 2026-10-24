@@ -87,7 +87,15 @@ export interface RunSummary {
   started: string;
 }
 
+export interface CheckSheet {
+  groups: { id: string; title: string; about: string }[];
+  checks: { id: string; group: string; title: string; proves: string; suite: string; args: string[]; target: number; cost: string;
+    status: "pass" | "fail" | "not run"; latest: (RunSummary & { config: Record<string, any> }) | null; history: (number | null)[] }[];
+  counts: Record<string, number>;
+}
+
 export const lab = {
+  checks: () => fetch("/api/lab/checks").then(json<CheckSheet>),
   suites: () => fetch("/api/lab/suites").then(json<{ suites: Record<string, { label: string; llm: boolean | string; args: string[] }>; provider: { name: string; available: boolean; models: Record<string, string | null> } }>),
   runs: () => fetch("/api/lab/runs").then(json<RunSummary[]>),
   run: (run: string) => fetch(`/api/lab/runs/${run}`).then(json<{ summary: RunSummary; rows: any[] }>),

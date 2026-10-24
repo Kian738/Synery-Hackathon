@@ -2,7 +2,11 @@
 question says; entity linking and every number stay deterministic. Used when the rule parser does not
 recognise the wording (new phrasings on the Sunday building). Provider: see floorwise.llm."""
 
-from floorwise.agent.spec import QuerySpec
+from typing import Literal
+
+from pydantic import BaseModel
+
+from floorwise.agent.spec import Kind, QuerySpec
 from floorwise.core import resolve as R
 from floorwise.core.model import Building
 from floorwise.llm import structured
@@ -35,6 +39,33 @@ Use the vocabulary below to normalise words (e.g. "WCs" -> the matching room typ
 specific rooms as written."""
 
 
+class WireQuery(BaseModel):
+    """Flat on purpose: no optional/union fields (strict structured output rejects deep unions as too complex).
+    Empty string / 0 / [] means "not mentioned"."""
+
+    kind: Kind
+    floor: str = ""
+    room_type: str = ""
+    asset_type: str = ""
+    item: str = ""
+    start: str = ""
+    destination: str = ""
+    first: str = ""
+    second: str = ""
+    closed: str = ""
+    min_width: float = 0.0
+    direction: Literal["above", "below", ""] = ""
+    stops: list[str] = []
+    step_free: bool = False
+    stairs_allowed: bool = True
+
+    def to_spec(self) -> QuerySpec:
+        data = {k: v for k, v in self.model_dump().items() if v not in ("", [], 0.0)}
+        data["step_free"] = self.step_free or None
+        data["stairs_allowed"] = None if self.stairs_allowed else False
+        return QuerySpec(**data)
+
+
 class LLMParser:
     def __init__(self, model: str | None = None, provider: str | None = None) -> None:
         self.model, self.provider = model, provider
@@ -46,6 +77,6 @@ class LLMParser:
             f"Item types: {', '.join(sorted(R.asset_types(building)))}\n"
             f"Stairs and lifts: {', '.join(c['name'] for c in building.connectors.values())}"
         )
-        spec, usage = structured.parse("parser", SYSTEM, f"{vocabulary}\n\nQuestion: {question}", QuerySpec,
+        wire, usage = structured.parse("parser", SYSTEM, f"{vocabulary}\n\nQuestion: {question}", WireQuery,
                                        provider=self.provider, model=self.model)
-        return spec, dict(usage)
+        return (wire.to_spec() if wire else None), dict(usage)

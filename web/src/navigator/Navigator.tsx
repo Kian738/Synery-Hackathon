@@ -7,7 +7,7 @@ import { api } from "../lib/api";
 import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from "../lib/geometry";
 import type { BuildingRow, GuideStep, Space } from "../lib/types";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
-import { type Message, useNavigator } from "./useNavigator";
+import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-factory-dev-003";
 const Building3D = lazy(() => import("../components/Building3D"));
@@ -22,6 +22,8 @@ export default function Navigator() {
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d">(params.get("view") === "3d" ? "3d" : "2d");
   const [allFloors, setAllFloors] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
   useEffect(() => { setSelected(null); setStepMode(false); }, [buildingId]);
@@ -39,6 +41,20 @@ export default function Navigator() {
   const g = nav.geometry;
   const steps = nav.route?.guide.steps ?? [];
   const cats = useMemo(() => (g ? categories(g) : []), [g]);
+  // Example requests built from this building's own rooms, items and lifts, so every one of them works here.
+  const examples = useMemo(() => {
+    if (!g) return [];
+    const out: string[] = [];
+    const toilet = g.spaces.some((x) => /toilet|bathroom/.test(x.room_type));
+    const meeting = g.spaces.find((x) => x.room_type === "meeting_room" || x.room_type === "lab" || x.room_type === "office");
+    if (toilet) out.push("I use a wheelchair. Take me to the nearest toilet.");
+    else if (meeting) out.push(`I use a wheelchair. How do I get to ${meeting.name}?`);
+    const machine = g.assets.find((a) => a.category === "machine") ?? g.assets.find((a) => a.category === "equipment");
+    if (machine) out.push(`Where is the ${machine.type.replace(/_/g, " ")}?`);
+    const lift = g.connectors.find((c) => c.kind === "lift") ?? g.connectors[0];
+    if (lift) out.push(`${lift.name} is closed for maintenance. What changes?`);
+    return out;
+  }, [g]);
   const hereFloor = g?.spaces.find((s) => s.id === nav.here)?.floor_id ?? null;
 
   // Speak new agent replies and route overviews when voice output is on.
@@ -91,10 +107,19 @@ export default function Navigator() {
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-2 px-4 py-2.5">
           <Toggle on={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} icon="wheelchair" label="Step-free" tone="escape" />
           <Toggle on={voiceOut} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} icon="speaker" label="Read aloud" tone="mark" />
-          <span className="flex basis-full items-center gap-1.5 text-sm text-ink-4 sm:ml-auto sm:basis-auto">
-            <Pictogram name="here" size={16} className={nav.here ? "text-escape" : ""} />
-            {nav.here ? <>at <b className="font-semibold text-white">{labelOf(g, nav.here)}</b></> : "Tap the plan to set where you are"}
-          </span>
+        </div>
+        <div className="border-b border-ink-2 px-4 py-2.5">
+          <button onClick={() => setPicking(!picking)} aria-expanded={picking}
+            className="flex w-full items-center gap-2 text-left text-[15px] hover:text-mark">
+            <Pictogram name="here" size={18} className="shrink-0 text-escape" />
+            <span className="min-w-0 flex-1 truncate">
+              {nav.here ? <>Starting from <b className="font-semibold">{labelOf(g, nav.here)}</b></> : "Where are you? Choose a start"}
+            </span>
+            <span className="shrink-0 text-sm text-ink-4 underline underline-offset-4">change</span>
+          </button>
+          {picking && (
+            <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); setPicking(false); nav.setNotice(null); }} />
+          )}
         </div>
 
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
@@ -103,7 +128,7 @@ export default function Navigator() {
               active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => setStepMode(true)} floors={g.floors} />
           )}
           {!nav.route && nav.messages.length === 0 && (
-            <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} />
+            <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
           <Conversation messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
@@ -121,7 +146,11 @@ export default function Navigator() {
       </aside>
 
       {/* ---------- plan ---------- */}
-      <main className="relative order-1 h-[46vh] shrink-0 bg-concrete lg:order-2 lg:h-auto lg:flex-1">
+      <main className="relative order-1 flex h-[46vh] shrink-0 bg-concrete lg:order-2 lg:h-auto lg:flex-1">
+        <div className="z-10 shrink-0 overflow-y-auto border-r border-ink bg-white">
+          <FloorRail floors={g.floors} active={nav.floorId} route={nav.route} onPick={nav.setFloorId} here={hereFloor} />
+        </div>
+        <div className="relative min-w-0 flex-1">
         {view === "2d" ? (
           <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed}
             pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint}
@@ -142,10 +171,13 @@ export default function Navigator() {
             </button>
           )}
         </div>
-        <div className="absolute left-3 top-3 max-h-[calc(100%-1.5rem)] overflow-y-auto">
-          <FloorRail floors={g.floors} active={nav.floorId} route={nav.route} onPick={nav.setFloorId} here={hereFloor} />
-        </div>
-        {view === "2d" && <Legend />}
+        {view === "2d" && (
+          <div className="absolute bottom-3 left-3">
+            {showKey && <Legend />}
+            <button onClick={() => setShowKey(!showKey)} aria-expanded={showKey}
+              className="mt-1 border border-ink bg-white px-3 py-1.5 font-sign text-[14px] font-semibold hover:bg-concrete">{showKey ? "Hide key" : "Key"}</button>
+          </div>
+        )}
         {nav.notice && (
           <div role="status" className="absolute inset-x-3 top-3 mx-auto flex max-w-xl items-start gap-3 border-l-4 border-mandatory bg-white p-3 text-[15px] shadow-[0_2px_0_var(--color-ink)] lg:left-auto lg:right-3">
             <span className="flex-1">{nav.notice}</span>
@@ -161,6 +193,7 @@ export default function Navigator() {
         {stepMode && nav.route && (
           <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => { setStepMode(false); stopSpeaking(); }} />
         )}
+        </div>
       </main>
     </div>
   );
@@ -199,15 +232,15 @@ function Toggle({ on, onClick, icon, label, tone }: { on: boolean; onClick: () =
   );
 }
 
-function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName }: {
+function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examples }: {
   categories: { key: string; label: string; query: string; icon: string }[];
-  onPick: (q: string) => void; onAsk: (t: string) => void; hasHere: boolean; buildingName: string;
+  onPick: (q: string) => void; onAsk: (t: string) => void; hasHere: boolean; buildingName: string; examples: string[];
 }) {
   return (
     <section className="px-4 pb-2 pt-5">
       <h1 className="font-sign text-[34px] font-bold leading-[1.05]">Where do you<br />want to go?</h1>
       <p className="mt-2 max-w-[34ch] text-[15px] text-ink-4">
-        {hasHere ? "Pick a place, or just ask." : `First tap where you are in ${buildingName}, or just ask.`}
+        {hasHere ? "Pick a place, or just ask." : `Choose where you are in ${buildingName}, or just ask.`}
       </p>
       {cats.length > 0 && (
         <div className="mt-5 grid grid-cols-3 gap-px bg-ink-2">
@@ -222,7 +255,7 @@ function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName }: {
       )}
       <p className="mt-6 font-sign text-sm text-ink-4">Things you can say</p>
       <ul className="mt-2 space-y-1.5">
-        {["I use a wheelchair. Take me to the nearest toilet.", "Where is the 3D printer?", "The office lift is closed for maintenance. What changes?"].map((t) => (
+        {examples.map((t) => (
           <li key={t}><button onClick={() => onAsk(t)} className="text-left text-[15px] text-concrete underline decoration-ink-3 underline-offset-4 hover:decoration-mark">“{t}”</button></li>
         ))}
       </ul>
@@ -425,10 +458,32 @@ function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; inde
   );
 }
 
+function StartPicker({ geometry, onPick }: { geometry: NonNullable<ReturnType<typeof useNavigator>["geometry"]>; onPick: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const options = query.trim()
+    ? geometry.spaces.filter((x) => `${x.name} ${x.ref ?? ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    : entrances(geometry).slice(0, 6);
+  return (
+    <div className="mt-2 space-y-1.5">
+      <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Room name or number"
+        aria-label="Search for your room" className="h-10 w-full border border-ink-3 bg-ink-2 px-3 text-white placeholder:text-ink-4 focus:border-white focus:outline-none" />
+      <p className="text-[13px] text-ink-4">{query ? "Matching rooms" : "Entrances, or tap your room on the plan"}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((x) => (
+          <button key={x.id} onClick={() => onPick(x.id)} className="border border-ink-3 px-2.5 py-1 font-sign text-[14.5px] hover:border-white">
+            {x.name}{geometry.floors.length > 1 ? ` (${geometry.floors.find((f) => f.id === x.floor_id)?.name})` : ""}
+          </button>
+        ))}
+        {!options.length && <span className="text-[14px] text-ink-4">No room matches that.</span>}
+      </div>
+    </div>
+  );
+}
+
 function Legend() {
   const zones: [string, string][] = [["circulation", "Circulation"], ["hall", "Halls"], ["office", "Rooms"], ["lab", "Labs"], ["service", "Service"]];
   return (
-    <div className="absolute bottom-4 left-3 hidden flex-wrap gap-x-3 gap-y-1 border border-ink bg-white/95 px-3 py-2 text-[12.5px] md:flex">
+    <div className="flex max-w-[460px] flex-wrap gap-x-3 gap-y-1 border border-ink bg-white px-3 py-2 text-[12.5px]">
       {zones.map(([z, l]) => <span key={z} className="flex items-center gap-1.5"><span className="h-3 w-3 border border-ink" style={{ background: `var(--color-zone-${z})` }} />{l}</span>)}
       <span className="flex items-center gap-1.5"><span className="h-0 w-0 border-x-[6px] border-b-[10px] border-x-transparent border-b-escape" />Entrance</span>
       <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 border border-ink bg-mark" />Door with steps</span>

@@ -29,6 +29,19 @@ const ACTIVITY: Record<string, (i: any) => string> = {
   move_item: (i) => `Moving ${i.item}`,
 };
 
+/** The space behind an entrance, preferring lobbies on the floor nearest the ground. */
+export function mainEntrance(g: Geometry): string | null {
+  const levels = new Map(g.floors.map((f) => [f.id, Math.abs(f.level)]));
+  const behind = entrances(g);
+  const rank = (x: Geometry["spaces"][number]) => (x.room_type === "lobby" ? 0 : 10) + (levels.get(x.floor_id) ?? 0) + (x.type === "room" ? 0.5 : 0);
+  return [...behind].sort((a, b) => rank(a) - rank(b))[0]?.id ?? null;
+}
+
+export function entrances(g: Geometry): Geometry["spaces"] {
+  const ids = new Set(g.openings.filter((o) => o.space_ids.includes("outside")).flatMap((o) => o.space_ids.filter((x) => x !== "outside")));
+  return g.spaces.filter((x) => ids.has(x.id));
+}
+
 /** All Navigator state: one session per building; map actions and the agent share it. */
 export function useNavigator(buildingId: string) {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -63,8 +76,9 @@ export function useNavigator(buildingId: string) {
       setFloorId(ground.id);
       setRoute(null); setRouteMeta(null); setHighlights(new Set()); setClosed(new Set()); setPreviewDoor(null);
       setMessages([]); setActiveStep(0);
+      // Start where a visitor actually stands: the QR/deep-link spot, else the main entrance.
       const at = new URLSearchParams(window.location.search).get("at");
-      setHere(at && g.spaces.some((s) => s.id === at) ? at : null);
+      setHere(at && g.spaces.some((s) => s.id === at) ? at : mainEntrance(g));
     })().catch((e) => setNotice(String(e.message ?? e)));
     return () => { cancelled = true; };
   }, [buildingId]);

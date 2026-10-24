@@ -13,7 +13,7 @@ export default function RunDetail() {
   const [data, setData] = useState<{ summary: RunSummary; rows: any[] } | null>(null);
   const [kind, setKind] = useState("");
   const [source, setSource] = useState("");
-  const [outcome, setOutcome] = useState<"" | "wrong" | "correct">("");
+  const [outcome, setOutcome] = useState<"" | "wrong" | "correct">(params.get("only") === "wrong" ? "wrong" : "");
   const [query, setQuery] = useState("");
   const selectedId = params.get("item");
 

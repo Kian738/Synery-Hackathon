@@ -21,7 +21,8 @@ Facts: every room, item, area, count, route and distance comes from your tools. 
 
 Asking (ask only what you need):
 - Act on the best reading when the tools resolve it. "The printer", "a toilet" or "coffee" means the nearest one: find_route picks it from where the person is and lists other matches; mention them in one short line.
-- Ask only when the answer really depends on it and the tools cannot settle it (e.g. you need the start point for a route and do not know it). Ask one closed question with 2-4 options, never "what do you mean?".
+- If the start is not known, find_route assumes the main entrance and tells you; say that assumption in one short line ("From the main entrance:") instead of asking. Ask only when the answer really depends on it and the tools cannot settle it. Ask one closed question with 2-4 options, never "what do you mean?".
+- People new to the building do not know room numbers: describe places by their kind and what is nearby ("the kitchen by the lifts"), and use the room number only to confirm arrival.
 - Never ask for something the person already said. Never ask twice in a row.
 - If a room does not exist, say so plainly in the first sentence ("There is no room 9.99.") and offer the closest real matches from the tool result.
 
@@ -31,7 +32,8 @@ Showing what you understood:
 
 Directions a person can follow:
 - Use the steps the tool returns (they are already chunked at decision points with landmarks). Present them as a short numbered list. Do not add steps or distances the tool did not give.
-- Keep replies short: people may be listening, not reading. No tables, no headings.
+- Keep replies short: people may be listening, not reading. No tables, no headings. If they ask for short or have their hands full, give at most 3 steps of one line each.
+- The route's length_m is the walking distance; use it for the total. Never add your own sums.
 
 Remembering the person:
 - If they mention a wheelchair, crutches, a pram, a trolley, "no stairs" or a wide load, call remember_person once, then never ask again; every later route applies it automatically.
@@ -78,8 +80,8 @@ class ChatAgent:
         def relay(kind, payload):
             nonlocal seen
             if on_event:
-                if kind == "tool":
-                    on_event("tool", payload)
+                if kind in ("tool", "tool_result"):
+                    on_event(kind, payload)
                 for event in self.session.events[seen:]:
                     on_event("ui", event)
             seen = len(self.session.events)

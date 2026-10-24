@@ -30,7 +30,9 @@ SUITES = {
     "robust": {"label": "Reworded questions", "llm": "optional", "args": ["--split", "--variants", "--limit"]},
     "metamorphic": {"label": "Invariance and properties", "llm": False, "args": ["--split", "--limit"]},
     "build": {"label": "Rebuild floors from images", "llm": False, "args": ["--split", "--limit"]},
-    "interaction": {"label": "Tricky users + judge", "llm": True, "args": ["--only"]},
+    "interaction": {"label": "Tricky users + judge", "llm": True, "args": ["--only", "--judge-model"]},
+    "walkability": {"label": "Drawn routes are walkable", "llm": False, "args": ["--split", "--pairs", "--limit"]},
+    "gates": {"label": "All free checks", "llm": False, "args": []},
 }
 JOBS: dict[str, dict] = {}
 JOB_TIMEOUT_S = int(os.environ.get("FLOORWISE_JOB_TIMEOUT_S", "1200"))
@@ -48,6 +50,13 @@ def summaries() -> list[dict]:
         summary["started"] = path.parent.name[:15]
         out.append(summary)
     return out
+
+
+@router.get("/checks")
+def checks() -> dict:
+    from server.checks import sheet
+
+    return sheet(summaries())
 
 
 @router.get("/suites")
@@ -126,7 +135,7 @@ def launch(body: Launch) -> dict:
         raise HTTPException(422, f"allowed flags for {body.suite}: {sorted(allowed)}")
     job_id = uuid.uuid4().hex[:8]
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "FLOORWISE_MAX_TOKENS": JOB_TOKEN_BUDGET}
-    if "llm" not in body.args and SUITES[body.suite]["llm"] == "optional":
+    if "llm" not in body.args and "paraphrase" not in body.args and SUITES[body.suite]["llm"] in ("optional", False):
         env["FLOORWISE_OFFLINE"] = "1"
     command = [sys.executable, "-u", "-m", "eval", body.suite, *body.args]
     job = {"id": job_id, "suite": body.suite, "args": body.args, "started": time.time(), "lines": [], "done": False,

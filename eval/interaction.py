@@ -138,6 +138,8 @@ def run_scenario(scenario: Scenario) -> dict:
             if kind == "tool":
                 calls.append({"turn": turn, **payload})
                 transcript.append(f"  [tool {payload['name']} {json.dumps(payload['input'], ensure_ascii=False)}]")
+            elif kind == "tool_result":
+                transcript.append(f"  [result {payload['content'][:700]}]")
 
         reply = agent.ask(text, on_event=on_event)
         replies.append(reply)

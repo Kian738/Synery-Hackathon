@@ -66,6 +66,8 @@ class Conversation:
                 if on_event:
                     on_event("tool", {"name": block.name, "input": block.input})
                 content, is_error = call(self.by_name, block.name, block.input)
+                if on_event:
+                    on_event("tool_result", {"name": block.name, "content": content, "is_error": is_error})
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": content, "is_error": is_error})
             self.messages.append({"role": "user", "content": results})
             if on_event:
@@ -103,6 +105,8 @@ class Conversation:
                 if on_event:
                     on_event("tool", {"name": c.function.name, "input": arguments})
                 content, is_error = call(self.by_name, c.function.name, arguments)
+                if on_event:
+                    on_event("tool_result", {"name": c.function.name, "content": content, "is_error": is_error})
                 self.messages.append({"role": "tool", "tool_call_id": c.id, "content": ("ERROR: " if is_error else "") + content})
             if on_event:
                 on_event("step", {})

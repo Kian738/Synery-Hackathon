@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useSearchParams } from "react-router";
 import { lab, type RunSummary } from "../lib/api";
+import Checks from "./Checks";
 import RunDetail from "./RunDetail";
 
 /** Benchmark Lab: dense, data-first. Same tokens as the Navigator, no sign column. */
@@ -9,7 +10,7 @@ export default function Lab() {
     <div className="flex h-full min-h-0 flex-col md:flex-row">
       <nav className="flex shrink-0 gap-1 overflow-x-auto bg-ink px-3 py-2 text-white md:w-52 md:flex-col md:px-0 md:py-4">
         <Link to="/" className="px-4 pb-3 font-sign text-lg font-bold">Floorwise <span className="font-normal text-ink-4">Lab</span></Link>
-        {[["", "Overview"], ["runs", "Runs"], ["compare", "Compare"], ["dataset", "Dataset"]].map(([to, label]) => (
+        {[["", "Checks"], ["runs", "History"], ["compare", "Compare runs"], ["advanced", "Run anything"], ["dataset", "Dataset"]].map(([to, label]) => (
           <NavLink key={to} to={`/lab/${to}`} end={to === ""}
             className={({ isActive }) => `whitespace-nowrap px-4 py-2 font-sign text-[15px] ${isActive ? "bg-ink-2 text-mark" : "text-concrete hover:bg-ink-2"}`}>
             {label}
@@ -19,7 +20,8 @@ export default function Lab() {
       </nav>
       <main className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <Routes>
-          <Route index element={<Overview />} />
+          <Route index element={<Checks />} />
+          <Route path="advanced" element={<Overview />} />
           <Route path="runs" element={<Runs />} />
           <Route path="runs/:run" element={<RunDetail />} />
           <Route path="compare" element={<Compare />} />

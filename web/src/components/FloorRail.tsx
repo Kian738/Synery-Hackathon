@@ -14,7 +14,7 @@ export function FloorRail({ floors, active, route, onPick, here }: {
   const top = levels.length ? Math.min(...levels) : -1;
   const bottom = levels.length ? Math.max(...levels) : -1;
   return (
-    <nav aria-label="Floors" className="relative flex flex-col bg-white/95 border border-ink">
+    <nav aria-label="Floors" className="relative flex flex-col bg-white">
       {ordered.map((f, i) => {
         const inSpan = i >= top && i <= bottom && top !== bottom;
         return (

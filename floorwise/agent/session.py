@@ -40,7 +40,11 @@ class Session:
     @classmethod
     def for_building(cls, building: Building) -> "Session":
         # Edits change the building; work on a copy so other sessions keep the original.
-        return cls(Building(copy.deepcopy(building.data), building.directory))
+        session = cls(Building(copy.deepcopy(building.data), building.directory))
+        session.default_start = main_entrance(session.building)
+        return session
+
+    default_start: str | None = None
 
     # ---------- helpers ----------
 
@@ -209,9 +213,12 @@ class Session:
 
     def route(self, start: str, destination: str, via: list[str] | None = None, **constraint_args) -> dict:
         b = self.building
+        assumed = None
         if not start and not self.profile.location:
-            return {"error": "Start unknown. Ask where the person is: offer 2-3 visible landmarks or entrances."}
-        first = self.place(start or self.profile.location)
+            if not self.default_start:
+                return {"error": "Start unknown. Ask where the person is: offer 2-3 entrances or things they can see."}
+            assumed = self.default_start
+        first = self.place(start or self.profile.location or assumed)
         middle = []
         for stop in via or []:
             middle.append(self.place(stop, near=(middle or [first])[-1]))
@@ -239,9 +246,11 @@ class Session:
         self.emit("route", route=route.to_dict())
         return {
             "from": b.label(stops[0]), "to": b.label(stops[-1]), "via": [b.label(s) for s in stops[1:-1]],
-            "length_m": route.length_m, "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
+            "length_m": route.walk_m if route.walk_m is not None else route.length_m,
+            "about_minutes": max(1, round((route.walk_m or route.length_m) / 1.2 / 60)), "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
             "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m,
             **({"note": "No indoor route: this goes outside between two entrances."} if outdoors else {}),
+            **({"assumed_start": f"Start not given: assumed the main entrance, {b.label(assumed)}. Say so in one line."} if assumed else {}),
             **({"other_matches_further_away": alternatives} if alternatives else {}),
         }
 
@@ -376,3 +385,16 @@ class Session:
             "longer_way_out_count": len(longer), "shorter_way_out_count": len(shorter),
             "most_affected": [{"room": b.label(s), "change_m": round(d, 1)} for d, s in itertools.islice(longer or shorter, 5)],
         }
+
+
+def main_entrance(building: Building) -> str | None:
+    """The space behind an entrance, preferring lobbies on the floor nearest the ground."""
+    candidates = []
+    for opening in building.openings.values():
+        if "outside" not in opening["space_ids"]:
+            continue
+        space_id = next(s for s in opening["space_ids"] if s != "outside")
+        space = building.spaces[space_id]
+        rank = (0 if space["room_type"] == "lobby" else 1, abs(building.level(space["floor_id"])), space["type"] == "room")
+        candidates.append((rank, space_id))
+    return min(candidates)[1] if candidates else None

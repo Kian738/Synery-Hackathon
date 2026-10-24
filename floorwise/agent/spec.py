@@ -57,7 +57,7 @@ def resolve_spec(building: Building, spec: QuerySpec) -> dict:
     if spec.kind in ("errand", "wide_delivery_count", "step_free_reachable_count", "room_stacked", "shared_walls_count"):
         inputs["start"] = R.resolve_space(b, _need(spec.start, "start room")).id
     if spec.kind == "errand":
-        inputs["asset_type"] = R.resolve_asset_type(b, _need(spec.asset_type, "item"))
+        inputs["asset_type"] = R.resolve_asset_type(b, _need(spec.asset_type or spec.item, "item"))
     if spec.kind == "wide_delivery_count":
         inputs["min_width"] = float(_need(spec.min_width, "width"))
     if spec.kind in ("locate", "count"):
