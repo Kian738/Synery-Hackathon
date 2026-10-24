@@ -11,11 +11,18 @@ from floorwise.reason.operators import REGISTRY
 from floorwise.reason.types import Abstain, ScenarioSpec, World
 
 
+# Assumption, not a measurement: people already inside the hazard space get this long to leave, then it is closed.
+# Without it a fire at t=0 would count its own occupants as trapped, which is not what the scenario asks.
+DEFAULT_ESCAPE_S = 30.0
+
+
 def _hazards(world: World, spec: ScenarioSpec) -> list[ev.Hazard]:
     """The scenario's hazards with their start times, plus anything already closed in this world."""
-    found = [ev.Hazard(spaces=h.spaces, elements=h.elements, from_s=h.start_s or 0.0) for h in spec.hazards]
-    spaces = tuple(sorted(i for i in world.closed if i in world.building.spaces))
-    elements = tuple(sorted(i for i in world.closed if i not in world.building.spaces))
+    found = [ev.Hazard(spaces=h.spaces, elements=h.elements, from_s=h.start_s or 0.0,
+                       escape_s=DEFAULT_ESCAPE_S if h.escape_s is None else h.escape_s) for h in spec.hazards]
+    named = {i for h in spec.hazards for i in (*h.spaces, *h.elements)}  # already carried, with their own escape window
+    spaces = tuple(sorted(i for i in world.closed if i in world.building.spaces and i not in named))
+    elements = tuple(sorted(i for i in world.closed if i not in world.building.spaces and i not in named))
     return found + ([ev.Hazard(spaces=spaces, elements=elements)] if spaces or elements else [])
 
 

@@ -32,11 +32,17 @@ def test_a_verified_door_fix_is_suggested_with_its_numbers(campus):
     assert fix.verified
 
 
-def test_people_inside_the_hazard_are_reported_as_a_finding(campus):
-    _, _, trace = campus
+def test_people_with_no_time_to_leave_are_reported_as_a_finding(campus):
+    building, fire, _ = campus
+    trace = run_plan(building, instantiate("evacuation", spec={"hazards": [{"spaces": [fire], "escape_s": 0}], "responders": {"auto": True}}))
     stranded = sum(trace.results[4].value.stranded.values())
     titles = " ".join(f.title for f in assess(trace))
     assert stranded > 0 and (f"{stranded} people" in titles)
+
+
+def test_people_in_the_hazard_room_leave_within_the_default_window(campus):
+    _, _, trace = campus
+    assert not trace.results[4].value.stranded
 
 
 def test_when_no_door_helps_the_report_says_so_and_names_the_step(factory):

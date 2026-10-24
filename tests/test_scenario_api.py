@@ -80,3 +80,15 @@ def test_claude_can_plan_a_scenario_by_room_name_and_gets_no_replay_table():
     reply = json.loads(tool.fn(hazard_rooms=["Canteen 0.28"]))
     assert reply["abstained"] is None and reply["evacuation"]["T_s"] > 0 and "schedule" not in reply["evacuation"]
     assert any(f["suggestion"] for f in reply["findings"])
+
+
+def test_people_in_the_hazard_room_get_a_stated_window_to_leave_and_zero_means_none(client, session, fire_room):
+    def run_with(escape):
+        hazard = {"spaces": [fire_room], **({} if escape is None else {"escape_s": escape})}
+        spec = {"hazards": [hazard], "responders": {"auto": True}}
+        return client.post(f"/api/sessions/{session}/scenario", json={"template": "evacuation", "params": {"spec": spec}}).json()["evacuation"]
+
+    default, none = run_with(None), run_with(0)
+    assert none["stranded"] and not default["stranded"]
+    assert default["evacuated"] == default["total"] == none["total"]
+    assert none["evacuated"] + sum(none["stranded"].values()) == none["total"]
