@@ -36,7 +36,7 @@ def test_closure_reports_both_profiles_and_reopening(factory):
 
 def test_verified_trolley_fix_does_not_mutate_then_can_be_applied(campus):
     original = copy.deepcopy(campus.building.data)
-    c = Constraints(step_free=True, min_width_m=1.1, outside='none')
+    c = Constraints(step_free=True, min_width_m=1.1)
     start, end = campus.space('Main lobby'), campus.space('Print room 0.16')
     fix = smallest_fix(campus.building, start, end, c)
     assert [w.opening_id for w in fix.widen] == ['proc-campus-dev-000-F0-O0015']
@@ -49,7 +49,7 @@ def test_verified_trolley_fix_does_not_mutate_then_can_be_applied(campus):
 
 
 def test_weak_points_are_exit_rooted_and_grouped(factory):
-    r = chaos_test(factory.building, Constraints(step_free=True, outside='none'))
+    r = chaos_test(factory.building, Constraints(step_free=True))
     assert r['rooms_reachable'] == 56
     assert r['critical'][0]['name'] == 'Office lift'
     assert r['critical'][0]['rooms_lost'] == 29

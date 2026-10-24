@@ -112,6 +112,12 @@ def grade(case, events):
     transcript = [{'type': e['type'], 'data': e['data']} for e in events if e['type'] in ('tool','tool_result','reply','error')]
     visuals = [{'title':e['data']['result']['title'], 'matching_entities':len(e['data']['result']['entities']),
                 'floor_ids':e['data']['result']['floor_ids']} for e in events if e['type']=='ui' and e['data'].get('type')=='visual_result']
+    # The UI highlights closure impacts directly, independently of visual-result cards.
+    for e in events:
+        if e['type']=='ui' and e['data'].get('type')=='closure':
+            impact=e['data'].get('impact',{})
+            scope=impact.get('step_free',impact)
+            visuals.append({'kind':'closure impact','highlighted_room_ids':scope.get('cut_off_ids',[])})
     from floorwise.agent.session import Session
     from floorwise.core.model import Building
     from floorwise.paths import DATA

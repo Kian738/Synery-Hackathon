@@ -305,6 +305,7 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
 
     def work() -> None:
         if not entry['lock'].acquire(timeout=5):
+            entry.get('requests', {}).pop(request_id, None)
             push('error',{'message':'Another request is still using this session. Please retry shortly.'})
             push('done',None)
             return

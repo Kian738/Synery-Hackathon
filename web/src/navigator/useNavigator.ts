@@ -153,7 +153,7 @@ export function useNavigator(buildingId: string) {
         if (sessionIdRef.current) api.sessionGeometry(sessionIdRef.current).then(setGeometry);
       } else if (e.type === "profile") {
         setStepFree(e.profile.step_free);
-        if (e.profile.location) setHere(e.profile.location);
+        if (e.profile.location) {setHereState(e.profile.location);setHereSource(e.profile.location_source??"declared");}
       }
     }
   }, [showRoute]);
@@ -263,8 +263,8 @@ export function useNavigator(buildingId: string) {
   }, [sessionId, here, stepFree, apply]);
 
   useEffect(() => {
-    if (sessionId && geometry) api.profile(sessionId, {step_free:stepFree, location:here}).then(response => {apply(response.events);if(response.route_update?.error){setPreviousRoute(routeRef.current);setRoute(null);setNotice(response.route_update.error);}}).catch(e => setNotice(e.message));
-  }, [sessionId, geometry?.building.id, here, stepFree]);
+    if (sessionId && geometry) api.profile(sessionId, {step_free:stepFree, location:here, location_source:hereSource}).then(response => {apply(response.events);if(response.route_update?.error){setPreviousRoute(routeRef.current);setRoute(null);setNotice(response.route_update.error);}}).catch(e => setNotice(e.message));
+  }, [sessionId, geometry?.building.id, here, hereSource, stepFree]);
   const inspectWeakPoints = async () => {
     if (!sessionId) return; setBusy(true);
     try { const response = await api.weakPoints(sessionId); apply(response.events); }

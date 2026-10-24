@@ -159,3 +159,28 @@ def test_submission_contract_uses_every_public_id_once():
         reader=csv.DictReader(stream);assert reader.fieldnames==['question_id','answer'];rows=list(reader)
     assert len(rows)==len(expected)==145 and {r['question_id'] for r in rows}==expected
     assert all('Answer:' in r['answer'] for r in rows) and path.stat().st_size<5_000_000
+
+
+def test_exact_equipment_type_and_assumed_origin_remain_distinct():
+    from floorwise.agent.session import Session
+    from floorwise.core.model import Building
+    s=Session.for_building(Building.load(DATA/'dev'/'proc-campus-dev-000'))
+    normal={a['space_id'] for a in s.building.assets.values() if a['type']=='printer'}
+    selected=s.place('printer',near=s.default_start)
+    assert normal and selected in normal
+    s.profile.location=s.default_start;s.profile.location_source='default'
+    result=s.route('', 'Makerspace 0.08')
+    assert 'assumed_start' in result and 'equipment position' in result['destination_basis']
+    s.profile.location_source='declared'
+    assert 'assumed_start' not in s.route('', 'Makerspace 0.08')
+
+
+def test_readiness_distinguishes_safe_previews_from_navigation_coverage(monkeypatch):
+    from server import readiness
+    current={'version':1,'source':'source','dataset':'kit','frontend':'web','provider':'fixture','models':{},'effort':'low'}
+    monkeypatch.setattr(readiness,'fingerprint',lambda:current)
+    sample={'suite':'walls','correct':10,'total':10,'accuracy':1.,'fingerprint':current,
+            'navigation':{'sampled':10,'safe':8,'emitted':8,'unavailable':1,'withheld':1}}
+    assert next(r for r in readiness.readiness([sample])['requirements'] if r['id']=='walls')['status']=='limited'
+    unrelated={'suite':'browser','accuracy':1.,'fingerprint':current,'coverage':{'passed':['unrelated browser case'],'failed':[]}}
+    assert all(f['status']!='verified and visible' for f in readiness.features([unrelated]))

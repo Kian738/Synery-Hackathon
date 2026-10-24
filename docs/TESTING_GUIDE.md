@@ -34,3 +34,5 @@ Three unfamiliar people must independently find equipment, navigate between floo
 ## Known limits
 
 Plan-import diagnostics use assisted calibration from known outline bounds. Report room precision/recall, door recall and entrance-connected share separately. A largest connected component is not evidence of exit access. Human walking validation is separate from official route costs, which ignore furniture. Unavailable/withheld previews must remain visible beside the number of validated previews.
+
+Focused live diagnosis is available with repeated selectors, for example `uv run fw test live --case ambiguous_printer --case closure_impact --case availability`. This creates a separate subset run and never replaces the complete 30-case denominator.

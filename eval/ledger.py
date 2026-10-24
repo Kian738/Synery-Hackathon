@@ -91,6 +91,8 @@ class Ledger:
             "source_changed": source_changed,
             "incomplete": any(row.get('outcome') == 'incomplete' for row in self.rows),
             "outcomes": dict(Counter(row.get('outcome', 'passed' if row.get('correct') else 'failed') for row in self.rows)),
+            "coverage": {"passed": [r.get('id') for r in self.rows if r.get('correct') and r.get('outcome') not in ('withheld','unavailable','skipped')],
+                         "failed": [r.get('id') for r in self.rows if not r.get('correct')]},
             "seconds": round(time.time() - self.started, 1),
             "total": total,
             "correct": correct,
@@ -106,6 +108,12 @@ class Ledger:
             "unexplained_failures": len(unexplained),
             "unexplained_ids": [row.get("id") for row in unexplained][:50],
         }
+        if self.suite in ('walls','walkability'):
+            withheld=sum(r.get('outcome')=='withheld' for r in self.rows)
+            unavailable=sum(r.get('outcome')=='unavailable' or r.get('kind')=='no route in the building model (not walked)' for r in self.rows)
+            emitted=[r for r in self.rows if r.get('outcome') not in ('withheld','unavailable') and r.get('kind')!='no route in the building model (not walked)']
+            summary['navigation']={'sampled':total,'emitted':len(emitted),'safe':sum(bool(r.get('correct')) for r in emitted),
+                                   'unavailable':unavailable,'withheld':withheld}
         (self.directory / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
         self.completed.append(self.directory / "summary.json")
         if not quiet:

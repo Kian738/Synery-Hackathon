@@ -9,7 +9,7 @@ from floorwise.core.model import Building
 from floorwise.core.resilience import chaos_test
 from floorwise.paths import DATA
 
-TROLLEY = Constraints(step_free=True, min_width_m=1.1, outside="none")
+TROLLEY = Constraints(step_free=True, min_width_m=1.1)
 
 
 @pytest.fixture(scope="module")
@@ -38,7 +38,7 @@ def test_fix_reports_real_before_and_after_counts(campus):
 
 def test_unverified_fix_carries_no_counters(campus):
     fix = smallest_fix(campus, space_id(campus, "Main lobby"), space_id(campus, "Print room 0.16"),
-                       Constraints(step_free=True, outside="none"))
+                       Constraints(step_free=True))
     assert fix.reachable_before and fix.rooms_reachable_after is None
 
 

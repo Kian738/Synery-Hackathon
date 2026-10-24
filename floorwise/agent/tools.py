@@ -137,6 +137,7 @@ def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = F
         if location is not None:
             try:
                 profile.location = session.place(location)
+                profile.location_source = 'declared'
             except ResolveError as error:
                 raise ToolError(as_json({"error": str(error), "candidates": error.candidates[:8]})) from error
         session.emit("profile", profile=profile.__dict__)

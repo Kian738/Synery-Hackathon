@@ -57,12 +57,23 @@ def command(ledger, name, args, cwd=ROOT, env=None, record=True):
                                      observed=last.get('errors',[]),attachments=last.get('attachments',[]))
         if not child.rows:child.record(id=name,kind=name,correct=code==0,outcome='passed' if code==0 else 'failed',artifact=str(artifact.relative_to(ROOT)))
         child.finish()
+        if name=='unit' and ledger.config.get('profile')=='full':
+            for suite,tokens in [('submission',('test_submission','submission_contract')),('scenario',('test_evac','test_reason','explicit_scenario'))]:
+                derived=Ledger(suite,{'profile':'full','layer':'deterministic unit contracts; browser evidence separate'})
+                for row in child.rows:
+                    if any(token in row['id'] for token in tokens):derived.record(**row)
+                if not derived.rows:derived.record(id=suite,correct=False,outcome='incomplete',reason='No corresponding unit contracts collected')
+                derived.finish()
     return code
 
 
-def live(ledger, selected):
+def live(ledger, selected, selected_cases=None):
     from eval.conversations import cases
     catalog = [c for c in cases() if c['family'] == 'demo'] if selected == 'demo' else cases()
+    if selected_cases:
+        wanted=set(selected_cases)
+        if wanted-{c['id'] for c in catalog}:raise ValueError('Unknown case ID')
+        catalog=[c for c in catalog if c['id'] in wanted]
     node = __import__('shutil').which('node')
     if not node: raise RuntimeError('Node.js is required for the real-browser live pack')
     for batch_index in range(0, len(catalog), 10):
@@ -100,7 +111,8 @@ def live(ledger, selected):
 
 
 def main():
-    cli=argparse.ArgumentParser();cli.add_argument('profile',choices=['smoke','full','live','demo']);args=cli.parse_args()
+    cli=argparse.ArgumentParser();cli.add_argument('profile',choices=['smoke','full','live','demo']);cli.add_argument('--case',action='append',dest='selected_cases');args=cli.parse_args()
+    if args.selected_cases and args.profile not in ('live','demo'):cli.error('--case is only valid for live/demo profiles')
     ledger=Ledger('live_chat' if args.profile=='live' else args.profile,{'profile':args.profile,'transport':'real browser + SSE' if args.profile in ('live','demo') else 'offline fixtures'})
     py=sys.executable
     try:
@@ -111,7 +123,7 @@ def main():
                 # Build artifacts changed; capture the exact artifact tested below.
                 from eval.evidence import fingerprint
                 ledger.fingerprint=fingerprint()
-            live(ledger,args.profile)
+            live(ledger,args.profile,args.selected_cases)
         else:
             env=dict(os.environ,FLOORWISE_OFFLINE='1')
             unit=[py,'-m','pytest','-q','--junitxml='+str((ledger.directory/'unit.xml').resolve())]

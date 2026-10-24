@@ -11,18 +11,20 @@ export default function RunDetail() {
   const { run } = useParams<{ run: string }>();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<{ summary: RunSummary; rows: any[] } | null>(null);
+  const [error,setError]=useState('');
   const [kind, setKind] = useState("");
   const [source, setSource] = useState("");
   const [outcome, setOutcome] = useState<"" | "wrong" | "correct">(params.get("only") === "wrong" ? "wrong" : "");
   const [query, setQuery] = useState("");
   const selectedId = params.get("item");
 
-  useEffect(() => { if (run) lab.run(run).then(setData); }, [run]);
+  const reload=()=>{setError('');if(run)void lab.run(run).then(setData).catch(e=>setError(String(e)));};
+  useEffect(reload, [run]);
   const rows = useMemo(() => (data?.rows ?? []).filter((r) =>
     (!kind || r.kind === kind) && (!source || r.source === source) &&
     (!outcome || (outcome === "wrong" ? r.correct === false : r.correct === true)) &&
     (!query || JSON.stringify(r).toLowerCase().includes(query.toLowerCase()))), [data, kind, source, outcome, query]);
-  if (!data) return <PageHead title="Run" />;
+  if (!data) return <><PageHead title="Run" />{error?<div role="alert">{error}<button onClick={reload}>Retry loading</button></div>:<p role="status">Loading run evidence…</p>}</>;
   const s = data.summary;
   const selected = data.rows.find((r) => r.id === selectedId) ?? null;
   const ci = s.ci95_clustered ?? s.ci95_wilson;

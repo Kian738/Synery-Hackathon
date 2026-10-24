@@ -107,6 +107,7 @@ export interface Impact {
 }
 
 export interface Profile {
+  location_source?: "default" | "declared" | "link" | null;
   step_free: boolean;
   min_door_width_m: number | null;
   location: string | null;

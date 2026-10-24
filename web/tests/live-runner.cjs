@@ -1,5 +1,5 @@
 // Real browser, real SSE, real tools. No mocked chat responses.
-const {chromium}=require('@playwright/test');
+const {chromium,expect}=require('@playwright/test');
 const fs=require('fs');const path=require('path');
 const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
 (async()=>{
@@ -28,7 +28,8 @@ const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
         await page.getByRole('textbox',{name:'Message'}).fill(question);
         await page.getByRole('button',{name:'Send',exact:true}).click();
         await page.waitForFunction(n=>window.__fwEvents.filter(e=>e.type==='done').length>n,before,{timeout:75000});
-        await page.getByRole('button',{name:'Send',exact:true}).waitFor({state:'attached'});
+        await expect(page.getByRole('button',{name:'Stop',exact:true})).toHaveCount(0);
+        await page.getByRole('region',{name:'Conversation',exact:true}).evaluate(el=>{el.scrollTop=el.scrollHeight;});
       }
       const events=await page.evaluate(()=>window.__fwEvents),session=await page.evaluate(()=>window.__fwSession);
       const screenshot=path.join(input.artifacts,scenario.id+'.png');await page.screenshot({path:screenshot,fullPage:false});
