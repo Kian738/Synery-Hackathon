@@ -154,6 +154,6 @@ export interface ScenarioReport {
   steps: ScenarioStep[];
   abstained: { step?: string; reason?: string } | string | null;
   answer: { fixes?: ScenarioFix[] } | null;
-  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[] } | null;
+  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null } | null;
   findings: ScenarioFinding[];
 }

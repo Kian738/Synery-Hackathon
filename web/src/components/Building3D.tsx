@@ -24,10 +24,10 @@ function floorShape(space: Space) {
   return g;
 }
 
-function Floors({spaces,elevation,highlights,onPick}:{spaces:Space[];elevation:number;highlights:Set<string>;onPick?:(s:Space)=>void}) {
+function Floors({spaces,elevation,highlights,hazard,onPick}:{spaces:Space[];elevation:number;highlights:Set<string>;hazard?:string;onPick?:(s:Space)=>void}) {
   const batches = useMemo(() => {
     const groups = new Map<string,Space[]>();
-    spaces.forEach(s => {const key=highlights.has(s.id)?"highlight":zoneOf(s); groups.set(key,[...(groups.get(key)??[]),s]);});
+    spaces.forEach(s => {const key=s.id===hazard?"hazard":highlights.has(s.id)?"highlight":zoneOf(s); groups.set(key,[...(groups.get(key)??[]),s]);});
     return [...groups].map(([zone,rooms]) => {
       let triangles=0;
       const ranges:{end:number;space:Space}[]=[];
@@ -35,12 +35,12 @@ function Floors({spaces,elevation,highlights,onPick}:{spaces:Space[];elevation:n
       const geometry=mergeGeometries(pieces); pieces.forEach(p=>p.dispose());
       return {zone,geometry,ranges};
     });
-  },[spaces,highlights]);
+  },[spaces,highlights,hazard]);
   useEffect(()=>()=>batches.forEach(b=>b.geometry?.dispose()),[batches]);
   return <group position={[0,elevation,0]}>{batches.map((b,index)=>b.geometry&&<mesh key={b.zone} geometry={b.geometry}
     onAfterRender={renderer=>{renderer.domElement.dataset.scenePainted="true";}}
     onClick={(e:ThreeEvent<MouseEvent>)=>{e.stopPropagation();if(e.delta>5)return;const room=b.ranges.find(r=>(e.faceIndex??0)<r.end);if(room)onPick?.(room.space);}}>
-    <meshStandardMaterial color={b.zone==="highlight"?"#ffd45c":COLORS[b.zone]??COLORS.office} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-index-1}/>
+    <meshStandardMaterial color={b.zone==="hazard"?"#e5484d":b.zone==="highlight"?"#ffd45c":COLORS[b.zone]??COLORS.office} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-index-1}/>
   </mesh>)}</group>;
 }
 
@@ -91,13 +91,13 @@ function UpperContext({geometry,above}:{geometry:Geometry;above:number}) {
   return <>{surfaces.map(({floor,mesh})=><group key={floor.id}><mesh geometry={mesh}><meshStandardMaterial color="#b2bcb9" roughness={1} side={THREE.DoubleSide}/></mesh><Walls geometry={geometry} floorId={floor.id} elevation={floor.elevation_m} follow/></group>)}</>;
 }
 
-const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,connectorSpaces,labelFloor,activeOpening}:{geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
+const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,hazard,onSpaceClick,follow,ceiling,span,connectorSpaces,labelFloor,activeOpening}:{geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;hazard?:string;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
   const spaces=useMemo(()=>geometry.spaces.filter(s=>s.floor_id===floorId),[geometry,floorId]);
   const assets=useMemo(()=>geometry.assets.filter(a=>a.floor_id===floorId),[geometry,floorId]);
   const height=geometry.floors.find(f=>f.id===floorId)?.height_m??3;
   const roomHighlights=highlights;
   return <group>
-        <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} onPick={onSpaceClick}/>
+        <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} hazard={hazard} onPick={onSpaceClick}/>
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening}/>
 
@@ -166,8 +166,8 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
   });return null;
 }
 
-export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset}: {
- geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;closed?:Set<string>;previewDoor?:Opening|null;
+export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset}: {
+ geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;hazard?:string;closed?:Set<string>;previewDoor?:Opening|null;
  lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
   const stageRef=useRef<HTMLDivElement>(null);
@@ -226,7 +226,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       <ambientLight intensity={follow?1.3:.65}/><hemisphereLight args={["#edf5ff","#59645c",follow?1.5:1.1]}/>
       <directionalLight position={[cx+30,80,cz+40]} intensity={1.7}/><directionalLight position={[cx-30,20,cz-25]} intensity={.6} color="#c6dfef"/>
       {follow&&<UpperContext geometry={geometry} above={elevation(activeFloor)}/>}
-      {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening}/>)}
+      {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} hazard={hazard} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening}/>)}
       {geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{
         const anchor=s.anchor??s.polygon[0];return <group key={`focus-${s.id}`}>
           <Line points={[...s.polygon,s.polygon[0]].map(p=>frame(p[0],p[1],elevation(s.floor_id)+.12))} color="#74c9ef" lineWidth={3} depthTest={false} depthWrite={false} renderOrder={109}/>

@@ -30,7 +30,7 @@ def _result(trace: Trace, op: str):
     return next((r.value for r in trace.results if r.op == op and r.ok), None)
 
 
-def assess(trace: Trace, audience: str = "safety_officer") -> list[Finding]:
+def assess(trace: Trace, audience: str = "safety_officer", building=None) -> list[Finding]:
     """Findings from an evacuation-style trace, most serious first. An abstained trace yields one blocker that names the
     step that stopped and why; a plan that never reached the solver has nothing else to report."""
     if audience not in AUDIENCES:
@@ -42,7 +42,7 @@ def assess(trace: Trace, audience: str = "safety_officer") -> list[Finding]:
     evacuation = _result(trace, "evacuate")
     if evacuation is not None:
         found += _people(evacuation, audience)
-        found += _doors(trace, evacuation, audience)
+        found += _doors(trace, evacuation, audience, building)
     plan = _result(trace, "responder_route")
     if plan is not None:
         found += _responders(plan, audience)
@@ -76,20 +76,43 @@ def _people(evacuation, audience: str) -> list[Finding]:
     return found
 
 
-def _doors(trace: Trace, evacuation, audience: str) -> list[Finding]:
+def _name(building, ident: str) -> str:
+    """People read names, never ids: a door is the two places it joins, a space is its label."""
+    if building is None:
+        return ident
+    if ident in building.openings:
+        from floorwise.core.resilience import _display_name
+        return _display_name(building, building.openings[ident])
+    return building.label(ident) if ident in building.spaces else ident
+
+
+def _capacity_math(building, evacuation, door: str) -> str:
+    """The number behind the headline: rate = specific flow x (width - 2 x boundary layer), SFPE handbook form."""
+    if building is None or door not in building.openings:
+        return ""
+    width = building.openings[door].get("width_m")
+    params = evacuation.params
+    if not width:
+        return ""
+    effective = max(0.0, width - 2 * params.boundary_m)
+    return f" Tightest door: {width} m wide, {params.specific_flow} x ({width} - {2 * params.boundary_m:.2f}) = {params.specific_flow * effective:.2f} people per second."
+
+
+def _doors(trace: Trace, evacuation, audience: str, building=None) -> list[Finding]:
     found = []
     if evacuation.bottleneck:
         found.append(Finding("risk", f"{len(evacuation.bottleneck)} doors limit the evacuation",
-                             "The minimum cut: " + ", ".join(evacuation.bottleneck[:5]) + (" and more" if len(evacuation.bottleneck) > 5 else ""),
+                             "The minimum cut: " + ", ".join(_name(building, d) for d in evacuation.bottleneck[:3]) + (" and more" if len(evacuation.bottleneck) > 3 else "")
+                             + "." + _capacity_math(building, evacuation, evacuation.bottleneck[0]),
                              ("bn",), "computed"))
     plan = _result(trace, "best_door")
     for fix in getattr(plan, "fixes", ()):
-        verb = "Add a door" if fix.kind == "add" else f"Widen {fix.element} from {fix.previous_width_m} m"
-        where = " and ".join(fix.between)
+        verb = "Add a door" if fix.kind == "add" else f"Widen {_name(building, fix.element)} from {fix.previous_width_m} m"
+        where = " and ".join(_name(building, x) for x in fix.between)
         detail = f"{verb} between {where} to {fix.width_m} m: evacuation {fix.T_before_s} s -> {fix.T_after_s} s"
         if audience == "occupant":
             detail = f"A door between {where} would get everyone out about {fix.T_before_s - fix.T_after_s} s sooner."
-        found.append(Finding("improve", f"Proposed: {fix.kind} {fix.element}", detail, ("best",), "computed",
+        found.append(Finding("improve", f"Proposed: {fix.kind} {_name(building, fix.element)}", detail, ("best",), "computed",
                              suggestion=detail if fix.verified else None))
     return found
 

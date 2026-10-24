@@ -48,6 +48,13 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
     } catch (e) { setError(e instanceof Error ? e.message : "Scenario failed"); }
     setBusy(false);
   };
+  // One-click first result: start the fire in the room with the most seats (the same occupant estimate the solver uses).
+  const busiest = useMemo(() => {
+    const seats = new Map<string, number>();
+    geometry.assets.forEach(x => { if (["chair", "office_chair", "bench"].includes(x.type)) seats.set(x.space_id, (seats.get(x.space_id) ?? 0) + 1); });
+    const top = [...seats].sort((p, q) => q[1] - p[1] || p[0].localeCompare(q[0]))[0];
+    return top ? geometry.spaces.find(x => x.id === top[0]) : undefined;
+  }, [geometry.assets, geometry.spaces]);
   const findings = report ? [...report.findings].sort((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity)).slice(0, more ? 99 : 3) : [];
   const fix = report?.answer?.fixes?.[0];
   const suggested = fix && report?.findings.some(f => f.suggestion);
@@ -56,6 +63,7 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   return <section className="stress-drawer scenario-panel" aria-label="Fire / evacuation scenario">
     <header><div><span>Scenario</span><h2>Fire / evacuation</h2></div><button aria-label="Close scenario" onClick={onClose}>Close</button></header>
     <p>{hazard ? <>Hazard room: <b>🔥 {hazard.name}</b></> : "Click a room on the plan or 3D view, or search below, to set where the fire starts."}</p>
+    {!hazard && busiest && <button className="stress-rerun" disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }}>Quick fire test: {busiest.name} (most seats)</button>}
     <input aria-label="Search rooms" placeholder="Search rooms" value={query} onChange={e => setQuery(e.target.value)} />
     {matches.map(s => <button key={s.id} className="stress-result" onClick={() => { setHazard(s); setReport(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); }}>{s.name}</button>)}
     <div role="radiogroup" aria-label="Who is this for" className="scenario-audience">
@@ -66,6 +74,7 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
     <div aria-live="polite">{busy && <p>Checking the evacuation…</p>}</div>
     {report && <>
       <h3 className="scenario-headline" role="status">{headline(report)}</h3>
+      {report.evacuation?.nearest_exit && report.evacuation.nearest_exit.T_s > report.evacuation.T_s && <p className="scenario-baseline">Everyone using their nearest exit instead: {report.evacuation.nearest_exit.T_s} s ({report.evacuation.nearest_exit.T_s - report.evacuation.T_s} s slower). Exits are planned together here.</p>}
       {report.abstained ? <p>⛔ {abstain ? `${abstain.id}: ` : ""}{reason ?? "A step could not be completed."}</p> : <>
         <details><summary>{report.steps.length} steps checked</summary>
           <ol>{report.steps.map(s => <li key={s.id}>{s.ok ? "✓" : "⛔"} {s.summary}</li>)}</ol></details>

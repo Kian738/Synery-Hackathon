@@ -92,3 +92,10 @@ def test_people_in_the_hazard_room_get_a_stated_window_to_leave_and_zero_means_n
     assert none["stranded"] and not default["stranded"]
     assert default["evacuated"] == default["total"] == none["total"]
     assert none["evacuated"] + sum(none["stranded"].values()) == none["total"]
+
+
+def test_findings_name_doors_by_place_and_show_the_capacity_arithmetic(client, session, fire_room):
+    findings = run(client, session, fire_room).json()["findings"]
+    risk = next(f for f in findings if f["severity"] == "risk")
+    assert BUILDING not in risk["detail"] and "people per second" in risk["detail"]
+    assert all(BUILDING not in f["title"] for f in findings)
