@@ -157,3 +157,5 @@ export interface ScenarioReport {
   evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null } | null;
   findings: ScenarioFinding[];
 }
+
+export interface RobustReport { before: { lost_exit: string | null; evacuated: number; T_s: number }[]; after: { lost_exit: string | null; evacuated: number; T_s: number }[]; verified: boolean; fixes: { element: string; name: string; width_m: number }[] }

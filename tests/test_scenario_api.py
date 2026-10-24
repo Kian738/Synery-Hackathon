@@ -99,3 +99,11 @@ def test_findings_name_doors_by_place_and_show_the_capacity_arithmetic(client, s
     risk = next(f for f in findings if f["severity"] == "risk")
     assert BUILDING not in risk["detail"] and "people per second" in risk["detail"]
     assert all(BUILDING not in f["title"] for f in findings)
+
+
+def test_n_minus_one_check_is_asked_for_and_never_makes_the_worst_case_worse(client, session, fire_room):
+    spec = {"hazards": [{"spaces": [fire_room]}]}
+    body = client.post(f"/api/sessions/{session}/scenario/robust", json={"params": {"spec": spec}}).json()
+    worst = lambda rows: max((-r["evacuated"], r["T_s"]) for r in rows)
+    assert body["verified"] and len(body["before"]) >= 3 and worst(body["after"]) <= worst(body["before"])
+    assert all(BUILDING not in (r["lost_exit"] or "") for r in body["before"])
