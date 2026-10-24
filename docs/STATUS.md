@@ -114,3 +114,7 @@ The eval ledger now creates unique run directories and gates identify their own 
 - Visual audit evidence: `runs/ux-overhaul/`; complete issue mapping and human acceptance script: `docs/UX_AUDIT.md`.
 
 The updated deterministic fallback recording passed its opt-in capture test and is saved at `runs/demo/fallback.webm`, including a real zero-model chair-ranking turn after the scripted route/closure/fix transport. It is not a live voice recording.
+
+## CIT walking regression and straight corridors (2026-10-24)
+
+Fixed grid-region connectivity to match the pathfinder's no-corner-cutting rule. The reported CIT route 03.05.061 → 00.05.058 now produces validated walking geometry. Empty, convex, elongated corridors use a verified central straight run with door approaches instead of raster-induced slalom. Source graph/benchmark distances and obstacle collision checks are unchanged. Verified by targeted regressions and `fw check`; subsequent UI redesign is in progress.
