@@ -24,6 +24,16 @@ class FixProposal:
     reason: str
     widen: tuple[Widening, ...] = ()
     verified: bool = False
+    # Rooms reachable from the start on foot (no teleporting between entrances), before and after the fix.
+    rooms_reachable_before: int | None = None
+    rooms_reachable_after: int | None = None
+    of_rooms: int | None = None
+
+
+def _rooms_reachable_from(building: Building, start: str, target: str, constraints: Constraints) -> int:
+    people = replace(constraints, outside="none")
+    reached = RouteGraph(building, people, keep=frozenset({start, target})).reachable(start)
+    return sum(building.spaces[s]["type"] == "room" for s in reached if s in building.spaces)
 
 
 def smallest_fix(building: Building, start: str, target: str, constraints: Constraints) -> FixProposal:
@@ -60,4 +70,11 @@ def smallest_fix(building: Building, start: str, target: str, constraints: Const
         return FixProposal(False, "The proposed repair did not verify.")
     widen = tuple(Widening(o, tuple(building.label(s) for s in building.openings[o]['space_ids']),
                            float(building.openings[o]['width_m']), width) for o in ids)
-    return FixProposal(False, "These door widenings restore connectivity under the requested constraints. Physical work is required.", widen, True)
+    widened = replace(constraints, extra_openings=constraints.extra_openings + copies)
+    return FixProposal(
+        False, "These door widenings restore connectivity under the requested constraints. Physical work is required.",
+        widen, True,
+        rooms_reachable_before=_rooms_reachable_from(building, start, target, constraints),
+        rooms_reachable_after=_rooms_reachable_from(building, start, target, widened),
+        of_rooms=sum(space["type"] == "room" for space in building.spaces.values()),
+    )

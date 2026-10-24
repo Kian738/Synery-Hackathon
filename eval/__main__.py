@@ -1,11 +1,11 @@
-"""uv run python -m eval <suite> [suite args]   suites: routes solver parser e2e e2e_basic robust metamorphic build interaction report
+"""uv run python -m eval <suite> [suite args]   suites: atlas routes solver parser e2e e2e_basic robust metamorphic build interaction report
 uv run python -m eval gates                      every offline gate in order (free, no API key needed)"""
 
 import importlib
 import os
 import sys
 
-SUITES = ["routes", "solver", "parser", "e2e", "e2e_basic", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "rehearse", "report"]
+SUITES = ["atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "rehearse", "report"]
 GATES = [
     ["routes", "--split", "train,dev"],
     ["solver", "--split", "train,dev"],
