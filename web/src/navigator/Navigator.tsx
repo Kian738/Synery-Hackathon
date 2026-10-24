@@ -22,8 +22,12 @@ export default function Navigator() {
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
   const [stepMode, setStepMode] = useState(false);
-  const [view, setView] = useState<"2d" | "3d" | "follow">(params.get("view") === "2d" ? "2d" : "3d");
-  const [allFloors, setAllFloors] = useState(false);
+  const [view, setView] = useState<"2d" | "3d" | "guide" | "follow">(params.get("view") === "2d" ? "2d" : "3d");
+  const [scope, setScope] = useState<"current"|"route"|"building">("current");
+  const [exploded,setExploded]=useState(true);
+  const [planExpanded,setPlanExpanded]=useState(false);
+  const [seekRequest,setSeekRequest]=useState(0);
+  const following=view==="follow"||view==="guide";
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [buildingImport, setBuildingImport] = useState(false);
@@ -75,7 +79,7 @@ export default function Navigator() {
     const out: Pin[] = [];
     const at = (id: string) => g.spaces.find((s) => s.id === id);
     const here = nav.here ? at(nav.here) : null;
-    if (here && !nav.route) out.push({ id: "here", at: centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start" });
+    if (here) out.push({ id: "here", at: centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start" });
     if (nav.route?.polyline.length) {
       const first = nav.route.polyline[0], last = nav.route.polyline[nav.route.polyline.length - 1];
       out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Start", tone: "start" });
@@ -89,6 +93,7 @@ export default function Navigator() {
 
   const focusStep = (i: number) => {
     nav.setActiveStep(i);
+    setSeekRequest(v=>v+1);
     const s = steps[i];
     if (s?.floor_id) nav.setFloorId(s.floor_id);
   };
@@ -121,14 +126,14 @@ export default function Navigator() {
             <span className="shrink-0 text-sm text-ink-4 underline underline-offset-4">change</span>
           </button>
           {picking && (
-            <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); setPicking(false); nav.setNotice(null); }} />
+            <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
           )}
         </div>
 
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
           {nav.route && (
             <RouteSign route={nav.route} meta={nav.routeMeta} stepFree={nav.route.constraints.includes("step-free")}
-              active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => { setView("follow"); nav.setActiveStep(0); }} floors={g.floors} />
+              active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => { setView("guide"); nav.setActiveStep(0); setSelected(null); }} floors={g.floors} />
           )}
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
@@ -153,10 +158,10 @@ export default function Navigator() {
           <div className="mode-switch" aria-label="View mode">
             <button aria-pressed={view === "3d"} onClick={() => setView("3d")}>3D</button>
             <button aria-pressed={view === "2d"} onClick={() => setView("2d")}>Floor plan</button>
-            <button disabled={!nav.route || nav.route.preview_available === false} aria-pressed={view === "follow"} onClick={() => setView("follow")}>Follow route</button>
+            <button disabled={!nav.route || nav.route.preview_available === false} aria-pressed={following} onClick={() => {setView("guide");setSelected(null);}}>Guide me</button>
           </div>
           <div className="model-actions">
-            {view === "3d" && <button aria-pressed={allFloors} onClick={() => setAllFloors(!allFloors)}>All floors</button>}
+            {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
             <button disabled={nav.busy} onClick={nav.inspectWeakPoints}>Test weak points</button>
             <Link to="/lab">Evidence</Link>
           </div>
@@ -168,22 +173,26 @@ export default function Navigator() {
               pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={setSelected} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
                 <Building3D geometry={g} floorId={nav.floorId} route={nav.route} previousRoute={nav.previousRoute} highlights={nav.highlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={allFloors} follow={view === "follow"} activeStep={nav.activeStep}
-                  onStep={focusStep} onSpaceClick={setSelected} />
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} onFinish={()=>setView("3d")} onPreview={()=>{stopSpeaking();setView("follow");}}
+                  onStep={i=>{nav.setActiveStep(i);const f=steps[i]?.floor_id;if(f)nav.setFloorId(f);}} onSpaceClick={setSelected} />
               </Suspense>}
           </ErrorBoundary>
         </div>
+        {view!=="2d"&&<section className={`linked-plan ${planExpanded?"expanded":""}`} aria-label="Linked floor plan">
+          <header><span>{g.floors.find(f=>f.id===nav.floorId)?.name}</span><button aria-expanded={planExpanded} onClick={()=>setPlanExpanded(!planExpanded)}>{planExpanded?"Shrink plan":"Expand plan"}</button></header>
+          <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed} pins={pins} selected={selected?.id} focus={focusPoint} onSpaceClick={setSelected} compact/>
+        </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span><button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
-        {view === "follow" && nav.route && <div className="follow-instruction"><span>Waypoint {nav.activeStep + 1} / {steps.length}</span><p>{steps[nav.activeStep]?.text}</p></div>}
-        {nav.weakPoints.length > 0 && view !== "follow" && <section className="weak-points" aria-label="Weak points">
+        {following && nav.route && <div className="follow-instruction"><span>Decision {nav.activeStep + 1} / {steps.length}</span><p>{steps[nav.activeStep]?.text}</p></div>}
+        {nav.weakPoints.length > 0 && !following && <section className="weak-points" aria-label="Weak points">
           <h2>Single closure simulation</h2>
           {nav.weakPoints.map((item, i) => <button key={i} onClick={() => {nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}>
             <b>{item.name}</b><span>{item.rooms_lost} of {item.of_rooms} rooms would lose step-free exit access</span>
           </button>)}
         </section>}
-        {selected && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
-          onHere={() => { nav.setHere(selected.id); setSelected(null); nav.setNotice(null); }}
+        {selected && !following && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
+          onHere={() => { nav.setHere(selected.id); nav.setFloorId(selected.floor_id); setSelected(null); nav.setNotice(`Location set: ${selected.name}. Your green marker is set manually.`); }}
           onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} />}
         {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking();}} />}
       </main>
@@ -288,13 +297,14 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
           <p className="mt-1.5 text-sm text-ink-4">Nearest match. Also: {meta.alternatives.map((a) => `${a.room} (${a.walk_m} m)`).join(", ")}</p>
         ) : null}
       </div>
-      <ol className="divide-y divide-ink-2">
+      <div className="current-decision"><span>Decision {active+1} of {steps.length}</span><p>{steps[active]?.text}</p></div>
+      <details className="route-itinerary"><summary>All {steps.length} instructions</summary><ol className="divide-y divide-ink-2">
         {steps.map((s, i) => (
           <StepRow key={i} step={s} index={i} active={i === active} onClick={() => onStep(i)} floorName={floors.find((f) => f.id === s.floor_id)?.name} />
         ))}
-      </ol>
+      </ol></details>
       <div className="flex gap-2 px-4 py-3">
-        <button disabled={route.preview_available === false} onClick={onStepMode} className="flex-1 bg-mark py-2.5 font-sign text-[17px] font-bold text-ink hover:brightness-95">{route.preview_available === false ? "Preview unavailable: check geometry" : "Start step by step"}</button>
+        <button disabled={route.preview_available === false} onClick={onStepMode} className="flex-1 bg-mark py-2.5 font-sign text-[17px] font-bold text-ink hover:brightness-95">{route.preview_available === false ? "Preview unavailable: check geometry" : "Guide me step by step"}</button>
       </div>
     </section>
   );

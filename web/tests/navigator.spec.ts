@@ -45,6 +45,7 @@ test("deep link draws a multi-floor route with followable steps", async ({ page 
   await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
   const route = page.getByRole("region", { name: "Route" });
   await expect(route).toContainText("Meeting room 1.10");
+  await route.getByText(/All \d+ instructions/).click();
   await expect(route.getByRole("listitem")).not.toHaveCount(0);
   await expect(route).toContainText(/floor change/);
   await expect(route).toContainText(/m walk/);
@@ -52,15 +53,15 @@ test("deep link draws a multi-floor route with followable steps", async ({ page 
 
 test("follow-route mode advances through eye-level waypoints", async ({ page }) => {
   await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
-  await page.getByRole("button", { name: "Start step by step" }).click();
-  await expect(page.getByText(/Route preview.*position is manually set/)).toBeVisible();
-  await expect(page.getByText(/Waypoint 1 \/ /)).toBeVisible();
+  await page.getByRole("button", { name: "Guide me step by step" }).click();
+  await expect(page.getByText(/Guide me - location set manually/)).toBeVisible();
+  await expect(page.getByText(/Decision 1 \/ /)).toBeVisible();
   const canvas=page.locator("canvas");
   await expect(canvas).toHaveAttribute("data-camera-position", /\[/);
   const before=await canvas.getAttribute("data-camera-position");
-  await page.getByRole("button", {name:"Next waypoint"}).click();
+  await page.getByRole("button", {name:"Next instruction"}).click();
   await expect(canvas).not.toHaveAttribute("data-camera-position", before!);
-  await expect(page.getByText(/Waypoint 2 \/ /)).toBeVisible();
+  await expect(page.getByText(/Decision 2 \/ /)).toBeVisible();
 });
 
 test("step-free toggle is announced as pressed", async ({ page }) => {
@@ -74,7 +75,23 @@ test("3D view can be switched on", async ({ page }) => {
   await page.goto(FACTORY);
   await page.getByRole("button", { name: "3D" }).click();
   await expect(page.getByRole("button", { name: "3D" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: "All floors" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Visible floors" })).toBeVisible();
+});
+
+test("preview has a seekable player, speed, arrival and replay", async ({page})=>{
+  await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
+  await page.getByRole("button",{name:"Guide me step by step"}).click();
+  await page.getByRole("button",{name:"Preview route",exact:true}).click();
+  const progress=page.getByRole("slider",{name:"Preview progress"});
+  await expect(progress).toBeVisible();
+  await page.getByRole("combobox",{name:"Playback speed"}).selectOption("2");
+  await progress.focus();
+  await progress.press("End");
+  await expect(page.getByText("Destination reached in preview")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Continue at landing"})).toHaveCount(0);
+  await page.getByRole("button",{name:"Replay preview"}).click();
+  await expect(page.getByRole("button",{name:"Pause preview"})).toBeVisible();
+  await expect(page.getByRole("combobox",{name:"Playback speed"})).toHaveValue("2");
 });
 
 test("floor-plan fallback remains available", async ({ page }) => {
@@ -182,7 +199,7 @@ test("microphone denial is recoverable and does not submit speech", async ({page
 test("reduced motion uses static waypoint guidance", async ({page}) => {
   await page.emulateMedia({reducedMotion:"reduce"});
   await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
-  await page.getByRole("button",{name:"Start step by step"}).click();
-  await expect(page.getByRole("button",{name:"Next waypoint"})).toBeVisible();
+  await page.getByRole("button",{name:"Guide me step by step"}).click();
+  await expect(page.getByRole("button",{name:"Next instruction"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Play preview"})).toHaveCount(0);
 });

@@ -1,8 +1,9 @@
 import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { advancePreview, presentation, samplePreview, type Presentation } from "../lib/playback";
 import { bounds, zoneOf } from "../lib/geometry";
 import type { Asset, Geometry, Opening, Route, Space } from "../lib/types";
 
@@ -84,14 +85,15 @@ function FurnitureBatch({assets,elevation,highlighted}:{assets:Asset[];elevation
     <meshStandardMaterial roughness={0.75} metalness={0.15}/></instancedMesh></group>;
 }
 
-function Path({route,geometry,explode=0,ghost=false,xray=true}:{route:Route;geometry:Geometry;explode?:number;ghost?:boolean;xray?:boolean}){
+function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors}:{route:Route;geometry:Geometry;explode?:number;ghost?:boolean;xray?:boolean;visibleFloors:Set<string>}){
   const runs=useMemo(()=>{
     const out:THREE.Vector3[][]=[];let run:THREE.Vector3[]=[];let previousFloor="";
     for(const p of route.polyline){
+      if(!visibleFloors.has(p.floor_id)){if(run.length>1)out.push(run);run=[];previousFloor="";continue;}
       if(run.length&&(p.gap||p.floor_id!==previousFloor)){if(run.length>1)out.push(run);run=[];}
       previousFloor=p.floor_id;const f=geometry.floors.find(f=>f.id===p.floor_id);run.push(frame(p.x,p.y,(f?.elevation_m??0)+(f?.level??0)*explode+0.09));
     }if(run.length>1)out.push(run);return out;
-  },[route,geometry,explode]);
+  },[route,geometry,explode,visibleFloors]);
   return <>{runs.map((r,i)=><group key={i}>
     <Line points={r} color={ghost?"#91a6b1":"#10171c"} lineWidth={ghost?3:10} depthTest={!xray} depthWrite={false} renderOrder={100} transparent opacity={ghost?0.35:1}/>
     {!ghost&&<Line points={r} color="#ffd45c" lineWidth={5} depthTest={!xray} depthWrite={false} renderOrder={101} transparent opacity={1}/>} 
@@ -129,86 +131,87 @@ function CameraActions({action}:{action:{id:number;kind:string}}){
   },[action,camera,controls,invalidate]);return null;
 }
 
-function RouteCamera({geometry,route,playing,setPlaying,activeStep,onStep,jump,onTransition}:{geometry:Geometry;route:Route;playing:boolean;setPlaying:(v:boolean)=>void;activeStep:number;onStep?:(i:number)=>void;jump:number;onTransition:(s:string)=>void}){
-  const {camera,invalidate,gl}=useThree();const cursor=useRef(0);const distance=useRef(0);const previousJump=useRef(jump);
-  const points=useMemo(()=>route.polyline.map(p=>({...p,v:frame(p.x,p.y,(geometry.floors.find(f=>f.id===p.floor_id)?.elevation_m??0)+1.65)})),[route,geometry]);
-  const steps=useMemo(()=>route.guide.steps.map(s=>{
-    let best=0, score=Infinity;points.forEach((p,i)=>{if(s.point&&p.floor_id===s.floor_id){const d=Math.hypot(p.x-s.point[0],p.y-s.point[1]);if(d<score){score=d;best=i;}}});return best;
-  }),[points,route]);
-  useEffect(()=>{cursor.current=steps[activeStep]??0;distance.current=0;invalidate();},[activeStep,steps,invalidate]);
-  useEffect(()=>{if(previousJump.current!==jump){cursor.current=Math.min(cursor.current+1,points.length-1);distance.current=0;previousJump.current=jump;const step=route.guide.steps.findIndex(s=>s.floor_id===points[cursor.current]?.floor_id);if(step>=0)onStep?.(step);invalidate();}},[jump,points,invalidate]);
+function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void}){
+  const {camera,invalidate,gl}=useThree();const lastReport=useRef(-1);const first=useRef(true);
+  useEffect(()=>{first.current=true;invalidate();},[seekVersion,model,invalidate]);
   useFrame((_,dt)=>{
-    const i=cursor.current,a=points[i],b=points[i+1];if(!a)return;
-    let position=a.v.clone();
-    const heading = i>0 ? a.v.clone().sub(points[i-1].v) : new THREE.Vector3(0,0,-1);
-    if(b){
-      const gap=b.gap||a.floor_id!==b.floor_id;
-      if(gap){if(playing){setPlaying(false);onTransition(`Continue via the mapped stairs or lift to ${geometry.floors.find(f=>f.id===b.floor_id)?.name??"the next section"}. Connector interior is schematic.`);}}
-      else {
-        const length=a.v.distanceTo(b.v);
-        if(playing)distance.current+=Math.min(dt,0.1)*1.6;
-        const t=length?Math.min(distance.current/length,1):1;position.lerp(b.v,t);
-        if(t>=1&&playing){cursor.current++;distance.current=0;const step=steps.indexOf(cursor.current);if(step>0)onStep?.(step);}
-        const forward=b.v.clone().sub(a.v);if(forward.length()>0.01)heading.copy(forward);
-      }
-    } else if(playing){setPlaying(false);onTransition("You have reached the destination in this preview.");}
-    let lookIndex=i+1,remaining=2.5;
-    while(lookIndex<points.length && !points[lookIndex].gap && points[lookIndex].floor_id===a.floor_id){
-      const segment=points[lookIndex].v.distanceTo(points[lookIndex-1].v);
-      remaining-=segment;
-      heading.copy(points[lookIndex].v).sub(position);
-      if(remaining<=0)break;
-      lookIndex++;
+    if(playing)clock.current=advancePreview(clock.current,dt,speed,model.duration);
+    const sample=samplePreview(model,clock.current),p=sample.point;if(!p)return;
+    const height=geometry.floors.find(f=>f.id===p.floor_id)?.elevation_m??0;
+    camera.position.copy(frame(p.x,p.y,height+1.65));
+    const direction=new THREE.Vector3(sample.heading[0],0,-sample.heading[1]);
+    if(direction.lengthSq()>.00001){
+      const matrix=new THREE.Matrix4().lookAt(camera.position,camera.position.clone().add(direction),new THREE.Vector3(0,1,0));
+      const target=new THREE.Quaternion().setFromRotationMatrix(matrix);
+      if(first.current)camera.quaternion.copy(target);else camera.quaternion.rotateTowards(target,Math.PI*dt);
+      first.current=false;
     }
-    heading.y=0;if(heading.length()<0.01)heading.set(0,0,-1);
-    camera.position.copy(position);camera.up.set(0,1,0);camera.lookAt(position.clone().add(heading.normalize().multiplyScalar(3)));camera.updateProjectionMatrix();gl.domElement.dataset.cameraPosition=JSON.stringify(position.toArray());gl.domElement.dataset.cameraFloor=a.floor_id;if(playing)invalidate();
-  });
-  return null;
+    camera.updateProjectionMatrix();gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;
+    if(Math.abs(clock.current-lastReport.current)>.08 || sample.arrived || !playing){lastReport.current=clock.current;onSample(clock.current);}
+    if(playing)invalidate();
+  });return null;
 }
 
-export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),closed=new Set(),previewDoor,showAll,follow=false,activeStep=0,onStep,onSpaceClick}: {
+export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected}: {
  geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;closed?:Set<string>;previewDoor?:Opening|null;
- showAll:boolean;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
+ showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
   const [action,setAction]=useState({id:0,kind:""});
-  const [playing,setPlaying]=useState(false),[transition,setTransition]=useState(""),[jump,setJump]=useState(0);
+  const [playing,setPlaying]=useState(false),[time,setTime]=useState(0),[speed,setSpeed]=useState(1),[seekVersion,setSeekVersion]=useState(0);
+  const clock=useRef(0), model=useMemo(()=>route?presentation(route):null,[route]);
+  const sample=model?samplePreview(model,time):null;
+  const seek=(value:number)=>{value=Math.max(0,Math.min(value,model?.duration??0));clock.current=value;setTime(value);setSeekVersion(v=>v+1);};
+  useEffect(()=>{seek(0);setPlaying(false);},[route,follow]);
+  useEffect(()=>{if(model)seek(model.chapters[activeStep]??0);},[seekRequest]);
+  useEffect(()=>{const hidden=()=>{if(document.hidden)setPlaying(false);};document.addEventListener("visibilitychange",hidden);return()=>document.removeEventListener("visibilitychange",hidden);},[]);
+  useEffect(()=>{if(!follow||!previewMode)return;const key=(e:KeyboardEvent)=>{if(/INPUT|SELECT|TEXTAREA|BUTTON/.test((e.target as HTMLElement)?.tagName))return;if(e.code==="Space"){e.preventDefault();setPlaying(v=>!v);}if(e.code==="ArrowRight"||e.code==="ArrowLeft"){e.preventDefault();seek(Math.max(0,Math.min(model?.duration??0,clock.current+(e.code==="ArrowRight"?5:-5))));}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);},[follow,previewMode,model]);
+  const report=(value:number)=>{setTime(old=>Math.abs(old-value)>.001?value:old);if(!model)return;const s=samplePreview(model,value);if(s.step!==activeStep)onStep?.(s.step);if(s.arrived)setPlaying(false);};
   const reduced=typeof matchMedia!=="undefined"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
   const box=useMemo(()=>bounds(geometry.spaces.flatMap(s=>s.polygon)),[geometry]);
   const cx=(box.minX+box.maxX)/2,cz=-(box.minY+box.maxY)/2,span=Math.max(box.maxX-box.minX,box.maxY-box.minY,10);
-  const explode=showAll&&!follow?2:0;
+  const multi=(showAll||scope==="building"||(scope==="route"&&!!route))&&!follow;
+  const explode=multi&&exploded?2:0;
   const elevation=(id:string)=>{const f=geometry.floors.find(f=>f.id===id);return (f?.elevation_m??0)+(f?.level??0)*explode;};
-  const floors=showAll&&!follow?geometry.floors:geometry.floors.filter(f=>f.id===(follow&&route?route.guide.steps[activeStep]?.floor_id??floorId:floorId));
-  useEffect(()=>{setPlaying(false);setTransition("");},[route,follow]);
-  return <div className="building-stage" data-testid="building-scene" data-scene-revision={geometry.scene?.revision}>
+  const activeFloor=follow?(sample?.point?.floor_id??floorId):floorId;
+  const floors=geometry.floors.filter(f=>multi?(scope==="route"?route?.floors.includes(f.id):true):f.id===activeFloor);
+  const visibleFloors=useMemo(()=>new Set(floors.map(f=>f.id)),[floors.map(f=>f.id).join()]);
+  const roomHighlights=useMemo(()=>new Set([...highlights,...(selected?[selected]:[])]),[highlights,selected]);
+  return <div className="building-stage" data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-visible-floors={[...visibleFloors].join(",")} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing?"always":"demand"} dpr={[1,1.5]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?65:40,near:.05,far:span*25}} gl={{antialias:true}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
       <ambientLight intensity={0.8}/><hemisphereLight args={["#deefff","#24353a",1.5]}/>
       <directionalLight position={[cx+30,80,cz+40]} intensity={2.4}/>
       {floors.map(f=>{const spaces=geometry.spaces.filter(s=>s.floor_id===f.id),assets=geometry.assets.filter(a=>a.floor_id===f.id);return <group key={f.id}>
-        <Floors spaces={spaces} elevation={elevation(f.id)} highlights={highlights} onPick={onSpaceClick}/>
+        <Floors spaces={spaces} elevation={elevation(f.id)} highlights={roomHighlights} onPick={onSpaceClick}/>
         <Walls geometry={geometry} floorId={f.id} elevation={elevation(f.id)} follow={follow}/>
         <FurnitureBatch assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation(f.id)} highlighted={false}/>
         <FurnitureBatch assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation(f.id)} highlighted/>
       </group>;})}
-      {previousRoute&&!follow&&<Path route={previousRoute} geometry={geometry} explode={explode} ghost/>}
-      {route&&<Path route={route} geometry={geometry} explode={explode} xray={!follow}/>}
-      {route?.guide.steps.slice(activeStep+1,activeStep+2).map((s,i)=>s.point&&s.floor_id&&<mesh key={i} position={[s.point[0],elevation(s.floor_id)+0.15,-s.point[1]]}>
+      {previousRoute&&!follow&&<Path route={previousRoute} geometry={geometry} explode={explode} visibleFloors={visibleFloors} ghost/>}
+      {route&&<Path route={route} geometry={geometry} explode={explode} visibleFloors={visibleFloors} xray={false}/>}
+      {route?.guide.steps.slice(activeStep+1,activeStep+2).map((s,i)=>s.point&&s.floor_id&&visibleFloors.has(s.floor_id)&&<mesh key={i} position={[s.point[0],elevation(s.floor_id)+0.15,-s.point[1]]}>
         <cylinderGeometry args={[0.38,0.38,0.1,24]}/><meshStandardMaterial color="#ffd45c" emissive="#a66c00" emissiveIntensity={0.5}/></mesh>)}
       {geometry.openings.filter(o=>closed.has(o.id)||previewDoor?.id===o.id).map(o=><mesh key={o.id} position={[o.position[0],elevation(o.floor_id)+.6,-o.position[1]]}>
         <boxGeometry args={[Math.max(o.width_m,.3),1.2,.15]}/><meshStandardMaterial color={closed.has(o.id)?"#ff8a8f":"#ffd45c"} emissive={closed.has(o.id)?"#9c202c":"#7c5612"}/></mesh>)}
       {geometry.connectors.filter(c=>closed.has(c.id)).flatMap(c=>c.space_ids.map(id=>geometry.spaces.find(s=>s.id===id)).filter((s):s is Space=>!!s)).map(s=>{
         const b=bounds(s.polygon);return <mesh key={s.id} position={[(b.minX+b.maxX)/2,elevation(s.floor_id)+.8,-(b.minY+b.maxY)/2]}><boxGeometry args={[Math.max(b.maxX-b.minX,.5),1.6,Math.max(b.maxY-b.minY,.5)]}/><meshStandardMaterial color="#ff8a8f" transparent opacity={.65}/></mesh>;
       })}
-      {follow&&route?<RouteCamera geometry={geometry} route={route} playing={playing&&!reduced} setPlaying={setPlaying} activeStep={activeStep} onStep={onStep} jump={jump} onTransition={setTransition}/>
-        :<><OrbitControls target={[cx,elevation(floorId),cz]} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><FitBuilding box={box} height={showAll?Math.max(...geometry.floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...geometry.floors.map(f=>elevation(f.id))):3.8} activeElevation={showAll?Math.min(...geometry.floors.map(f=>elevation(f.id))):elevation(floorId)}/><CameraActions action={action}/></>}
+      {here&&geometry.spaces.filter(s=>s.id===here&&visibleFloors.has(s.floor_id)).map(s=>{const point=route?.stops[0]===here?route.polyline[0]:null;const b=bounds(s.polygon);return <group key={s.id} position={[point?.x??(b.minX+b.maxX)/2,elevation(s.floor_id)+.08,-(point?.y??(b.minY+b.maxY)/2)]}><mesh rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.35,.52,32]}/><meshBasicMaterial color="#65d7ac" side={THREE.DoubleSide} depthTest={false}/></mesh><mesh position={[0,.35,0]}><sphereGeometry args={[.18,16,12]}/><meshStandardMaterial color="#65d7ac" emissive="#1e7a4c"/></mesh></group>;})}
+      {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report}/>
+        :<><OrbitControls target={[cx,elevation(floorId),cz]} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><FitBuilding box={box} height={multi?Math.max(...floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...floors.map(f=>elevation(f.id))):3.8} activeElevation={multi?Math.min(...floors.map(f=>elevation(f.id))):elevation(floorId)}/><CameraActions action={action}/></>}
     </Canvas>
-    {follow&&route&&<div className="playback-controls"><span>Route preview · position is manually set</span>
-      {transition&&<p role="status">{transition}</p>}
-      <div><button disabled={activeStep<=0} onClick={()=>{setPlaying(false);onStep?.(activeStep-1);}}>Previous</button>
-      {!reduced&&<button onClick={()=>{setTransition("");setPlaying(!playing);}}>{playing?"Pause preview":"Play preview"}</button>}
-      {transition&&<button onClick={()=>{setJump(jump+1);setTransition("");}}>Continue at landing</button>}
-      <button disabled={activeStep>=route.guide.steps.length-1} onClick={()=>{setPlaying(false);setTransition("");onStep?.(activeStep+1);}}>Next waypoint</button></div>
+    {follow&&route&&model&&<div className="media-dock" aria-label={previewMode?"Route preview player":"Landmark guidance"}>
+      <div className="media-status" role="status">{sample?.arrived?"Destination reached in preview":sample?.transition?`Landing transition - ${geometry.floors.find(f=>f.id===sample.point?.floor_id)?.name} - connector interior not surveyed`:previewMode?"Route preview":"Guide me - location set manually"}</div>
+      {previewMode&&<div className="timeline"><input aria-label="Preview progress" type="range" min="0" max={Math.ceil(model.duration*100)/100||1} step="0.01" value={time} onChange={e=>seek(Number(e.target.value))}/><div className="chapter-marks">{model.chapters.map((c,i)=><button key={i} style={{left:`${100*c/(model.duration||1)}%`}} aria-label={`Jump to instruction ${i+1}`} title={route.guide.steps[i].text} onClick={()=>seek(c)}/>)}</div></div>}
+      <div className="media-buttons">
+        <button aria-label="Previous instruction" disabled={activeStep<=0} onClick={()=>{setPlaying(false);seek(model.chapters[activeStep-1]??0);}}>Back</button>
+        {previewMode&&!reduced&&<button className="media-play" aria-label={sample?.arrived?"Replay preview":playing?"Pause preview":"Play preview"} onClick={()=>{if(sample?.arrived)seek(0);setPlaying(v=>sample?.arrived?true:!v);}}>{sample?.arrived?"Replay":playing?"Pause":"Play"}</button>}
+        <button aria-label="Next instruction" disabled={sample?.arrived} onClick={()=>{setPlaying(false);seek(model.chapters[Math.min(activeStep+1,model.chapters.length-1)]??model.duration);}}>Next</button>
+        {previewMode?<><span className="media-time">{Math.floor(time/60)}:{String(Math.floor(time%60)).padStart(2,"0")} / {Math.floor(model.duration/60)}:{String(Math.floor(model.duration%60)).padStart(2,"0")}</span><select aria-label="Playback speed" value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[.5,1,2,4].map(v=><option key={v} value={v}>{v}x</option>)}</select></>:<button onClick={onPreview}>Preview route</button>}
+        <button onClick={()=>{setPlaying(false);onFinish?.();}}>{sample?.arrived?"Finish":"Exit"}</button>
+      </div>
     </div>}
+
     {!follow&&<div className="scene-navigation" aria-label="3D camera controls">
       {[["zoom-in","+","Zoom in"],["zoom-out","−","Zoom out"],["left","←","Pan left"],["right","→","Pan right"],["up","↑","Pan up"],["down","↓","Pan down"]].map(([kind,text,label])=><button key={kind} aria-label={label} onClick={()=>setAction({id:action.id+1,kind})}>{text}</button>)}
     </div>}

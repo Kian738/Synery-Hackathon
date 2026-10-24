@@ -119,3 +119,7 @@ Each rule comes from the research report (sources there).
 ## 2026-10-24 implementation update
 
 The team selected a cinematic industrial presentation (see DESIGN.md), replacing the original fixed light-plan composition. Navigator defaults to a dark 3D building stage, with Floor plan and Follow route modes. Controls and text retain high contrast; 2D remains the bright fallback. Follow route is an explicitly started preview, not live positioning. Closure impact and verified hypothetical widenings are contextual overlays, not dashboard metrics. Projector inspection and uncoached human usability testing remain manual release checks.
+
+## Guidance and preview redesign (2026-10-24)
+
+Guide me is the default: one decision with a landmark and a linked plan. Route preview is optional, with a media dock, seekable simulated-time timeline, instruction chapters, speed and replay. Preview time is not a real-world ETA. Manual position and preview position remain separate. Current floor / Route floors / Whole building make visibility explicit. Unsurveyed connector interiors use disclosed landing transitions rather than invented traversable stairs.
