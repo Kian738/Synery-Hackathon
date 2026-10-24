@@ -4,20 +4,23 @@ works without an API key; /chat runs the Claude agent and streams its tool calls
   uv run --env-file .env uvicorn server.app:app --reload --port 8000"""
 
 import asyncio
+import base64
 import csv
 import json
 import os
+import queue as std_queue
 import threading
 import uuid
 from functools import lru_cache
 from pathlib import Path
 
+import httpx
 import re
 import tempfile
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,6 +28,29 @@ from floorwise.agent.session import Session
 from floorwise.core.model import Building
 from floorwise.core.resolve import ResolveError
 from floorwise.paths import DATA, ROOT
+
+
+def _load_env_if_present() -> None:
+    # If ANTHROPIC_API_KEY is a CLI user token (sk-ant-usr-...) rather than an API key (sk-ant-api03-...),
+    # unset it so the Anthropic SDK's valid auto-discovered profile/credentials are used instead.
+    if os.environ.get("ANTHROPIC_API_KEY", "").startswith("sk-ant-usr-"):
+        del os.environ["ANTHROPIC_API_KEY"]
+
+    env_path = ROOT / ".env"
+    if env_path.is_file():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k == "ANTHROPIC_API_KEY" and v.startswith("sk-ant-usr-"):
+                continue
+            if k and k not in os.environ:
+                os.environ[k] = v
+
+
+_load_env_if_present()
 
 app = FastAPI(title="floorwise")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -213,7 +239,148 @@ def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: 
             raise HTTPException(422, str(error)) from error
 
 
-# ---------- chat (Claude) ----------
+# ---------- chat (Claude) & streaming TTS ----------
+
+ABBREVIATIONS = {"dr", "mr", "ms", "mrs", "eg", "ie", "vs", "rm", "no", "st"}
+
+
+def clean_speech_text(text: str) -> str:
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.*?)\*", r"\1", text)
+    text = re.sub(r"^#+\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^Answer:\s*", "", text, flags=re.IGNORECASE | re.MULTILINE)
+    text = re.sub(r"^[-*•]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def extract_speech_sentences(buffer: str, is_final: bool = False) -> tuple[list[str], str]:
+    sentences = []
+    pattern = re.compile(r"([.!?]+(?:\s+|\Z)|\n+)")
+    pos = 0
+    while True:
+        m = pattern.search(buffer, pos)
+        if not m:
+            if len(buffer) > 120:
+                clause_match = re.search(r"[,;:\n]\s+", buffer[60:120])
+                if clause_match:
+                    split_idx = 60 + clause_match.end()
+                    cand = buffer[:split_idx].strip()
+                    sentences.append(cand)
+                    buffer = buffer[split_idx:].lstrip()
+                    pos = 0
+                    continue
+            break
+        candidate = buffer[:m.end()].strip()
+        text_before_match = buffer[:m.start()]
+        if re.match(r"^\s*\d+\.\s*$", candidate):
+            pos = m.end()
+            continue
+        words = re.findall(r"[A-Za-z]+", text_before_match)
+        if words and words[-1].lower() in ABBREVIATIONS:
+            pos = m.end()
+            continue
+        sentences.append(candidate)
+        buffer = buffer[m.end():].lstrip()
+        pos = 0
+
+    if is_final and buffer.strip():
+        sentences.append(buffer.strip())
+        buffer = ""
+    return sentences, buffer
+
+
+class TtsStreamer:
+    """Buffers text deltas from Claude, splits into spoken sentences, and streams
+
+    low-latency ElevenLabs audio chunks as base64-encoded audio over SSE.
+    """
+
+    def __init__(self, push_fn, api_key: str, voice_id: str, model_id: str = "eleven_turbo_v2_5") -> None:
+        self.push = push_fn
+        self.api_key = api_key
+        self.voice_id = voice_id
+        self.model_id = model_id
+        self.buffer = ""
+        self.chunk_index = 0
+        self.queue: std_queue.Queue = std_queue.Queue()
+        self.worker = threading.Thread(target=self._run, daemon=True)
+        self.worker.start()
+
+    def feed_delta(self, text: str) -> None:
+        self.buffer += text
+        sents, self.buffer = extract_speech_sentences(self.buffer, is_final=False)
+        for s in sents:
+            cleaned = clean_speech_text(s)
+            if cleaned and re.search(r"[A-Za-z0-9]", cleaned):
+                self.queue.put((self.chunk_index, cleaned))
+                self.chunk_index += 1
+
+    def clear(self) -> None:
+        self.buffer = ""
+        with self.queue.mutex:
+            self.queue.queue.clear()
+
+    def flush_and_close(self, timeout: float = 6.0) -> None:
+        sents, self.buffer = extract_speech_sentences(self.buffer, is_final=True)
+        for s in sents:
+            cleaned = clean_speech_text(s)
+            if cleaned and re.search(r"[A-Za-z0-9]", cleaned):
+                self.queue.put((self.chunk_index, cleaned))
+                self.chunk_index += 1
+        self.queue.put(None)
+        self.worker.join(timeout=timeout)
+
+    def _synthesize(self, text: str) -> bytes | None:
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream?optimize_streaming_latency=4"
+        headers = {
+            "xi-api-key": self.api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        payload = {
+            "text": text,
+            "model_id": self.model_id,
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+            },
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200 and resp.content:
+                    return resp.content
+                if resp.status_code != 200 and self.model_id != "eleven_multilingual_v2":
+                    payload["model_id"] = "eleven_multilingual_v2"
+                    resp = client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200 and resp.content:
+                        return resp.content
+        except Exception:
+            pass
+        return None
+
+    def _run(self) -> None:
+        while True:
+            item = self.queue.get()
+            if item is None:
+                self.queue.task_done()
+                break
+            idx, text = item
+            audio_bytes = self._synthesize(text)
+            if audio_bytes:
+                b64 = base64.b64encode(audio_bytes).decode("ascii")
+                self.push("audio_chunk", {
+                    "index": idx,
+                    "text": text,
+                    "audio": b64,
+                    "format": "audio/mpeg",
+                })
+            self.queue.task_done()
+
 
 class ChatBody(BaseModel):
     text: str
@@ -227,7 +394,10 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
     loop = asyncio.get_running_loop()
 
     def push(kind: str, payload) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload})
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload})
+        except Exception:
+            pass
 
     def work() -> None:
         if not entry['lock'].acquire(timeout=5):
@@ -246,8 +416,29 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                 entry["session"].events.clear()
                 if body.selected_space is not None and body.selected_space not in entry["session"].building.spaces:
                     raise ValueError("Selected room does not belong to this building")
-                entry["session"].ui_selection=body.selected_space
-                reply = agent.ask(body.text, on_event=push)
+                entry["session"].ui_selection = body.selected_space
+
+                eleven_key = os.getenv("ELEVENLABS_API_KEY")
+                voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+                model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
+                streamer = (
+                    TtsStreamer(push, eleven_key, voice_id, model_id)
+                    if eleven_key
+                    else None
+                )
+
+                def on_chat_event(kind: str, payload) -> None:
+                    if streamer:
+                        if kind == "text_delta" and isinstance(payload, dict) and "text" in payload:
+                            streamer.feed_delta(payload["text"])
+                        elif kind == "clear_deltas":
+                            streamer.clear()
+                    push(kind, payload)
+
+                reply = agent.ask(body.text, on_event=on_chat_event)
+                if streamer:
+                    streamer.flush_and_close()
+
                 push("reply", {"text": reply, "usage": agent.turn_usage, "model": agent.model})
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
                 message = 'The language service timed out. Please retry, or use the map controls. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else f"{type(error).__name__}: {error}"
@@ -268,6 +459,72 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                 break
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+# ---------- text to speech (ElevenLabs / OpenAI / Browser fallback) ----------
+
+class TtsBody(BaseModel):
+    text: str
+    voice_id: str | None = None
+
+
+@app.get("/api/tts/status")
+async def tts_status() -> dict:
+    if os.getenv("ELEVENLABS_API_KEY"):
+        return {"enabled": True, "provider": "elevenlabs"}
+    if os.getenv("OPENAI_API_KEY"):
+        return {"enabled": True, "provider": "openai"}
+    return {"enabled": False, "provider": "browser"}
+
+
+@app.post("/api/tts")
+async def text_to_speech(body: TtsBody) -> Response:
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "Text is required")
+
+    eleven_key = os.getenv("ELEVENLABS_API_KEY")
+    if eleven_key:
+        voice_id = body.voice_id or os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        headers = {
+            "xi-api-key": eleven_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        payload = {
+            "text": text,
+            "model_id": os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2"),
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75,
+            },
+        }
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code != 200:
+                    raise HTTPException(resp.status_code, f"ElevenLabs error: {resp.text}")
+                return Response(content=resp.content, media_type="audio/mpeg")
+        except httpx.RequestError as exc:
+            raise HTTPException(502, f"Failed to contact ElevenLabs: {exc}") from exc
+
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=openai_key)
+            response = await client.audio.speech.create(
+                model=os.getenv("OPENAI_TTS_MODEL", "tts-1"),
+                voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
+                input=text,
+            )
+            return Response(content=response.content, media_type="audio/mpeg")
+        except Exception as exc:
+            raise HTTPException(502, f"OpenAI TTS error: {exc}") from exc
+
+    raise HTTPException(501, "No cloud TTS configured (ELEVENLABS_API_KEY or OPENAI_API_KEY missing)")
 
 
 # ---------- Level 4: build a building from plan images ----------

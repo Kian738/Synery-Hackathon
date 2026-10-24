@@ -145,7 +145,7 @@ class ChatAgent:
         def relay(kind, payload):
             nonlocal seen
             if on_event:
-                if kind in ("tool", "tool_result", "progress"):
+                if kind in ("tool", "tool_result", "progress", "text_delta", "clear_deltas"):
                     on_event(kind, payload)
                 for event in self.session.events[seen:]:
                     on_event("ui", event)
@@ -181,6 +181,10 @@ class ChatAgent:
         if reply is not None:
             self.local_history=(self.local_history+[{'user':user_text,'reply':reply}])[-6:]
             relay('step',{})
+            if on_event:
+                for part in re.split(r'(\n+|(?<=[.!?])\s+)', reply):
+                    if part:
+                        on_event("text_delta", {"text": part})
             self._finish_usage(started,before,'deterministic' if self.last_model=='deterministic' else 'parser',models)
             return reply
         self._prepare_conversation(user_text)

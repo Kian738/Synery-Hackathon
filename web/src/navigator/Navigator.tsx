@@ -11,11 +11,82 @@ import { PlanView, type Pin } from "../components/PlanView";
 import { api } from "../lib/api";
 import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from "../lib/geometry";
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
-import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
+import { audioStreamQueue, canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
 const Building3D = lazy(() => import("../components/Building3D"));
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findSpacesMentionedInText(
+  text: string,
+  spaces: Space[],
+  visualResult?: VisualResult | null,
+  highlights?: Set<string>
+): Space[] {
+  const found: Space[] = [];
+  const addedIds = new Set<string>();
+
+  const add = (s: Space) => {
+    if (!addedIds.has(s.id)) {
+      addedIds.add(s.id);
+      found.push(s);
+    }
+  };
+
+  const candidateIds = new Set<string>();
+  if (visualResult?.entities) {
+    for (const ent of visualResult.entities) {
+      if (ent.kind === "room") candidateIds.add(ent.id);
+    }
+  }
+  if (highlights) {
+    for (const id of highlights) candidateIds.add(id);
+  }
+
+  // 1. Match numbers like 0.08, 2.02, 2.08, 2.17, 204
+  const numberMatches = Array.from(text.matchAll(/\b\d+\.\d+\b|\b\d{3,4}\b/g));
+  for (const match of numberMatches) {
+    const num = match[0];
+    const matchInCandidates = spaces.find(
+      (s) => candidateIds.has(s.id) && (s.name.includes(num) || s.id.includes(num))
+    );
+    if (matchInCandidates) {
+      add(matchInCandidates);
+      continue;
+    }
+    const matchInAll = spaces.find((s) => {
+      const tokens: string[] = s.name.match(/\b\d+\.\d+\b|\b\d{3,4}\b/g) ?? [];
+      const idEnd = s.id.split("-").pop();
+      return tokens.includes(num) || idEnd === num || s.name.includes(` ${num}`);
+    });
+    if (matchInAll) {
+      add(matchInAll);
+    }
+  }
+
+  // 2. Match distinctive room names (e.g. Makerspace, Main lobby, Cafeteria)
+  const GENERIC = new Set([
+    "room", "rooms", "floor", "space", "spaces", "corridor", "corridors",
+    "office", "offices", "staircase", "elevator", "lift", "printer", "printers",
+    "place", "places", "door", "doors", "level", "levels", "area", "areas"
+  ]);
+
+  for (const s of spaces) {
+    const baseName = s.name.replace(/\s+\d+(\.\d+)?$/, "").trim();
+    if (baseName.length >= 4 && !GENERIC.has(baseName.toLowerCase())) {
+      const pattern = new RegExp(`\\b${escapeRegExp(baseName)}\\b`, "i");
+      if (pattern.test(text)) {
+        add(s);
+      }
+    }
+  }
+
+  return found;
+}
 
 export default function Navigator() {
   const [params, setParams] = useSearchParams();
@@ -23,16 +94,33 @@ export default function Navigator() {
   const nav = useNavigator(buildingId);
   const [buildings, setBuildings] = useState<BuildingRow[]>([]);
   const [selected, setSelected] = useState<Space | null>(null);
-  const [voiceOut, setVoiceOut] = useState(false);
-  const [weakOpen,setWeakOpen]=useState(false);
-  const [questionOpen,setQuestionOpen]=useState(false);
-  const [phoneOpen,setPhoneOpen]=useState(false);
-  const [compact,setCompact]=useState(()=>matchMedia("(max-width:1023px)").matches);
-  const [toolsOpen,setToolsOpen]=useState(false);
-  useEffect(()=>{const q=matchMedia("(max-width:1023px)");const changed=()=>{setCompact(q.matches);setToolsOpen(false);};q.addEventListener("change",changed);return()=>q.removeEventListener("change",changed);},[]);
-  const [lookOffset,setLookOffset]=useState({yaw:0,pitch:0});
-  const [focusRequest,setFocusRequest]=useState<{id:string;revision:number}|null>(null);
-  const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
+  const [voiceOut, setVoiceOut] = useState(true);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceFocusSpace, setVoiceFocusSpace] = useState<Space | null>(null);
+  const [voiceHighlightId, setVoiceHighlightId] = useState<string | null>(null);
+  const voiceTourTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
+  const [currentlySpeakingId, setCurrentlySpeakingId] = useState<number | null>(null);
+  const [heading, setHeading] = useState<string>("");
+  const [weakOpen, setWeakOpen] = useState(false);
+  const [questionOpen, setQuestionOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [compact, setCompact] = useState(() => matchMedia("(max-width:1023px)").matches);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  useEffect(() => {
+    const q = matchMedia("(max-width:1023px)");
+    const changed = () => { setCompact(q.matches); setToolsOpen(false); };
+    q.addEventListener("change", changed);
+    return () => q.removeEventListener("change", changed);
+  }, []);
+  const [lookOffset, setLookOffset] = useState({ yaw: 0, pitch: 0 });
+  const [focusRequest, setFocusRequest] = useState<{ id: string; revision: number } | null>(null);
+  const selectSpace = useCallback((space: Space) => {
+    setSelected(space);
+    setPlanExpanded(false);
+    setWeakOpen(false);
+    nav.setFloorId(space.floor_id);
+  }, [nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow">(params.get("view") === "2d" ? "2d" : "3d");
   const [scope, setScope] = useState<"current"|"route"|"building">("current");
@@ -80,17 +168,134 @@ export default function Navigator() {
   }, [g]);
   const hereFloor = g?.spaces.find((s) => s.id === nav.here)?.floor_id ?? null;
 
-  // Speak new agent replies and route overviews when voice output is on.
-  const spokenFor = useRef<string | null>(null);
+  // Listen to speech start/end events to keep UI in sync
   useEffect(() => {
-    if(!voiceOut){spokenFor.current=null;return;}
+    const onStart = () => setIsAgentSpeaking(true);
+    const onEnd = () => setIsAgentSpeaking(false);
+    window.addEventListener("floorwise:speech-start", onStart);
+    window.addEventListener("floorwise:speech-end", onEnd);
+    return () => {
+      window.removeEventListener("floorwise:speech-start", onStart);
+      window.removeEventListener("floorwise:speech-end", onEnd);
+    };
+  }, []);
+
+  const clearVoiceTour = useCallback(() => {
+    voiceTourTimers.current.forEach(clearTimeout);
+    voiceTourTimers.current = [];
+    setVoiceFocusSpace(null);
+    setVoiceHighlightId(null);
+  }, []);
+
+  // Voice camera choreography: automatically zoom in to specific rooms mentioned
+  // in speech, tour across multiple mentioned rooms, and dezoom back to the route/overview.
+  useEffect(() => {
+    const onChunk = (e: Event) => {
+      if (!voiceOut && !voiceMode) return;
+      if (!g) return;
+      const custom = e as CustomEvent<{ index: number; text: string; audio?: HTMLAudioElement }>;
+      const text = custom.detail?.text;
+      if (!text) return;
+
+      clearVoiceTour();
+
+      const matchedSpaces = findSpacesMentionedInText(text, g.spaces, nav.visualResult, nav.highlights);
+
+      if (matchedSpaces.length > 0) {
+        const audioDuration = custom.detail?.audio?.duration;
+        const durationMs =
+          audioDuration && isFinite(audioDuration) ? audioDuration * 1000 : Math.max(2500, text.length * 65);
+
+        if (matchedSpaces.length === 1) {
+          const space = matchedSpaces[0];
+          nav.setFloorId(space.floor_id);
+          setVoiceFocusSpace(space);
+          setVoiceHighlightId(space.id);
+        } else {
+          const interval = Math.max(1200, durationMs / matchedSpaces.length);
+          matchedSpaces.forEach((space, idx) => {
+            const timer = setTimeout(() => {
+              nav.setFloorId(space.floor_id);
+              setVoiceFocusSpace(space);
+              setVoiceHighlightId(space.id);
+            }, idx * interval);
+            voiceTourTimers.current.push(timer);
+          });
+        }
+      } else {
+        const isRouteChunk = /\b(?:route|directions|way to|head to|walk to|take the|path|exit)\b/i.test(text);
+        if (isRouteChunk && nav.route?.polyline.length) {
+          setVoiceFocusSpace(null);
+          setVoiceHighlightId(null);
+          nav.setFloorId(nav.route.polyline[0].floor_id);
+        }
+      }
+    };
+
+    const onSpeechEnd = () => {
+      clearVoiceTour();
+    };
+
+    window.addEventListener("floorwise:speech-chunk", onChunk);
+    window.addEventListener("floorwise:speech-end", onSpeechEnd);
+    return () => {
+      window.removeEventListener("floorwise:speech-chunk", onChunk);
+      window.removeEventListener("floorwise:speech-end", onSpeechEnd);
+      clearVoiceTour();
+    };
+  }, [voiceOut, voiceMode, g, nav.visualResult, nav.highlights, nav.route, nav.setFloorId, clearVoiceTour]);
+
+  // Speak new agent replies and route overviews when voice output or voice mode is on.
+  const spokenFor = useRef<string | null>(null);
+  const lastSpokenMessageId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!voiceOut && !voiceMode) {
+      lastSpokenMessageId.current = null;
+      return;
+    }
+    const lastMsg = nav.messages[nav.messages.length - 1];
+    if (lastMsg && lastMsg.role === "agent" && lastMsg.id !== lastSpokenMessageId.current) {
+      if (lastMsg.streaming) {
+        if (audioStreamQueue.active) {
+          setCurrentlySpeakingId(lastMsg.id);
+        }
+        return;
+      }
+      lastSpokenMessageId.current = lastMsg.id;
+      if (audioStreamQueue.hadChunks) {
+        if (audioStreamQueue.active) {
+          setCurrentlySpeakingId(lastMsg.id);
+        }
+        audioStreamQueue.onEnd(() => {
+          setCurrentlySpeakingId(null);
+        });
+      } else {
+        setCurrentlySpeakingId(lastMsg.id);
+        speak(lastMsg.text, () => {
+          setCurrentlySpeakingId(null);
+        });
+      }
+    }
+  }, [nav.messages, voiceOut, voiceMode]);
+
+  useEffect(() => {
+    if (!voiceOut && !voiceMode) { spokenFor.current = null; return; }
     if (!nav.route || following) return;
     const key = `${nav.route.length_m}-${nav.route.stops.join()}`;
     if (spokenFor.current === key) return;
     spokenFor.current = key;
     speak(nav.route.guide.spoken);
-  }, [nav.route, voiceOut,following]);
-  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speak(steps[nav.activeStep].text);return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
+  }, [nav.route, voiceOut, voiceMode, following]);
+
+  useEffect(() => {
+    if ((voiceOut || voiceMode) && following && steps[nav.activeStep]) {
+      speak(steps[nav.activeStep].short ?? steps[nav.activeStep].text ?? "");
+    }
+    return () => {
+      stopSpeaking();
+    };
+  }, [voiceOut, voiceMode, following, nav.activeStep]);
 
   const pins: Pin[] = useMemo(() => {
     if (!g) return [];
@@ -116,13 +321,45 @@ export default function Navigator() {
     const s = steps[i];
     if (s?.floor_id) nav.setFloorId(s.floor_id);
   };
-  const displayFloor=following&&previewPosition?previewPosition.floor_id:nav.floorId;
-  const visualRooms=nav.visualResult?.entities.filter(e=>e.kind==="room")??[];
-  const visualPrimary=(nav.visualResult?.measurements.primary_ids as string[]|undefined)?.[0];
-  const visualRoom=g?.spaces.find(s=>s.id===(visualPrimary??(visualRooms.length===1?visualRooms[0].id:null)));
-  const visualAnchor=visualRoom?(visualRoom.anchor??centroid(visualRoom.polygon)):null;
-  const focused=g?.spaces.find(s=>s.id===focusRequest?.id);
-  const focusPoint = following&&previewPosition?[previewPosition.x,previewPosition.y] as [number,number]:focused?(focused.anchor??centroid(focused.polygon)):visualAnchor??(nav.route&&steps[nav.activeStep]?.floor_id===nav.floorId?steps[nav.activeStep]?.point??null:null);
+  const activeHighlights = useMemo(() => {
+    const set = new Set(nav.highlights);
+    if (voiceHighlightId) set.add(voiceHighlightId);
+    return set;
+  }, [nav.highlights, voiceHighlightId]);
+
+  const displayFloor = following && previewPosition ? previewPosition.floor_id : nav.floorId;
+  const visualRooms = nav.visualResult?.entities.filter((e) => e.kind === "room") ?? [];
+  const visualPrimary = (nav.visualResult?.measurements.primary_ids as string[] | undefined)?.[0];
+  const visualRoom = g?.spaces.find((s) => s.id === (visualPrimary ?? (visualRooms.length === 1 ? visualRooms[0].id : null)));
+  const visualAnchor = visualRoom ? (visualRoom.anchor ?? centroid(visualRoom.polygon)) : null;
+  const voiceAnchor = voiceFocusSpace ? (voiceFocusSpace.anchor ?? centroid(voiceFocusSpace.polygon)) : null;
+  const focused = g?.spaces.find((s) => s.id === focusRequest?.id);
+  const focusPoint = following && previewPosition
+    ? ([previewPosition.x, previewPosition.y] as [number, number])
+    : voiceAnchor
+    ? voiceAnchor
+    : focused
+    ? (focused.anchor ?? centroid(focused.polygon))
+    : selected
+    ? (selected.anchor ?? centroid(selected.polygon))
+    : visualAnchor ?? (nav.route && steps[nav.activeStep]?.floor_id === nav.floorId ? steps[nav.activeStep]?.point ?? null : null);
+
+  const handleToggleVoiceMode = useCallback(() => {
+    setVoiceMode((prev) => {
+      const next = !prev;
+      if (next) setVoiceOut(true);
+      else stopSpeaking();
+      return next;
+    });
+  }, []);
+
+  const handleSend = useCallback((text: string) => {
+    nav.ask(text, selected?.id);
+    setSelected(null);
+    setWeakOpen(false);
+    setPhoneOpen(false);
+    setToolsOpen(false);
+  }, [nav.ask, selected?.id]);
 
   const focusRoom=(room:Space)=>{selectSpace(room);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
   const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
@@ -141,7 +378,12 @@ export default function Navigator() {
 
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-2 px-4 py-2.5">
           <Toggle on={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} icon="wheelchair" label="Step-free" tone="escape" />
-          <Toggle on={voiceOut} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} icon="speaker" label="Read aloud" tone="mark" />
+          <Toggle on={voiceOut && !voiceMode} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} icon="speaker" label="Read aloud" tone="mark" />
+          <Toggle on={voiceMode} onClick={() => {
+            const next = !voiceMode;
+            setVoiceMode(next);
+            if (next) setVoiceOut(true); else stopSpeaking();
+          }} icon="mic" label={voiceMode ? "Voice mode (ON)" : "Voice only"} tone="mark" />
         </div>
         <div className="border-b border-ink-2 px-4 py-2.5">
           <button onClick={() => setPicking(!picking)} aria-expanded={picking}
@@ -166,7 +408,32 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation
+            busyLabel={nav.busyLabel}
+            geometry={g}
+            onRoom={(id) => {
+              const room = g.spaces.find((s) => s.id === id);
+              if (room) {
+                setView("3d");
+                setQuestionOpen(false);
+                focusRoom(room);
+              }
+            }}
+            messages={nav.messages}
+            busy={nav.busy}
+            currentlySpeakingId={currentlySpeakingId}
+            onSpeakMessage={(id, text) => {
+              if (currentlySpeakingId === id) {
+                stopSpeaking();
+                setCurrentlySpeakingId(null);
+              } else {
+                setCurrentlySpeakingId(id);
+                speak(text, () => setCurrentlySpeakingId(null));
+              }
+            }}
+            onOption={(id) => nav.goTo(id)}
+            onDecide={nav.decideChange}
+          />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -179,7 +446,13 @@ export default function Navigator() {
           </div>
         )}
         {nav.turnUsage&&<div className="turn-usage" role="status">{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}</div>}
-        <Composer busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
+        <Composer
+          busy={nav.busy}
+          voiceMode={voiceMode}
+          onToggleVoiceMode={handleToggleVoiceMode}
+          isSpeaking={isAgentSpeaking}
+          onSend={handleSend}
+        />
       </aside>
 
       <main className="model-panel relative order-1 flex h-[46vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
@@ -210,18 +483,18 @@ export default function Navigator() {
         <div className="floor-selector"><FloorRail floors={g.floors} active={displayFloor} route={nav.route} onPick={id=>{if(following)setView("3d");nav.setFloorId(id);}} here={hereFloor} /></div>
         <div className="model-viewport">
           <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
-            {view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult}
-              pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
+            {view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult}
+              pins={pins} previewDoor={nav.previewDoor} selected={voiceFocusSpace?.id ?? selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
-                <Building3D geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                <Building3D geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id ?? selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
         </div>
         {view!=="2d"&&planExpanded&&<section className="map-drawer" aria-label="Linked floor plan">
           <header><span>{g.floors.find(f=>f.id===displayFloor)?.name}</span><button aria-label="Close map" onClick={()=>setPlanExpanded(false)}><Pictogram name="close" size={18}/></button></header>
-          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
+          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id ?? selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span><button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
@@ -392,10 +665,26 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel }: {
-  busyLabel:string;
-  geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
-  messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
+function Conversation({
+  messages,
+  busy,
+  onOption,
+  onDecide,
+  geometry,
+  onRoom,
+  busyLabel,
+  currentlySpeakingId,
+  onSpeakMessage,
+}: {
+  busyLabel?: string;
+  geometry: NonNullable<ReturnType<typeof useNavigator>["geometry"]>;
+  onRoom: (id: string) => void;
+  messages: Message[];
+  busy: boolean;
+  onOption: (id: string) => void;
+  onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
+  currentlySpeakingId?: number | null;
+  onSpeakMessage?: (id: number, text: string) => void;
 }) {
   const [history,setHistory]=useState(false);
   const end = useRef<HTMLDivElement>(null);
@@ -445,11 +734,44 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
               ) : <p className="mt-2 text-sm text-ink-4">{m.state === "applied" ? "Applied." : "Discarded."}</p>}
             </div>
           );
-        return (
-          <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
-            {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}><RoomText text={line.replace(/\*\*/g, "")} spaces={geometry.spaces} onRoom={onRoom}/></p>)}
-          </div>
-        );
+        if (m.role === "agent") {
+          const isThisPlaying = currentlySpeakingId === m.id;
+          return (
+            <div key={m.id} className="space-y-1.5 border-l-2 border-mark/80 bg-ink-2/40 py-2 pl-3 pr-2 text-[15.5px] leading-relaxed">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-sign text-xs font-semibold uppercase tracking-wider text-concrete">
+                  Agent response
+                </span>
+                {onSpeakMessage && (
+                  <button
+                    type="button"
+                    onClick={() => onSpeakMessage(m.id, m.text)}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 font-sign text-xs transition-colors rounded ${
+                      isThisPlaying
+                        ? "bg-mark text-ink font-bold animate-pulse"
+                        : "border border-ink-3 text-concrete hover:border-white hover:text-white"
+                    }`}
+                    aria-label={isThisPlaying ? "Stop reading" : "Read answer aloud"}
+                  >
+                    <Pictogram name="speaker" size={13} />
+                    <span>{isThisPlaying ? "Stop" : "Read aloud"}</span>
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5 text-white">
+                {m.text.split("\n").filter(Boolean).map((line, i) => (
+                  <p key={i}>
+                    <RoomText text={line.replace(/\*\*/g, "")} spaces={geometry.spaces} onRoom={onRoom} />
+                  </p>
+                ))}
+                {m.streaming && (
+                  <span className="inline-block h-4 w-1.5 animate-pulse bg-mark ml-1 align-middle" />
+                )}
+              </div>
+            </div>
+          );
+        }
+        return null;
       })}
       {busy && <p className="flex items-center gap-2 text-[13px] text-ink-4"><span className="h-1.5 w-1.5 animate-pulse bg-mark" />{busyLabel}</p>}
       <div ref={end} />
@@ -457,29 +779,190 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
   );
 }
 
-function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void }) {
+function Composer({
+  busy,
+  onSend,
+  voiceMode,
+  onToggleVoiceMode,
+  isSpeaking,
+}: {
+  busy: boolean;
+  onSend: (t: string) => void;
+  voiceMode: boolean;
+  onToggleVoiceMode: () => void;
+  isSpeaking: boolean;
+}) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState("");
-  const stopListening = useRef<(() => void) | null>(null);
-  useEffect(() => () => {stopListening.current?.();}, []);
-  const submit = (value: string) => {
+  const stopListening = useRef<((submitIfText?: boolean) => void) | null>(null);
+
+  const stopListeningSession = useCallback((submitIfText = false) => {
+    if (stopListening.current) {
+      const abortFn = stopListening.current;
+      stopListening.current = null;
+      abortFn(submitIfText);
+    }
+    setListening(false);
+  }, []);
+
+  useEffect(() => () => { stopListeningSession(false); }, [stopListeningSession]);
+
+  const submit = useCallback((value: string) => {
     const t = value.trim();
     if (!t || busy) return;
     onSend(t);
     setText("");
-  };
+  }, [busy, onSend]);
+
+  const startListeningSession = useCallback(() => {
+    if (!canListen()) {
+      setVoiceError("Voice input is not supported in this browser.");
+      return;
+    }
+    stopSpeaking();
+    window.dispatchEvent(new Event("floorwise:voice-start"));
+    setVoiceError("");
+    setListening(true);
+    stopListening.current = listen(
+      setText,
+      (t) => {
+        setListening(false);
+        submit(t);
+      },
+      () => setListening(false),
+      (err) => {
+        setListening(false);
+        setVoiceError(err);
+      }
+    );
+  }, [submit]);
+
+  // Hands-free continuous loop when voiceMode is active
+  useEffect(() => {
+    if (!voiceMode) return;
+    if (busy || isSpeaking) {
+      if (listening) {
+        stopListeningSession(false);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (!listening && !busy && !isSpeaking) {
+        startListeningSession();
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [voiceMode, busy, isSpeaking, listening, startListeningSession, stopListeningSession]);
+
+  if (voiceMode) {
+    return (
+      <div className="relative border-t border-ink-2 bg-ink-2 p-3" role="region" aria-label="Voice interaction">
+        {voiceError && (
+          <p role="status" className="mb-2 border border-signal bg-signal/20 p-2 text-xs text-signal">
+            {voiceError}
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (isSpeaking) {
+                stopSpeaking();
+              } else if (listening) {
+                stopListeningSession(true);
+              } else if (!busy) {
+                startListeningSession();
+              }
+            }}
+            aria-label={isSpeaking ? "Interrupt agent" : listening ? "Done speaking" : "Start speaking"}
+            className={`grid h-12 w-12 shrink-0 place-items-center rounded-sm transition-all ${
+              isSpeaking
+                ? "animate-pulse bg-mark text-ink"
+                : busy
+                ? "bg-ink-3 text-concrete"
+                : listening
+                ? "animate-bounce bg-signal text-white"
+                : "bg-white text-ink hover:bg-concrete"
+            }`}
+          >
+            <Pictogram name={isSpeaking ? "speaker" : "mic"} size={22} />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  isSpeaking
+                    ? "animate-ping bg-mark"
+                    : busy
+                    ? "animate-pulse bg-concrete"
+                    : listening
+                    ? "animate-pulse bg-signal"
+                    : "bg-ink-4"
+                }`}
+              />
+              <p className="font-sign text-sm font-semibold text-white">
+                {isSpeaking
+                  ? "Building is speaking…"
+                  : busy
+                  ? "Thinking…"
+                  : listening
+                  ? "Listening to you…"
+                  : "Tap mic to speak"}
+              </p>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-ink-4">
+              {isSpeaking
+                ? "Tap to interrupt"
+                : listening
+                ? (text || "Speak your destination or question (take your time)")
+                : busy
+                ? "Analyzing route & spaces…"
+                : "Microphone idle"}
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            {isSpeaking && (
+              <button
+                type="button"
+                onClick={() => stopSpeaking()}
+                className="border border-ink-3 px-2 py-1 font-sign text-xs text-concrete hover:border-white hover:text-white"
+              >
+                Interrupt
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onToggleVoiceMode}
+              className="border border-ink-3 px-2.5 py-1 font-sign text-xs text-concrete hover:border-white hover:text-white"
+            >
+              Switch to text
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit(text); }} className="relative flex gap-2 border-t border-ink-2 p-3">
       {voiceError && <p role="status" className="absolute bottom-full left-0 right-0 bg-ink-2 p-3 text-sm">{voiceError}</p>}
       {canListen() && (
-        <button type="button" disabled={busy} aria-label={listening ? "Stop listening" : "Speak"} aria-pressed={listening}
-          onClick={() => { if (listening) {stopListening.current?.();setListening(false);return;} stopSpeaking();window.dispatchEvent(new Event("floorwise:voice-start"));setVoiceError("");setListening(true);stopListening.current=listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false), setVoiceError); }}
+        <button type="button" disabled={busy} aria-label={listening ? "Done speaking" : "Speak"} aria-pressed={listening}
+          onClick={() => {
+            if (listening) {
+              stopListeningSession(true);
+            } else {
+              startListeningSession();
+            }
+          }}
           className={`grid h-12 w-12 shrink-0 place-items-center ${listening ? "bg-signal text-white" : "bg-white text-ink hover:bg-concrete"}`}>
           <Pictogram name="mic" size={22} />
         </button>
       )}
-      <input value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Ask the building"}
+      <input value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening… (take your time to speak)" : "Ask the building"}
         aria-label="Message" className="h-12 min-w-0 flex-1 border border-ink-3 bg-ink-2 px-3 text-[16px] text-white placeholder:text-ink-4 focus:border-white focus:outline-none" />
       <button type="submit" disabled={busy || !text.trim()} aria-label="Send"
         className="grid h-12 w-12 shrink-0 place-items-center bg-mark text-ink disabled:opacity-40"><Pictogram name="send" size={20} /></button>

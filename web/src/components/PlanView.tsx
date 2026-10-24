@@ -78,11 +78,38 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  useEffect(()=>{
-    if(!focus||(followPosition&&!tracking))return;
-    const w=Math.max(12,Math.min(24,size*.25)),h=w*screen.h/Math.max(1,screen.w);
-    setView({x:focus[0]-w/2,y:-focus[1]-h/2,w,h});
-  },[focus,screen.w,screen.h,size,followPosition,tracking]);
+  const runs = useMemo(() => (route ? routeRuns(route, new Set([floorId])).map((run) => run.map((p) => [p.x, p.y] as XY)) : []), [route, floorId]);
+  const routeBox = useMemo(() => {
+    const pts = runs.flat();
+    if (!pts.length) return null;
+    return bounds(pts);
+  }, [runs]);
+
+  const prevFocus = useRef<XY | null>(null);
+
+  useEffect(() => {
+    if (focus) {
+      if (followPosition && !tracking) return;
+      const w = Math.max(12, Math.min(24, size * 0.25)), h = (w * screen.h) / Math.max(1, screen.w);
+      setView({ x: focus[0] - w / 2, y: -focus[1] - h / 2, w, h });
+      prevFocus.current = focus;
+    } else if (prevFocus.current !== null) {
+      prevFocus.current = null;
+      if (route && routeBox) {
+        const rw = Math.max(routeBox.maxX - routeBox.minX, 8);
+        const rh = Math.max(routeBox.maxY - routeBox.minY, 8);
+        const rSize = Math.max(rw, rh);
+        const pad = rSize * 0.25;
+        const w = Math.max(rw + 2 * pad, ((rh + 2 * pad) * screen.w) / Math.max(1, screen.h));
+        const h = (w * screen.h) / Math.max(1, screen.w);
+        const cx = (routeBox.minX + routeBox.maxX) / 2;
+        const cy = (routeBox.minY + routeBox.maxY) / 2;
+        setView({ x: cx - w / 2, y: -cy - h / 2, w, h });
+      } else {
+        setView(fit);
+      }
+    }
+  }, [focus, followPosition, tracking, route, routeBox, fit, screen.w, screen.h, size]);
   const pxPerM = Math.max(0.01, Math.min(screen.w / view.w, screen.h / view.h));
   const scale = 8 / pxPerM; // 8 screen px, in metres: base unit for strokes and markers
   const font = 12.5 / pxPerM; // labels are 12.5 px on screen
@@ -104,8 +131,6 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
   const zoom = (factor: number, cx = view.x + view.w / 2, cy = view.y + view.h / 2) =>
     setView((v) => ({ x: cx - (cx - v.x) * factor, y: cy - (cy - v.y) * factor, w: v.w * factor, h: v.h * factor }));
   const pan = (dx: number, dy: number) => setView((v) => ({ ...v, x: v.x + dx * v.w, y: v.y + dy * v.h }));
-
-  const runs=useMemo(()=>route?routeRuns(route,new Set([floorId])).map(run=>run.map(p=>[p.x,p.y] as XY)):[],[route,floorId]);
 
 
   return (

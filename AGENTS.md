@@ -83,6 +83,7 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 5. **Secrets live only in `.env`** (gitignored). The Groq key is for testing; one live Claude call was verified on AWS Bedrock (plan_scenario, numbers matched the solver); Anthropic API or AWS Bedrock only, never Vertex.
 6. **Keep docs true.** After a change, update `docs/STATUS.md`, and also this file if paths or commands change.
 7. **UI work follows `docs/UX_PLAN.md`** and the design rules in it, not generic dashboard defaults.
+8. **Never start a uvicorn / web server process.** The user manages the server manually with `uv run fw start`. Do not launch background server processes or duplicate anything that `uv run fw start` handles automatically.
 
 ## Data facts agents get wrong
 

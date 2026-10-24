@@ -45,9 +45,12 @@ export const api = {
 export type ChatEvent =
   | { type: "progress"; data: {stage:string;message:string} }
   | { type: "tool"; data: { name: string; input: Record<string, any> } }
-  | { type: "tool_result"; data:{name:string;content:string;is_error:boolean} }
+  | { type: "tool_result"; data: { name: string; content: string; is_error?: boolean } }
   | { type: "ui"; data: UiEvent }
   | { type: "reply"; data: { text: string; usage: Record<string, unknown>; model: string } }
+  | { type: "text_delta"; data: { text: string } }
+  | { type: "clear_deltas"; data?: Record<string, unknown> }
+  | { type: "audio_chunk"; data: { audio: string; text?: string; index?: number; format?: string } }
   | { type: "error"; data: { message: string } }
   | { type: "done"; data: null };
 
