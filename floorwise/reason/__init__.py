@@ -36,3 +36,4 @@ __all__ = [
     "parse_plan",
     "run_plan",
 ]
+from floorwise.reason import evac_ops  # noqa: E402,F401  (registers the evacuation operators)
