@@ -64,6 +64,7 @@ export function useNavigator(buildingId: string) {
   const [previewDoor, setPreviewDoor] = useState<Opening | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
+  const [busyLabel,setBusyLabel]=useState("Working…");
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
   const geometryRef = useRef<Geometry | null>(null);
@@ -211,12 +212,14 @@ export function useNavigator(buildingId: string) {
     setVisualResult(null);setHighlights(new Set());
     push({ role: "user", text });
     setBusy(true);
+    setBusyLabel("Starting your request…");
     const current = generation.current;
     const g = geometryRef.current;
 
     try {
       await chat(sessionId, text, (event) => {
         if (current !== generation.current || !event || typeof event !== "object") return;
+        if(event.type==='progress'){setBusyLabel(event.data.message+'…');return;}
         if (event.type === "tool") push({ role: "activity",tool:event.data.name,input:event.data.input, text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
         else if(event.type==="tool_result"){
           let result:unknown=event.data.content;try{result=JSON.parse(event.data.content);}catch{}
@@ -255,6 +258,6 @@ export function useNavigator(buildingId: string) {
   return {
     visualResult,setVisualResult,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
-    goTo, ask, toggleClosed, decideChange,
+    goTo, ask, toggleClosed, decideChange,busyLabel,
   };
 }

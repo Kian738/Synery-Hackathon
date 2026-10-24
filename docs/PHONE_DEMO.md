@@ -7,7 +7,7 @@ uv sync
 uv run fw start --lan
 ```
 
-On the laptop, open **Phone**, then **Pair a phone**. Open the printed `/phone` address on the phone using the same network. Type the six-digit code. Compare the two-digit confirmation number on both screens and press **Allow** on the laptop. Close setup; pairing remains active.
+On the laptop, open **Phone**, then **Pair a phone**. Scan the QR with the phone camera on the same network. The address and six-digit code are also available under **Or enter the code manually**. Compare the two-digit confirmation number on both screens and press **Allow** on the laptop. Close setup; pairing remains active. The QR is generated locally, contains the one-use code in the URL fragment, and changes when **New code** is pressed. Codes expire after two minutes.
 
 Choose a route on the laptop. The phone shows the current computed instruction, Next, Back, Repeat, a touch look pad and Recenter. Next/Back use the laptop's chapter controls and pause preview playback. Turning changes camera orientation only. It does not change the declared location, route, or confirm that someone physically reached a waypoint. Closing or disconnecting the phone leaves desktop navigation available. End pairing from laptop setup when finished.
 
