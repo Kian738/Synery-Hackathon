@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talk to Your Building // Dispatch Visualizer</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Three.js + OrbitControls via CDN with offline Canvas 2D fallback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    <!-- Top Telemetry Header -->
+    <header class="top-header">
+      <div class="branding">
+        <div class="status-indicator live"></div>
+        <div class="title-group">
+          <h1>TALK TO YOUR BUILDING</h1>
+          <span class="subtitle">AUTONOMOUS INDOOR SPATIAL DISPATCHER // v4.2</span>
+        </div>
+      </div>
+
+      <!-- Center Controls: Building & Floor Selector -->
+      <div class="header-controls">
+        <div class="control-group">
+          <label for="buildingSelect">BUILDING:</label>
+          <select id="buildingSelect" class="hud-select"></select>
+        </div>
+
+        <div class="control-group">
+          <label>ELEVATION:</label>
+          <div id="floorButtons" class="btn-group">
+            <button class="hud-btn active" data-floor="all">ALL STACKED</button>
+          </div>
+        </div>
+
+        <div class="control-group view-modes">
+          <label>MODE:</label>
+          <button id="btnMode3D" class="hud-btn active" title="3D Perspective">3D</button>
+          <button id="btnMode2D" class="hud-btn" title="2D Orthographic">2D</button>
+        </div>
+
+        <div class="control-group exploded-control">
+          <label for="explodeSlider">SPACING: <span id="explodeValue">1.0x</span></label>
+          <input type="range" id="explodeSlider" min="1.0" max="4.0" step="0.2" value="1.0" class="hud-slider">
+        </div>
+      </div>
+
+      <!-- Right Header Actions -->
+      <div class="header-actions">
+        <button id="btnAudioToggle" class="icon-btn active" title="Toggle Spoken Audio Feedback">
+          <span class="icon">🔊</span> AUDIO ON
+        </button>
+        <button id="btnResetView" class="hud-btn secondary" title="Reset Camera View">RESET CAM</button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="workspace">
+      <!-- 3D / 2D Canvas Viewport -->
+      <main id="viewport" class="viewport-container">
+        <!-- Floating HUD Overlays -->
+        <div class="viewport-overlay top-left">
+          <div class="telemetry-badge" id="telemetryBadge">BUILDING: LOADING...</div>
+          <div class="view-mode-tag" id="viewModeTag">MODE: 3D PERSPECTIVE</div>
+        </div>
+
+        <div class="viewport-overlay top-right">
+          <div class="legend">
+            <div class="legend-item"><span class="swatch prod"></span> Production</div>
+            <div class="legend-item"><span class="swatch office"></span> Office</div>
+            <div class="legend-item"><span class="swatch lab"></span> Lab / Tech</div>
+            <div class="legend-item"><span class="swatch corridor"></span> Corridor</div>
+            <div class="legend-item"><span class="swatch connector"></span> Lift / Stair</div>
+            <div class="legend-item"><span class="swatch closed"></span> Closed / Hazard</div>
+          </div>
+        </div>
+
+        <!-- Room Hover Info Tooltip -->
+        <div id="tooltip" class="hud-tooltip hidden"></div>
+
+        <!-- Fallback 2D Canvas (active when WebGL unavailable) -->
+        <canvas id="fallbackCanvas" class="hidden"></canvas>
+      </main>
+
+      <!-- Right Collapsible Control Sidebar -->
+      <aside class="control-sidebar">
+        <!-- Navigation Tab Strip -->
+        <div class="sidebar-tabs">
+          <button class="tab-btn active" data-tab="navTab">ROUTE</button>
+          <button class="tab-btn" data-tab="dispatchTab">DISPATCH</button>
+          <button class="tab-btn" data-tab="assetsTab">ASSETS</button>
+        </div>
+
+        <!-- Tab 1: Multi-Floor Routing -->
+        <div id="navTab" class="tab-content active">
+          <div class="panel-section">
+            <h3 class="section-title">ROUTE PLANNER</h3>
+            <div class="form-row">
+              <label for="routeStart">START SPACE:</label>
+              <select id="routeStart" class="hud-select full-width"></select>
+            </div>
+            <div class="form-row">
+              <label for="routeDest">DESTINATION:</label>
+              <select id="routeDest" class="hud-select full-width"></select>
+            </div>
+
+            <div class="form-row-inline">
+              <label class="checkbox-label">
+                <input type="checkbox" id="stepFreeCheck">
+                <span class="checkmark"></span>
+                Step-Free (Accessible / Lifts only)
+              </label>
+            </div>
+
+            <div class="form-row-inline">
+              <label for="minWidthInput">Min Door Width (m):</label>
+              <input type="number" id="minWidthInput" min="0.5" max="3.0" step="0.1" placeholder="e.g. 0.9" class="hud-input short">
+            </div>
+
+            <div class="btn-group-row">
+              <button id="btnCalculateRoute" class="hud-btn primary full-width">CALCULATE OPTIMAL ROUTE</button>
+              <button id="btnClearRoute" class="hud-btn secondary">CLEAR</button>
+            </div>
+          </div>
+
+          <!-- Route Telemetry Output -->
+          <div id="routeStatsCard" class="panel-section stats-card hidden">
+            <h4 class="card-title">ROUTE TELEMETRY</h4>
+            <div class="stats-grid">
+              <div class="stat-box">
+                <span class="stat-label">TOTAL DISTANCE</span>
+                <span id="statDistance" class="stat-value">0.0 m</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">EST. WALK TIME</span>
+                <span id="statTime" class="stat-value">0s</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">WAYPOINTS</span>
+                <span id="statNodes" class="stat-value">0</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-label">STEP-FREE</span>
+                <span id="statStepFree" class="stat-value">NO</span>
+              </div>
+            </div>
+
+            <h4 class="card-title mt-2">TURN-BY-TURN GUIDANCE</h4>
+            <ol id="directionsList" class="directions-list"></ol>
+          </div>
+        </div>
+
+        <!-- Tab 2: Live Dispatch & Closures -->
+        <div id="dispatchTab" class="tab-content">
+          <div class="panel-section">
+            <div class="section-header-split">
+              <h3 class="section-title">VERTICAL CONNECTORS</h3>
+              <button id="btnResetClosures" class="hud-btn mini">RESET ALL</button>
+            </div>
+            <p class="panel-hint">Toggle operational availability of lifts and stairs in real time:</p>
+            <div id="connectorsList" class="connectors-list"></div>
+          </div>
+
+          <div class="panel-section">
+            <h3 class="section-title">SYNTHETIC DOOR PLACEMENT</h3>
+            <p class="panel-hint">Create dynamic opening between geometrically adjacent spaces (&le; 0.6m apart):</p>
+            <div class="form-row">
+              <label for="doorRoomA">ROOM A:</label>
+              <select id="doorRoomA" class="hud-select full-width"></select>
+            </div>
+            <div class="form-row">
+              <label for="doorRoomB">ROOM B:</label>
+              <select id="doorRoomB" class="hud-select full-width"></select>
+            </div>
+            <button id="btnAddDoor" class="hud-btn full-width accent">INSERT SYNTHETIC DOOR</button>
+            <div id="doorStatusMsg" class="status-msg hidden"></div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Industrial Assets -->
+        <div id="assetsTab" class="tab-content">
+          <div class="panel-section">
+            <h3 class="section-title">FACILITY ASSET INVENTORY</h3>
+            <div class="form-row">
+              <input type="text" id="assetSearchInput" placeholder="Filter equipment, machines..." class="hud-input full-width">
+            </div>
+            <div id="assetsList" class="assets-list"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Voice Navigation HUD -->
+    <footer class="voice-hud">
+      <div class="voice-mic-container">
+        <button id="btnMic" class="mic-btn" title="Push to talk (Speech Recognition)">
+          <div class="pulse-ring"></div>
+          <span class="mic-icon">🎙️</span>
+        </button>
+      </div>
+
+      <div class="voice-status-group">
+        <div class="voice-telemetry">
+          <span id="voiceStatusBadge" class="status-badge ready">READY</span>
+          <span id="voiceStatusText" class="status-text">Click microphone or type command...</span>
+        </div>
+        <div id="voiceTranscript" class="transcript-display">"Take me to the 3D printer" // "Close office lift" // "Show floor 1"</div>
+      </div>
+
+      <div class="voice-input-group">
+        <input type="text" id="voiceTextInput" placeholder="Type voice command (e.g. 'take me to kitchen', 'close lift')..." class="hud-input voice-input">
+        <button id="btnSendVoice" class="hud-btn primary">SEND</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="voice.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
