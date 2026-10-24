@@ -36,13 +36,26 @@ def test_template_parameters_are_validated_by_name():
         instantiate("nothing")
 
 
-def test_evacuation_template_runs_offline_up_to_the_evacuation_solver_then_abstains():
+def test_evacuation_template_runs_every_step_with_the_exact_solver():
+    campus = Building.load(CAMPUS_DIR)
+    seats = {}
+    for asset in campus.assets.values():
+        if asset["type"] in ("chair", "office_chair"):
+            seats[asset["space_id"]] = seats.get(asset["space_id"], 0) + 1
+    fire = max(sorted(seats), key=seats.get)
+    spec = {"hazards": [{"spaces": [fire]}], "responders": {"auto": True}}
+    trace = run_plan(campus, instantiate("evacuation", spec=spec))
+    assert trace.abstained is None
+    assert [r.id for r in trace.results] == ["spec", "g1", "occ", "exits", "evac", "bn", "resp", "cand", "best"]
+    assert trace.results[1].value.closed == {fire}
+    assert trace.answer.T_after_s < trace.answer.T_before_s and all(f.verified for f in trace.answer.fixes)
+
+
+def test_evacuation_template_abstains_naming_the_step_when_no_door_helps():
     factory = Building.load(FACTORY_DIR)
-    fire = space_id(factory, "Quality lab 0.21")
-    trace = run_plan(factory, instantiate("evacuation", spec={"hazards": [{"spaces": [fire]}], "objective": "min_evacuation_time"}))
-    assert [r.id for r in trace.results if r.ok] == ["spec", "g1", "occ", "exits"]
-    assert trace.abstained.step == "evac" and "provided by floorwise/evacuation" in trace.abstained.reason
-    assert trace.results[1].value.closed == {fire} and trace.results[2].value.total == 146
+    fire = space_id(factory, "Meeting room 0.24")
+    trace = run_plan(factory, instantiate("evacuation", spec={"hazards": [{"spaces": [fire]}], "responders": {"auto": True}}))
+    assert trace.abstained.step == "best" and "no door or widening" in trace.abstained.reason
 
 
 def test_delivery_equals_direct_core_calls_on_two_kinds_of_building():

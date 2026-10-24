@@ -190,23 +190,22 @@ def test_bottom_value_abstains(factory):
     assert trace.abstained.step == "v" and trace.answer is None
 
 
-def test_evacuation_placeholders_abstain_until_plugged_in(factory):
+def test_evacuation_operators_run_the_exact_solver_and_can_be_swapped(factory):
     fire = by_name(factory, "Quality lab 0.21")
     steps = [("spec", "scenario", {"spec": {"hazards": [{"spaces": [fire]}]}}),
              ("g1", "apply_hazards", {"world": W, "spec": "#spec"}),
              ("occ", "occupants", {"world": "#g1", "spec": "#spec"}),
              ("evac", "evacuate", {"world": "#g1", "occupants": "#occ", "spec": "#spec"})]
     trace = run_plan(factory, plan("fire", steps, "#evac"))
-    assert [r.id for r in trace.results] == ["spec", "g1", "occ", "evac"]
-    assert trace.abstained.step == "evac" and "provided by floorwise/evacuation" in trace.abstained.reason
+    assert [r.id for r in trace.results] == ["spec", "g1", "occ", "evac"] and trace.abstained is None
     assert trace.results[1].value.closed == {fire}
+    assert trace.answer.total == trace.results[2].value.total and trace.answer.T_s > 0
+    again = run_plan(factory, plan("fire", steps, "#evac"))
+    assert again.answer == trace.answer  # deterministic
 
-    plugged = REGISTRY.copy()
-    original = plugged.get("evacuate")
-    plugged.register(replace(original, fn=lambda world, occupants, spec: {"T_s": 10}), replace=True)
-    done = run_plan(factory, plan("fire", steps, "#evac"), registry=plugged)
-    assert done.abstained is None and done.answer == {"T_s": 10}
-    assert REGISTRY.get("evacuate") is original
+    swapped = REGISTRY.copy()
+    swapped.register(replace(swapped.get("evacuate"), fn=lambda world, occupants, spec: {"T_s": 10}), replace=True)
+    assert run_plan(factory, plan("fire", steps, "#evac"), registry=swapped).answer == {"T_s": 10}
 
 
 def test_unknown_hazard_space_abstains_at_apply_hazards(factory):
