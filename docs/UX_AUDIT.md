@@ -23,7 +23,7 @@
 | 17 | Disconnected selection | Linked room selection and contextual inspector; explicit Focus room animates framing |
 | 18 | Unexplained door gaps | Oriented instanced frames and thresholds; passage/entrance distinctions |
 | 19 | Connector teleports | Labeled landings and explicit transition curtain; no traversal through unknown interiors |
-| 20 | Unenclosed interiors | Full supplied wall heights, interior ceiling, balanced lighting; overview remains open |
+| 20 | Unenclosed interiors | Full supplied wall heights and actual upper-floor slab coverage; unrecorded roofs remain open, with upper walls visible through voids |
 | 21 | Unrecognizable assets | Procedural furniture, printer, oscilloscope and supplied internal-stair silhouettes; muted irrelevant context |
 | 22 | Coplanar artifacts | Display-wall union removes overlapping segments; deterministic floor depth layers |
 | 23 | Truncated visual answers | Typed validated visual events, complete entity sets and session-scoped result pages |

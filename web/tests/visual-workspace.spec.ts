@@ -34,9 +34,13 @@ test("complete real chat analytics are visual, paged and free of model calls",as
 test("floor scope and linked plan stay usable through preview",async({page},info)=>{
   await page.goto(`${campus}&at=proc-campus-dev-000-F2-S008&to=Canteen%200.28`);
   const scene=page.getByTestId("building-scene");await expect(scene).toBeVisible();
+  await expect(page.locator(".building-tools")).toBeAttached();
+  if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("combobox",{name:"Visible floors"}).selectOption("route");
   await expect(scene).toHaveAttribute("data-visible-floors",/F0.*F1.*F2/);
   await capture(page,"route-floors",info.project.name);
+  await expect(page.locator(".building-tools")).toBeAttached();
+  if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("combobox",{name:"Visible floors"}).selectOption("current");
   await expect(scene).toHaveAttribute("data-visible-floors",/^[^,]+$/);
   await page.getByRole("button",{name:"Guide me step by step"}).click();

@@ -11,6 +11,8 @@ On the laptop, open **Phone**, then **Pair a phone**. Open the printed `/phone` 
 
 Choose a route on the laptop. The phone shows the current computed instruction, Next, Back, Repeat, a touch look pad and Recenter. Next/Back use the laptop's chapter controls and pause preview playback. Turning changes camera orientation only. It does not change the declared location, route, or confirm that someone physically reached a waypoint. Closing or disconnecting the phone leaves desktop navigation available. End pairing from laptop setup when finished.
 
+No route is needed to use the remote pad: in the overview it turns the model around the current camera target. It does not silently switch into guidance. **Open 3D on this phone** opens the selected building in a separate full-scene phone workspace. Motion and disconnect controls are under **Motion & connection**. On smaller screens the laptop-style secondary controls are under the three-dot **Building tools** menu; Map and the current view remain directly accessible.
+
 ## Motion look readiness
 
 The default `http://<LAN-IP>:8000/phone` address supports touch control. Phone motion sensors require a secure context; enable them only after the phone opens an HTTPS address with a certificate it trusts and the user taps **Turn on motion look**. iOS may ask permission. Denial or missing sensors preserves touch controls. No insecure-browser flags or public tunnel are configured.

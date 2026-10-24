@@ -57,6 +57,22 @@ class Peer:
 STEP = {"text": "Walk 20 metres along the corridor to the stairs.", "short": "Corridor", "icon": "straight", "metres": 20}
 
 
+@pytest.mark.parametrize('building_id', ['', '../secret', 'bad/id', '<script>', 'x'*101, 42, None])
+def test_building_reference_rejects_non_identifiers(building_id):
+    hub, _, made, laptop = start()
+    phone = pair_phone(hub, made, laptop)
+    laptop.send('route_state', status='idle', building_id=building_id)
+    assert laptop.errors()
+    assert 'route_state' not in phone.types()
+
+
+def test_building_reference_is_relayed_without_needing_a_route():
+    hub, _, made, laptop = start()
+    phone = pair_phone(hub, made, laptop)
+    laptop.send('route_state', status='idle', building_id='sample-building_1')
+    assert phone.last('route_state')['building_id'] == 'sample-building_1'
+
+
 def start(clock: Clock | None = None, settings: C.Settings | None = None):
     clock = clock or Clock()
     hub = C.Hub(settings, clock)

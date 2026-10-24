@@ -552,6 +552,7 @@ test.describe("paired demo in two browser contexts", () => {
     try {
       await pairUp(denied.laptop, denied.mobile);
       expect(await denied.mobile.evaluate(() => (window as unknown as { __asked: number }).__asked)).toBe(0);   // nothing asked on load or on pairing
+      await denied.mobile.getByText("Motion & connection",{exact:true}).click();
       await expect(denied.mobile.getByText(/Motion look is off/)).toBeVisible();
       await denied.mobile.getByRole("button", { name: "Turn on motion look" }).click();
       await expect(denied.mobile.getByText(/Motion access was declined/)).toBeVisible();
@@ -565,6 +566,7 @@ test.describe("paired demo in two browser contexts", () => {
     const granted = await contexts(browser, "DeviceOrientationEvent.requestPermission = () => Promise.resolve('granted');");
     try {
       await pairUp(granted.laptop, granted.mobile);
+      await granted.mobile.getByText("Motion & connection",{exact:true}).click();
       await granted.mobile.getByRole("button", { name: "Turn on motion look" }).click();
       await expect(granted.mobile.getByText(/Waiting for motion data|Motion look is on/)).toBeVisible();
       const fire = (alpha: number, beta: number, gamma: number) => granted.mobile.evaluate(([a, b, g]) => window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", { alpha: a, beta: b, gamma: g })), [alpha, beta, gamma]);

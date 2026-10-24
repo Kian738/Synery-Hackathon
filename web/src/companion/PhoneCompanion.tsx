@@ -189,36 +189,36 @@ export function PhoneCompanion(props: PhoneCompanionProps) {
   return (
     <main className="cmp" aria-label="Phone companion">
       <div className="cmp-status" data-tone={tone}><span className="cmp-dot" aria-hidden="true" /><span role="status" aria-live="polite">{statusText}</span></div>
+      {route?.building_id&&<a className="cmp-open-building" href={`/?building=${encodeURIComponent(route.building_id)}&explore=1`} target="_blank" rel="noopener">Open 3D on this phone ↗</a>}
 
       <section className="cmp-panel" aria-label="Current instruction">
         {idle ? (
-          <p>No route yet. Ask for directions on the laptop and the first step appears here.</p>
+          <><h1>Explore the building</h1><p>Drag below to turn the laptop’s building view. Choose a route on the laptop to get directions here.</p></>
         ) : (
           <>
             <div className="cmp-step">
               <Glyph icon={route!.instruction!.icon} />
               <div>
                 <div className="cmp-count">Step {(route!.step_index ?? 0) + 1} of {route!.step_count}{route!.status === "arrived" ? " · Arrived" : ""}{route!.instruction!.metres ? ` · ${Math.round(route!.instruction!.metres!)} m` : ""}</div>
-                <div className="cmp-short">{route!.instruction!.short || route!.instruction!.text}</div>
+
               </div>
             </div>
             <p className="cmp-instruction" aria-live="polite">{route!.instruction!.text}</p>
-            {route!.next && <p className="cmp-next">Next: {route!.next.short || route!.next.text}</p>}
+
           </>
         )}
       </section>
 
-      <div className="cmp-row three">
+      {!idle&&<div className="cmp-row three">
         <button className="cmp-btn" onClick={() => act("back")} disabled={!connected || idle}>Back</button>
         <button className="cmp-btn" onClick={() => act("repeat")} disabled={!connected || idle}>Repeat</button>
         <button className="cmp-btn primary" onClick={() => act("next")} disabled={!connected || idle}>Next</button>
-      </div>
-      <p className="cmp-small">These buttons ask the laptop to change the instruction it shows. They never move you on the route by themselves.</p>
+      </div>}
 
       <section aria-label="Look around" className="cmp-panel cmp-row">
         <div className="cmp-pad" data-active={dragging} role="group" aria-label="Look pad: drag to turn the laptop view"
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
-          <span>Drag here to look around<br /><span className="cmp-small">Left or right turns, up or down tilts</span></span>
+          <span>{idle?"Turn the building":"Look around on the laptop"}<br/><span className="cmp-small">Drag left / right · up / down</span></span>
         </div>
         <div className="cmp-row two">
           <button className="cmp-btn" onClick={() => look(-NUDGE_DEG, 0)} disabled={!connected} aria-label="Look left 15 degrees">◀ Look left</button>
@@ -227,7 +227,7 @@ export function PhoneCompanion(props: PhoneCompanionProps) {
         <button className="cmp-btn" onClick={recenter} disabled={!connected}>Recenter view</button>
       </section>
 
-      <section aria-label="Motion look" className="cmp-panel cmp-row">
+      <details className="cmp-settings"><summary>Motion & connection</summary><section aria-label="Motion look" className="cmp-panel cmp-row">
         <p role="status" aria-live="polite">{SENSOR_TEXT[sensor]}</p>
         {gyroOn ? (
           <button className="cmp-btn" onClick={stopGyro}>Turn off motion look</button>
@@ -236,7 +236,7 @@ export function PhoneCompanion(props: PhoneCompanionProps) {
         )}
       </section>
 
-      <button className="cmp-btn quiet" onClick={leave}>Disconnect this phone</button>
+      <button className="cmp-btn quiet" onClick={leave}>Disconnect this phone</button></details>
     </main>
   );
 }

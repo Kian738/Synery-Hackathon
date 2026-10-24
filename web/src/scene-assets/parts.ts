@@ -87,12 +87,14 @@ export class PartBuilder {
 
   /**
    * Box rotated about X (positive angle leans its +Y end toward +Z). Dimensions are centre-based metres and
-   * pre-rotation: sx wide, sy tall, sz thick. The caller keeps the rotated extent inside the footprint.
+   * pre-rotation: sx wide, sy tall, sz thick. Rotated Y/Z extents shrink to remain grounded and inside the footprint.
    */
   tilt(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, angle: number, color: string) {
     const x = Math.min(sx, 2 * (this.hw - Math.abs(cx)));
-    if (x < MIN || sy < MIN || sz < MIN) return this;
-    this.parts.push({ shape: "box", position: [r4(cx / this.w), r4(cy), r4(cz / this.d)], scale: [r4(x / this.w), r4(sy), r4(sz / this.d)], color, rotation: [r4(angle), 0, 0] });
+    const a=r4(angle),c=Math.abs(Math.cos(a)),s=Math.abs(Math.sin(a));
+    const factor=Math.min(1,2*(this.hd-Math.abs(cz))/(s*sy+c*sz),2*cy/(c*sy+s*sz));
+    if (x < MIN || sy*factor < MIN || sz*factor < MIN) return this;
+    this.parts.push({ shape: "box", position: [r4(cx / this.w), r4(cy), r4(cz / this.d)], scale: [r4(x / this.w), r4(sy*factor), r4(sz*factor / this.d)], color, rotation: [a, 0, 0] });
     return this;
   }
 }

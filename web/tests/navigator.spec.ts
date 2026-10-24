@@ -75,6 +75,8 @@ test("3D view can be switched on", async ({ page }) => {
   await page.goto(FACTORY);
   await page.getByRole("button", { name: "3D" }).click();
   await expect(page.getByRole("button", { name: "3D" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".building-tools")).toBeAttached();
+  if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
   await expect(page.getByRole("combobox", { name: "Visible floors" })).toBeVisible();
 });
 
@@ -127,6 +129,8 @@ test("HTTP chat failures preserve the composer and building controls", async ({p
 
 test("weak point simulation highlights the real step-free consequence", async ({page}) => {
   await page.goto(FACTORY);
+  await expect(page.locator(".building-tools")).toBeAttached();
+  if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("button",{name:"Stress test",exact:true}).click();
   await expect(page.getByRole("region",{name:"Building stress test"})).toContainText("Office lift");
   await expect(page.getByRole("region",{name:"Building stress test"})).toContainText("29 / 56 rooms");

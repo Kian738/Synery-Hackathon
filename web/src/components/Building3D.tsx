@@ -81,10 +81,14 @@ function Doorways({geometry,floorId,elevation,follow,activeOpening}:{geometry:Ge
   return <group position={[0,elevation,0]}><instancedMesh ref={ref} args={[undefined,undefined,parts.length]}><boxGeometry/><meshStandardMaterial roughness={.7} metalness={.15}/></instancedMesh></group>;
 }
 
-function Ceiling({spaces,elevation}:{spaces:Space[];elevation:number}) {
-  const geometry=useMemo(()=>{const parts=spaces.map(floorShape),merged=parts.length?mergeGeometries(parts):null;parts.forEach(g=>g.dispose());return merged;},[spaces]);
-  useEffect(()=>()=>geometry?.dispose(),[geometry]);
-  return geometry?<mesh geometry={geometry} position={[0,elevation-.025,0]}><meshStandardMaterial color="#c1c8c6" roughness={1} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={1}/></mesh>:null;
+function UpperContext({geometry,above}:{geometry:Geometry;above:number}) {
+  const surfaces=useMemo(()=>(geometry.scene?.slabs??[]).flatMap(s=>{
+    const floor=geometry.floors.find(f=>f.id===s.floor_id);if(!floor||floor.elevation_m<=above+.05)return [];
+    const mesh=new THREE.BufferGeometry();mesh.setAttribute("position",new THREE.Float32BufferAttribute(s.vertices.flatMap(p=>[p[0],floor.elevation_m,-p[1]]),3));mesh.computeVertexNormals();
+    return [{floor,mesh}];
+  }),[geometry,above]);
+  useEffect(()=>()=>surfaces.forEach(s=>s.mesh.dispose()),[surfaces]);
+  return <>{surfaces.map(({floor,mesh})=><group key={floor.id}><mesh geometry={mesh}><meshStandardMaterial color="#b2bcb9" roughness={1} side={THREE.DoubleSide}/></mesh><Walls geometry={geometry} floorId={floor.id} elevation={floor.elevation_m} follow/></group>)}</>;
 }
 
 const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,connectorSpaces,labelFloor,activeOpening}:{geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
@@ -96,7 +100,7 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
         <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} onPick={onSpaceClick}/>
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening}/>
-        {follow&&ceiling&&<Ceiling spaces={spaces} elevation={elevation+height}/>}
+
         {geometry.connectors.flatMap(c=>c.space_ids.map(id=>({c,s:spaces.find(s=>s.id===id)}))).filter(pair=>pair.s).map(({c,s})=>{const b=bounds(s!.polygon);return <group key={s!.id} position={[(b.minX+b.maxX)/2,elevation+.08,-(b.minY+b.maxY)/2]}>
           <mesh rotation={[-Math.PI/2,0,0]}><planeGeometry args={[Math.min(1,b.maxX-b.minX),Math.min(1,b.maxY-b.minY)]}/><meshStandardMaterial color={c.kind==="lift"?"#5e92a4":"#b4a378"}/></mesh>
           {c.kind==="stairs"&&[-.3,0,.3].map(z=><mesh key={z} position={[0,.01,z]}><boxGeometry args={[.8,.015,.04]}/><meshBasicMaterial color="#e6e8e6"/></mesh>)}
@@ -108,12 +112,19 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
 
 function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors}:{route:Route;geometry:Geometry;explode?:number;ghost?:boolean;xray?:boolean;visibleFloors:Set<string>}){
   const meshes=useMemo(()=>routeRuns(route,visibleFloors).map(run=>{
-    const points=run.map(p=>{const f=geometry.floors.find(f=>f.id===p.floor_id);return frame(p.x,p.y,(f?.elevation_m??0)+(f?.level??0)*explode+.14);});
-    const curve=new THREE.CurvePath<THREE.Vector3>();for(let i=1;i<points.length;i++)curve.add(new THREE.LineCurve3(points[i-1],points[i]));
-    return new THREE.TubeGeometry(curve,Math.min(512,Math.max(12,points.length*8)),ghost?.065:.085,6,false);
+    const points=run.map(p=>{const f=geometry.floors.find(f=>f.id===p.floor_id);return frame(p.x,p.y,(f?.elevation_m??0)+(f?.level??0)*explode+.045);});
+    const vertices:number[]=[],radius=ghost?.055:.08;
+    for(let i=1;i<points.length;i++){
+      const a=points[i-1],b=points[i],delta=b.clone().sub(a);if(delta.length()<1e-6)continue;
+      const n=new THREE.Vector3(-delta.z,0,delta.x).normalize().multiplyScalar(radius);
+      const l=a.clone().add(n),r=a.clone().sub(n),u=b.clone().add(n),v=b.clone().sub(n);
+      for(const p of [l,r,u,r,v,u])vertices.push(p.x,p.y,p.z);
+    }
+    for(const p of points)for(let k=0;k<12;k++)for(const v of [p,new THREE.Vector3(p.x+radius*Math.cos(k*Math.PI/6),p.y,p.z+radius*Math.sin(k*Math.PI/6)),new THREE.Vector3(p.x+radius*Math.cos((k+1)*Math.PI/6),p.y,p.z+radius*Math.sin((k+1)*Math.PI/6))])vertices.push(v.x,v.y,v.z);
+    const mesh=new THREE.BufferGeometry();mesh.setAttribute("position",new THREE.Float32BufferAttribute(vertices,3));mesh.computeVertexNormals();return mesh;
   }),[route,geometry,explode,visibleFloors,ghost]);
   useEffect(()=>()=>meshes.forEach(m=>m.dispose()),[meshes]);
-  return <>{meshes.map((g,i)=><mesh key={i} geometry={g}><meshStandardMaterial color={ghost?"#869ba5":"#ffd45c"} emissive={ghost?"#000000":"#a8750d"} emissiveIntensity={.5} roughness={.8} transparent={ghost} opacity={ghost?.3:1} depthWrite={!ghost}/></mesh>)}</>;
+  return <>{meshes.map((g,i)=><mesh key={i} geometry={g}><meshStandardMaterial color={ghost?"#869ba5":"#ffd45c"} emissive={ghost?"#000000":"#a8750d"} emissiveIntensity={.5} roughness={.8} side={THREE.DoubleSide} transparent={ghost} opacity={ghost?.3:1} depthWrite={!ghost}/></mesh>)}</>;
 }
 
 
@@ -145,7 +156,7 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       const matrix=new THREE.Matrix4().lookAt(camera.position,camera.position.clone().add(direction),new THREE.Vector3(0,1,0));
       const target=new THREE.Quaternion().setFromRotationMatrix(matrix);
       if(lookOffset)target.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(lookOffset.pitch),-THREE.MathUtils.degToRad(lookOffset.yaw),0,"YXZ")));
-      if(first.current)camera.quaternion.copy(target);else camera.quaternion.rotateTowards(target,Math.PI*dt);
+      if(first.current)camera.quaternion.copy(target);else camera.quaternion.rotateTowards(target,Math.min(camera.quaternion.angleTo(target)*(1-Math.exp(-5*dt)),Math.PI*.65*dt));
       if(camera.quaternion.angleTo(target)>.002)invalidate();
       first.current=false;
     }
@@ -159,6 +170,8 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
  geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;closed?:Set<string>;previewDoor?:Opening|null;
  lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
+  const stageRef=useRef<HTMLDivElement>(null);
+  useEffect(()=>{const el=stageRef.current;if(!el)return;const wheel=(e:WheelEvent)=>{if(e.ctrlKey)e.preventDefault();};const gesture=(e:Event)=>e.preventDefault();el.addEventListener("wheel",wheel,{passive:false,capture:true});el.addEventListener("gesturestart",gesture,{passive:false});el.addEventListener("gesturechange",gesture,{passive:false});return()=>{el.removeEventListener("wheel",wheel,true);el.removeEventListener("gesturestart",gesture);el.removeEventListener("gesturechange",gesture);};},[]);
   const reduced=typeof matchMedia!=="undefined"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
   const emphasis=focusRequest?.id??(visualResult?.measurements.primary_ids as string[]|undefined)?.[0];
   const [action,setAction]=useState({id:0,kind:""});
@@ -207,11 +220,12 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
     ...(visualResult?.kind==="intervention"?(()=>{const o=visualResult.measurements.proposed_opening as Opening|undefined;return o&&visibleFloors.has(o.floor_id)?[{id:"proposed",text:"Proposed opening · not applied",position:[o.position[0],elevation(o.floor_id)+1.8,-o.position[1]] as [number,number,number]}]:[];})():[])
   ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode]);
 
-  return <div className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-visible-floors={[...visibleFloors].join(",")} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
+  return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,1.5]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.06:.5,far:Math.max(200,span*6)}} gl={{antialias:true}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
       <ambientLight intensity={follow?1.3:.65}/><hemisphereLight args={["#edf5ff","#59645c",follow?1.5:1.1]}/>
       <directionalLight position={[cx+30,80,cz+40]} intensity={1.7}/><directionalLight position={[cx-30,20,cz-25]} intensity={.6} color="#c6dfef"/>
+      {follow&&<UpperContext geometry={geometry} above={elevation(activeFloor)}/>}
       {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening}/>)}
       {geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{
         const anchor=s.anchor??s.polygon[0];return <group key={`focus-${s.id}`}>
@@ -240,7 +254,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       })}
       {here&&geometry.spaces.filter(s=>s.id===here&&visibleFloors.has(s.floor_id)).map(s=>{const point=route?.stops[0]===here?route.polyline[0]:null;const b=bounds(s.polygon);return <group key={s.id} position={[point?.x??s.anchor?.[0]??(b.minX+b.maxX)/2,elevation(s.floor_id)+.08,-(point?.y??s.anchor?.[1]??(b.minY+b.maxY)/2)]}><mesh rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.14,.22,24]}/><meshBasicMaterial color="#65d7ac" side={THREE.DoubleSide} depthTest={false}/></mesh><mesh position={[0,.12,0]}><sphereGeometry args={[.1,12,8]}/><meshStandardMaterial color="#65d7ac" emissive="#1e7a4c"/></mesh>{heading!==undefined&&<group rotation={[0,-heading*Math.PI/180,0]}><mesh position={[0,.15,-.65]} rotation={[-Math.PI/2,0,0]}><coneGeometry args={[.2,.5,3]}/><meshBasicMaterial color="#65d7ac"/></mesh></group>}</group>;})}
       {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&previewMode&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report} lookOffset={lookOffset}/>
-        :<><OrbitControls mouseButtons={{LEFT:orbiting?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.ROTATE}} touches={{ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_ROTATE}} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><ExploreCamera cacheKey={`${geometry.building.id}-${multi?scope:floorId}-${exploded}-${focusRequest?`${focusRequest.id}-${focusRequest.revision}`:visualResult?.id??"explore"}`} fitVersion={fitVersion} box={fitBox} height={multi?Math.max(...floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...floors.map(f=>elevation(f.id))):3.8} elevation={multi?Math.min(...floors.map(f=>elevation(f.id))):elevation(floorId)} action={action}/></>}
+        :<><OrbitControls mouseButtons={{LEFT:orbiting?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.ROTATE}} touches={{ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_ROTATE}} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><ExploreCamera remoteLook={lookOffset} cacheKey={`${geometry.building.id}-${multi?scope:floorId}-${exploded}-${focusRequest?`${focusRequest.id}-${focusRequest.revision}`:visualResult?.id??"explore"}`} fitVersion={fitVersion} box={fitBox} height={multi?Math.max(...floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...floors.map(f=>elevation(f.id))):3.8} elevation={multi?Math.min(...floors.map(f=>elevation(f.id))):elevation(floorId)} action={action}/></>}
 
       <SceneLabels labels={sceneLabels} onProject={setProjectedLabels}/>
     </Canvas>

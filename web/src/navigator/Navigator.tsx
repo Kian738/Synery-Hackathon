@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { RoomText } from "../components/RoomText";
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -26,6 +27,9 @@ export default function Navigator() {
   const [weakOpen,setWeakOpen]=useState(false);
   const [questionOpen,setQuestionOpen]=useState(false);
   const [phoneOpen,setPhoneOpen]=useState(false);
+  const [compact,setCompact]=useState(()=>matchMedia("(max-width:1023px)").matches);
+  const [toolsOpen,setToolsOpen]=useState(false);
+  useEffect(()=>{const q=matchMedia("(max-width:1023px)");const changed=()=>{setCompact(q.matches);setToolsOpen(false);};q.addEventListener("change",changed);return()=>q.removeEventListener("change",changed);},[]);
   const [lookOffset,setLookOffset]=useState({yaw:0,pitch:0});
   const [focusRequest,setFocusRequest]=useState<{id:string;revision:number}|null>(null);
   const [heading,setHeading]=useState<string>("");
@@ -35,7 +39,7 @@ export default function Navigator() {
   const [scope, setScope] = useState<"current"|"route"|"building">("current");
   const [exploded,setExploded]=useState(true);
   const [planExpanded,setPlanExpanded]=useState(false);
-  const [stageExpanded,setStageExpanded]=useState(false);
+  const [stageExpanded,setStageExpanded]=useState(params.get("explore")==="1");
   const [seekRequest,setSeekRequest]=useState(0);
   const [previewPosition,setPreviewPosition]=useState<{x:number;y:number;floor_id:string}|null>(null);
   const following=view==="follow"||view==="guide";
@@ -44,7 +48,7 @@ export default function Navigator() {
   const [buildingImport, setBuildingImport] = useState(false);
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
-  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setHeading("");setPlanExpanded(false);setStageExpanded(false);setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null); }, [buildingId]);
+  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setHeading("");setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null); }, [buildingId]);
   // Deep link (shareable, QR at a door): ?building=…&at=<space id>&to=<place>&step_free=1
   const linked = useRef(false);
   useEffect(() => {
@@ -164,7 +168,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -177,7 +181,7 @@ export default function Navigator() {
           </div>
         )}
         {nav.turnUsage&&<div className="turn-usage" role="status">{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}</div>}
-        <Composer busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);}} />
+        <Composer busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
       </aside>
 
       <main className="model-panel relative order-1 flex h-[46vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
@@ -191,12 +195,18 @@ export default function Navigator() {
             </>}
           </div>
           <div className="model-actions">
-            <CompanionControl steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
+            <button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button>
+            {following&&<button aria-expanded={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}>Ask</button>}
+            <details className="building-tools" open={!compact||toolsOpen} onToggle={e=>{if(compact)setToolsOpen(e.currentTarget.open);}}>
+              <summary aria-label="Building tools" title="Building tools">•••</summary><div className="building-tools-content">
+            <CompanionControl buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
               onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
-              onLook={(yaw,pitch)=>{if(!nav.route)return;if(!following)setView("guide");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
+              onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
               onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
-            {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
-            {following?<><button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button><button aria-label="Read aloud" aria-pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}><Pictogram name="speaker" size={18}/></button><button aria-expanded={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}>Ask</button></>:<><button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}>Stress test</button><Link to="/lab">Evidence</Link></>}
+            {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>{setScope(e.target.value as typeof scope);if(compact)setToolsOpen(false);}}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
+            {following?<button aria-label="Read aloud" aria-pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}><Pictogram name="speaker" size={18}/>Read aloud</button>:<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}>Stress test</button><Link to="/lab">Evidence</Link></>}
+              </div>
+            </details>
           </div>
         </div>
         <div className="floor-selector"><FloorRail floors={g.floors} active={displayFloor} route={nav.route} onPick={id=>{if(following)setView("3d");nav.setFloorId(id);}} here={hereFloor} /></div>
@@ -384,7 +394,8 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide }: {
+function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom }: {
+  geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
 }) {
   const [history,setHistory]=useState(false);
@@ -437,7 +448,7 @@ function Conversation({ messages, busy, onOption, onDecide }: {
           );
         return (
           <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
-            {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}>{line.replace(/\*\*/g, "")}</p>)}
+            {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}><RoomText text={line.replace(/\*\*/g, "")} spaces={geometry.spaces} onRoom={onRoom}/></p>)}
           </div>
         );
       })}

@@ -483,6 +483,11 @@ class Hub:
         if route_id is not None and not (isinstance(route_id, str) and len(route_id) <= 64):
             raise ValueError("route_id must be a short string.")
         clean: dict = {"t": "route_state", "status": status, "route_id": route_id}
+        if "building_id" in message:
+            building_id = message["building_id"]
+            if not isinstance(building_id, str) or not 1 <= len(building_id) <= 100 or any(not (c.isascii() and (c.isalnum() or c in "_-")) for c in building_id):
+                raise ValueError("Invalid building reference.")
+            clean["building_id"] = building_id
         if status != "idle":
             count, index = message.get("step_count"), message.get("step_index")
             if not (_is_int(count) and 1 <= count <= self.s.max_steps):

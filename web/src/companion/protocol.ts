@@ -13,6 +13,7 @@ export type LookMode = "touch" | "gyro";
 
 export interface Instruction { text: string; short: string; icon: Icon; metres?: number }
 export interface RouteState {
+  building_id?: string;
   status: "idle" | "guiding" | "arrived";
   route_id?: string | null;
   step_index?: number;
@@ -90,6 +91,7 @@ function validInstruction(v: unknown): v is Instruction {
   return isRecord(v) && typeof v.text === "string" && v.text.length > 0 && typeof v.short === "string" && ICONS.includes(v.icon as Icon);
 }
 function validRouteState(v: Record<string, unknown>): boolean {
+  if(v.building_id!==undefined&&(typeof v.building_id!=="string"||! /^[A-Za-z0-9_-]{1,100}$/.test(v.building_id)))return false;
   if (!Number.isInteger(v.seq) || !(v.status === "idle" || v.status === "guiding" || v.status === "arrived")) return false;
   if (v.status === "idle") return true;
   return Number.isInteger(v.step_count) && Number.isInteger(v.step_index) && (v.step_index as number) >= 0 && (v.step_index as number) < (v.step_count as number) && validInstruction(v.instruction);
