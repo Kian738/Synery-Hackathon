@@ -51,7 +51,7 @@ export interface Asset {
 
 export interface Geometry {
   building: { id: string; name: string; source: string };
-  scene?: { revision: string; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
+  scene?: { revision: string; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];

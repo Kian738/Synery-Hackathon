@@ -8,7 +8,7 @@ import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from 
 export type Message =
   | { id: number; role: "user"; text: string }
   | { id: number; role: "agent"; text: string; model?: string }
-  | { id: number; role: "activity"; text: string }
+  | { id: number; role: "activity"; text: string; tool?:string; input?:Record<string,unknown>;result?:unknown;failed?:boolean }
   | { id: number; role: "error"; text: string }
   | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" }
   | { id: number; role: "change"; text: string; first: string; second: string; widenings?: {opening_id:string;to_m:number}[]; kind?: "widen"; openingId?: string; width?: number; start?: string; destination?: string; state: "pending" | "applied" | "discarded" };
@@ -217,7 +217,11 @@ export function useNavigator(buildingId: string) {
     try {
       await chat(sessionId, text, (event) => {
         if (current !== generation.current || !event || typeof event !== "object") return;
-        if (event.type === "tool") push({ role: "activity", text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
+        if (event.type === "tool") push({ role: "activity",tool:event.data.name,input:event.data.input, text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
+        else if(event.type==="tool_result"){
+          let result:unknown=event.data.content;try{result=JSON.parse(event.data.content);}catch{}
+          setMessages(all=>{let index=-1;for(let i=all.length-1;i>=0;i--){const m=all[i];if(m.role==="activity"&&m.tool===event.data.name&&m.result===undefined){index=i;break;}}return all.map((m,i)=>i===index?{...m,result,failed:event.data.is_error} as Message:m);});
+        }
         else if (event.type === "ui") {
           apply([event.data]);
           if (event.data.type === "preview_door") {

@@ -18,6 +18,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "openai>=3.37.0",
     "scipy>=1.18.1",
+    "websockets>=17.3",
 ]
 
 [project.scripts]

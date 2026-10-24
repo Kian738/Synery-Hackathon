@@ -1,0 +1,42 @@
+# 05 Sources, with dates and what was actually checked
+
+Status key: **read** = the document text was opened this session and the cited statement was seen; **abstract** = the publisher or repository abstract or catalogue page was opened; **search result** = bibliographic details came from a search result and the page was not opened; **not read** = not opened, listed only as a pointer. No claim in these notes rests on a "not read" item.
+
+## Evacuation modelling, verification and validation
+
+| Source | Date | URL | Used for | Status |
+|---|---|---|---|---|
+| Ronchi, Kuligowski, Reneke, Peacock, Nilsson. *The Process of Verification and Validation of Building Fire Evacuation Models.* NIST Technical Note 1822 | November 2013 | https://doi.org/10.6028/NIST.TN.1822 (catalogue page https://www.nist.gov/node/575786; PDF https://nvlpubs.nist.gov/nistpubs/technicalnotes/NIST.TN.1822.pdf) | No international V&V standard for building evacuation models; five component groups; qualitative validation tests and datasets | abstract (catalogue page). The PDF was fetched but not text-extracted; individual tests **not read** |
+| Averill, Song. *Accounting for Emergency Response in Building Evacuation: Modeling Differential Egress Capacity Solutions.* NISTIR 7425 | April 2007 | https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nistir7425.pdf | Responder counterflow in stairs raises evacuation time; occupants modelled as making room for firefighters, unlike traditional counterflow; calibrated on one 2005 drill in a six-storey office; speed falls with density; hypothetical 50-storey case with stated assumptions | **read** (pages 1-14) |
+| Kuligowski, Peacock, Hoskins. *A Review of Building Evacuation Models, 2nd edition.* NIST Technical Note 1680 | 2010 | https://www.nist.gov/node/604521 | The existence of 25 prior models, so the algorithms are not novel | search result (catalogue summary); not opened |
+| IMO MSC.1/Circ.1533, *Revised guidelines on evacuation analysis for new and existing passenger ships* | 6 June 2016 | https://www.deutsche-flagge.de/de/redaktion/dokumente/interpretationen/solas/ii-2/msc-1-circ-1533-revised-guidelines-on-evacuation-analysis-for-new-and-existing-passenger-ships.pdf ; Lloyd's Register notice: https://cruiseindustrynews.com/cruise-news/2016/12/lr-statutory-alert-revised-guidelines-on-evacuation-analysis-for-passenger-ships | Maritime benchmark-scenario stance: analysis assesses against benchmarks, not an actual emergency | search result (date and summary from the LR notice); circular text **not read** |
+
+## Flow algorithms and complexity
+
+| Source | Date | URL | Used for | Status |
+|---|---|---|---|---|
+| Ford, Fulkerson. *Constructing Maximal Dynamic Flows from Static Flows.* Operations Research 6(3):419-433 | June 1958 | https://doi.org/10.1287/opre.6.3.419 (listing: https://ideas.repec.org/a/inm/oropre/v6y1958i3p419-433.html) | Origin of flows over time; single-commodity dynamic flow from static flow | search result |
+| Bellmore, Vemuganti. *On Multi-Commodity Maximal Dynamic Flows.* Operations Research 21(1):10-21 | 1973 | https://pubsonline.informs.org/doi/10.1287/opre.21.1.10 | The single-commodity construction does not extend to several commodities (as quoted by the search tool) | search result |
+| Hoppe, Tardos. *The Quickest Transshipment Problem.* Mathematics of Operations Research 25(1):36-62 | February 2000 (Cornell technical report: February 1995) | https://doi.org/10.1287/moor.25.1.36.15211 ; https://ecommons.cornell.edu/entities/publication/aeba3666-c517-40e4-b974-10731bc6efac | First polynomial algorithm for the quickest transshipment (several sources and sinks) | search result |
+| Skutella. *An Introduction to Transshipments Over Time.* arXiv 2312.04991 | 8 December 2023 | https://arxiv.org/abs/2312.04991 | Transshipments over time as "arguably the most difficult flow over time problem that can still be solved in polynomial time"; several sources and sinks | abstract (**read** on the arXiv page) |
+| Even, Itai, Shamir. *On the Complexity of Timetable and Multicommodity Flow Problems.* SIAM Journal on Computing 5(4):691-703 | 1976 | https://epubs.siam.org/doi/10.1137/0205048 | Integral multi-commodity flow NP-complete even for two commodities, directed or undirected | search result (abstract text) |
+| Hamacher, Tjandra. *Mathematical Modelling of Evacuation Problems: A State of Art.* Fraunhofer ITWM Report 24 | 2001 (repository lists 2004) | https://kluedo.ub.rptu.de/frontdoor/index/index/docId/1477 | Dynamic network flow approaches to evacuation (min-cost dynamic flow, maximum dynamic flow, quickest flow) | search result (abstract) |
+| Lu, George, Shekhar. *Evacuation Planning: A Capacity Constrained Routing Approach.* LNCS 2665:111-125 | 2003 | https://experts.umn.edu/en/publications/evacuation-planning-a-capacity-constrained-routing-approach/ | Capacity-constrained route planning heuristic, within 10% of optimal on a real building dataset, per abstract | search result (abstract). **No nearest-exit comparison was found in what was read**, so none is attributed to it |
+
+## Guidance, landmarks and accessibility
+
+| Source | Date | URL | Used for | Status |
+|---|---|---|---|---|
+| Meilinger, Frankenstein, Bülthoff. *When in doubt follow your nose: a wayfinding strategy.* Frontiers in Psychology 5 | 26 November 2014 | https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2014.01363/full | Turns and decision points remembered better than straight intersections (about 60% of straight intersections omitted versus about 23% of turns) | **read** (abstract and summary) |
+| Lovelace, Hegarty, Montello. *Elements of Good Route Directions in Familiar and Unfamiliar Environments.* COSIT '99, LNCS 1661:65-82 | 1999 | https://www.coli.uni-saarland.de/~masta/WS13/Lovelace_etal_goodDirections_99.pdf | More complete directions, with more landmarks, segments and turns, rated higher | abstract and secondary review; paper tables not read |
+| Gramann, Hoepner, Karrer-Gauss. *Modified Navigation Instructions for Spatial Navigation Assistance Systems Lead to Incidental Spatial Learning.* Frontiers in Psychology | 13 February 2017 | https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5303713/ (doi 10.3389/fpsyg.2017.00193) | Landmark-related instruction detail improved retracing, landmark recognition and sketch maps in a driving simulator | abstract |
+| Nourin N, Pramanick, Sarkar. *How Much is too Much: Exploring the Effect of Verbal Route Description Length on Indoor Navigation.* arXiv 2408.15367 | 27 August 2024 | https://arxiv.org/abs/2408.15367 | "An ideal length of four route segments" | abstract (**read** on the arXiv page) |
+| W3C. *Web Content Accessibility Guidelines (WCAG) 2.2*, success criteria 1.4.1 Use of Color and 1.3.3 Sensory Characteristics | document dated 12 December 2024 | https://www.w3.org/TR/WCAG22/ | Not relying on colour or other single sensory characteristic alone; applied by analogy | **read** (criterion text, trimmed by the tool) |
+| ISO 21542:2021, *Building construction: Accessibility and usability of the built environment* | 2021 | https://genorma.com/en/standards/iso-21542-2021 | Scope includes egress and fire evacuation and has a wayfinding clause; a pointer only | search result; **not read**, no requirement claimed |
+| Repo research: `reports/Indoor wayfinding agent UX.md` | in repo | n/a | Raubal and Winter salience, Haas et al. CHI 2022, Bauer et al., Kalia et al. 2010, NavCog, UMaine VEMI | **not re-fetched** here; cited only as carried-forward design hints |
+| Denis, M. (1997). *The description of routes.* Cahiers de Psychologie Cognitive 16(4):409-458 | 1997 | n/a (bibliographic record only) | Pointer for follow-up reading on route-description structure | **not read**; no claim made |
+
+## Checks I made of my own (not sourced, reproducible by hand)
+
+- The two toy cases in `01-flow-formulations.md` (367, 205 and 196 s; 97, 109 and 79 s, responders at 40 to 49 s) were computed by exhaustive enumeration of all splits with a throwaway script that is not kept in the repository: it is a short loop over slot times, and the numbers can be rechecked by hand from the stated assumptions.
+- The building-size figures in `03-validation-baselines-limits.md` (median 54 spaces and about 60 openings; largest 1,623 spaces and 1,799 openings; 280 buildings) were counted directly from the supplied `building.json` files (read-only, not copied into the repository).

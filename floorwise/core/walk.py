@@ -2,7 +2,7 @@
 walks through each room: around furniture and machines, away from walls, with straight lines where
 nothing is in the way. Without it a route is drawn anchor -> door -> anchor and cuts through tables.
 
-Per space: rasterise the polygon (0.4 m cells), mark furniture footprints as blocked, compute clearance
+Per space: rasterise the polygon (0.2 m cells), mark furniture footprints as blocked, compute clearance
 (distance to the nearest wall or obstacle), run A* with a penalty for low clearance, then smooth the cell
 path by line of sight. Results are cached per (space, from, to)."""
 
@@ -85,7 +85,9 @@ class Grid:
         # Walkable = not under furniture. Clearance is a cost preference (in astar), not a hard rule, so rooms
         # that furniture nearly splits stay connected instead of producing blind straight hops.
         self.free = self.free | self.open
-        _, self.components = cv2.connectedComponents(self.free.astype(np.uint8), connectivity=8)
+        # A* forbids diagonal corner cutting. Its connected regions therefore match
+        # four-neighbour connectivity, not diagonal-only contacts between obstacles.
+        _, self.components = cv2.connectedComponents(self.free.astype(np.uint8), connectivity=4)
 
     def _px(self, coords) -> np.ndarray:
         return np.array([[int(round((x - self.ox) / CELL_M)), int(round((y - self.oy) / CELL_M))] for x, y in coords], np.int32)
@@ -229,9 +231,42 @@ def walk_in_space(building: Building, space_id: str, a: tuple[float, float], b: 
     return points
 
 
+def corridor_spine(building: Building, space_id: str, a: tuple[float,float], b: tuple[float,float]):
+    """Straight central run through an empty convex corridor, with perpendicular door approaches.
+
+    This is display/walking geometry only. It cannot bypass a door, obstacle or concave corner.
+    Raster noise must not make an empty, straight hallway look like a slalom.
+    """
+    if building.spaces[space_id]['type'] != 'corridor':
+        return None
+    polygon=building.polygons[space_id]
+    if polygon.geom_type!='Polygon' or polygon.interiors or polygon.convex_hull.area-polygon.area>1e-5:
+        return None
+    if any(asset['space_id']==space_id and asset.get('category') in BLOCKING_CATEGORIES for asset in building.assets.values()):
+        return None
+    rect=list(polygon.minimum_rotated_rectangle.exterior.coords)[:4]
+    edges=[(math.dist(rect[i],rect[(i+1)%4]),rect[i],rect[(i+1)%4]) for i in range(4)]
+    long,first,last=max(edges);width=min(e[0] for e in edges)
+    if width<.5 or long<3*width:
+        return None
+    axis=((last[0]-first[0])/long,(last[1]-first[1])/long)
+    if abs((b[0]-a[0])*axis[0]+(b[1]-a[1])*axis[1])<2*width:
+        return None
+    centre=(sum(p[0] for p in rect)/4,sum(p[1] for p in rect)/4)
+    limit=long/2-min(width/2,.35)
+    def project(p):
+        distance=max(-limit,min(limit,(p[0]-centre[0])*axis[0]+(p[1]-centre[1])*axis[1]))
+        return (centre[0]+distance*axis[0],centre[1]+distance*axis[1])
+    points=_dedupe([a,project(a),project(b),b])
+    return points if polygon.buffer(.02).covers(LineString(points)) else None
+
+
 @lru_cache(maxsize=20000)
 def _walk(_key: int, building: Building, space_id: str, a: tuple[float, float], b: tuple[float, float],
           a_door: bool = True, b_door: bool = True) -> tuple:
+    central=corridor_spine(building,space_id,a,b)
+    if central is not None:
+        return tuple(central)
     try:
         g = grid(building, space_id)
     except Exception:  # noqa: BLE001 - degenerate polygons: fall back to a straight line
