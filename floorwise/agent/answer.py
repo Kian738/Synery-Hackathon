@@ -70,12 +70,21 @@ def pick_reading(answers: list[str], tolerance: float = 0.01) -> str:
     return answers[best]
 
 
-def answer_with_trace(building_directory: Path | str, question: str) -> tuple[str, dict]:
+def answer_with_trace(building_directory: Path | str, question: str, hints: dict | None = None) -> tuple[str, dict]:
+    """hints: constraints given beside the question text (e.g. {"step_free": true, "closed": ["Lift 1"]})."""
     building = load_building(str(building_directory))
     trace: dict = {"building": building.id}
     try:
         spec, via = parse(building, question)
         trace["parser"] = via
+        if spec is not None and hints:
+            update = {}
+            if hints.get("step_free"):
+                update["step_free"] = True
+            if hints.get("closed") and not spec.closed:
+                closed = hints["closed"]
+                update["closed"] = closed[0] if isinstance(closed, list) else closed
+            spec = spec.model_copy(update=update)
         if spec is None or spec.kind == "other":
             return fallback(building, question, trace, "not one of the known question families")
         trace["spec"] = spec.model_dump(exclude_none=True)
