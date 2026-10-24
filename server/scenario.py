@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from floorwise.evacuation import to_dict
 from floorwise.reason import PlanError, ScenarioSpec
-from floorwise.reason.report import scenario_report
+from floorwise.reason.report import robust_report, scenario_report
 from floorwise.reason.elicit import next_question
 from floorwise.reason.findings import AUDIENCES, assess
 from floorwise.reason.templates import TemplateError, instantiate, template_names
@@ -43,6 +43,15 @@ def scenario_router(get_session):
             except PlanError as error:
                 raise HTTPException(422, str(error)) from error
         return report
+
+    @router.post("/{session_id}/scenario/robust")
+    def robust(session_id: str, body: ScenarioBody):
+        entry = get_session(session_id)
+        with entry["lock"]:
+            try:
+                return robust_report(entry["session"].building, body.params.get("spec", {}))
+            except (ValueError, TypeError, KeyError) as error:
+                raise HTTPException(422, str(error)) from error
 
     @router.post("/{session_id}/scenario/ask")
     def ask(session_id: str, body: AskBody):

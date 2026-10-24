@@ -23,7 +23,9 @@ State at handoff: all offline gates, `pytest` (362) and `fw ui-test` (128 passed
 - Anthropic API or AWS Bedrock only, never Vertex. One Bedrock call was verified (see README); `boto3` is not a repo dependency.
 
 ## Open items
-- N-1 robust doors (`robust.py`) are not yet exposed in the API or UI.
+- N-1 robust doors: `POST /api/sessions/{id}/scenario/robust`, opt-in button "Check if an exit fails" in the panel (about 20 s, so never automatic).
+- Level 3 multi-building is not implemented: no supplied data has linked buildings; floors, stairs and lifts are done.
+- Voice is browser speech only; ElevenLabs needs a key.
 - Hazard hatch and slow-door markers are on the 2D plan; the 3D view colours the hazard room only.
 - Scenario view is desktop-only (the phone opens in follow mode, like Stress test).
 - Playwright uses 4 workers and 15 s assertions: three specs failed only under full parallelism (shared server load), never alone.

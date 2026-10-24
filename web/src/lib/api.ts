@@ -1,4 +1,4 @@
-import type { Audience, ScenarioReport, BuildingRow, Geometry, Route, UiEvent } from "./types";
+import type { Audience, ScenarioReport, BuildingRow, Geometry, Route, UiEvent, RobustReport } from "./types";
 
 export class ApiError extends Error {
   candidates: { id: string; label?: string }[];
@@ -28,6 +28,7 @@ export const api = {
   profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
   widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
   scenario: (id: string, hazardSpace: string, audience: Audience) => post(`/api/sessions/${id}/scenario`, {template: "evacuation", params: {spec: {hazards: [{spaces: [hazardSpace]}], responders: {auto: true}}}, audience}).then(json<ScenarioReport>),
+  scenarioRobust: (id: string, hazardSpace: string) => post(`/api/sessions/${id}/scenario/robust`, {params: {spec: {hazards: [{spaces: [hazardSpace]}]}}}).then(json<RobustReport>),
   weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
   buildings: () => fetch("/api/buildings").then(json<BuildingRow[]>),
   geometry: (building: string) => fetch(`/api/buildings/${building}`).then(json<Geometry>),
