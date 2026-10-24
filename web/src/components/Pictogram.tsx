@@ -3,6 +3,7 @@ import type React from "react";
 // Signage-style pictograms (ISO 7001/7010-inspired), drawn as simple strokes so they read at 20 px.
 
 const PATHS: Record<string, React.ReactNode> = {
+  phone: <><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 5h4M11 19h2"/></>,
   play: <path d="M8 4l12 8-12 8z" fill="currentColor" stroke="none" />,
   pause: <path d="M7 4h4v16H7zM15 4h4v16h-4z" fill="currentColor" stroke="none" />,
   replay: <path d="M5 8a8 8 0 1 1-1 8M5 3v6h6" />,

@@ -1,0 +1,51 @@
+import {test,expect} from "@playwright/test";
+import fs from "node:fs/promises";
+import path from "node:path";
+test.use({actionTimeout:8_000});
+
+test("paired phone operates the real Navigator without changing declared location",async({page,browser,baseURL},info)=>{
+  test.skip(info.project.name!=="desktop","One laptop and one independent phone context");
+  test.setTimeout(45_000);
+  const errors:string[]=[];page.on("pageerror",e=>errors.push("LAPTOP: "+(e.stack??e.message)));
+  await page.goto("/?building=proc-campus-dev-000&at=proc-campus-dev-000-F2-S017&to=Lab%204.26&step_free=1");
+  await expect(page.getByRole("region",{name:"Route"})).toContainText("Lab 4.26",{timeout:15_000});
+  const location=page.locator(".navigation-panel button").filter({hasText:"Starting from"});
+  await expect(location).toHaveCount(1);
+  const declared=await location.textContent();
+  await page.getByRole("button",{name:"Phone companion",exact:true}).click();
+  await page.getByRole("button",{name:"Pair a phone",exact:true}).click();
+  const code=page.locator(".cmp-code");await expect(code).toHaveText(/^\d{6}$/);
+  const secret=(await code.textContent())!.trim();
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,baseURL});
+  try{
+    const phone=await context.newPage();phone.on("pageerror",e=>errors.push("PHONE: "+(e.stack??e.message)));
+    await phone.goto(`/phone#code=${secret}`);
+    await phone.getByRole("button",{name:"Pair",exact:true}).click();
+    await expect(phone.getByRole("heading",{name:"Confirm on the laptop"})).toBeVisible();
+    await expect(page.locator(".cmp-verify")).toHaveText((await phone.locator(".cmp-verify").textContent())!);
+    await page.getByRole("button",{name:"Allow",exact:true}).click();
+    await expect(phone.getByText("Connected to laptop",{exact:true})).toBeVisible();
+    await expect(phone.getByRole("region",{name:"Current instruction"})).toContainText("Step 1");
+    await page.getByRole("button",{name:"Close phone setup"}).click();
+    await phone.getByRole("button",{name:"Next",exact:true}).click();
+    await expect(page.getByRole("region",{name:"Route preview player"})).toContainText("Decision 2");
+    await expect(phone.getByRole("region",{name:"Current instruction"})).toContainText("Step 2");
+    const canvas=page.locator("canvas");await expect(canvas).toHaveAttribute("data-camera-quaternion",/\[/);
+    const position=await canvas.getAttribute("data-camera-position");
+    const rotation=await canvas.getAttribute("data-camera-quaternion");
+    await phone.getByRole("button",{name:"Look right 15 degrees"}).click();
+    await expect.poll(()=>canvas.getAttribute("data-camera-quaternion")).not.toBe(rotation);
+    expect(await canvas.getAttribute("data-camera-position")).toBe(position);
+    await phone.getByRole("button",{name:"Recenter view",exact:true}).click();
+    await phone.getByRole("button",{name:"Back",exact:true}).click();
+    await expect(page.getByRole("region",{name:"Route preview player"})).toContainText("Decision 1");
+    expect(await location.textContent()).toBe(declared);
+    const out=path.resolve("../runs/ux2");await fs.mkdir(out,{recursive:true});
+    await phone.screenshot({path:path.join(out,"phone-paired-navigator.png")});
+    await page.screenshot({path:path.join(out,"laptop-phone-guidance.png")});
+    await context.close();
+    await page.getByRole("button",{name:"Play preview",exact:true}).click();
+    await expect(page.getByRole("button",{name:"Pause preview",exact:true})).toBeVisible();
+    expect(errors).toEqual([]);
+  }finally{await context.close();}
+});

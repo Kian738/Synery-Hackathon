@@ -81,7 +81,7 @@ Any type not in `KNOWN_ASSET_TYPES` (after trimming, lowercasing and turning spa
 - `npx tsc --noEmit -p web`: clean (checked while Codex's concurrent edits were in the tree).
 - Tests cover: coverage of the real supplied inventory (every type, none via fallback; category-independence); finite, positive, grounded, hex-coloured parts inside footprint with rotation-aware bounds across min/median/max and sampled real footprints for every type and both LODs; part budgets; determinism and independence from id, name, position, category and `rotation_deg`; frozen output; exact-match fallback (no substring identity, no borrowed silhouette); missing, zero, negative, NaN, infinite, 0.001 m, 3.4 m and 1e6 m footprints; family-level geometry duplication (no copy-paste silhouettes); minimum detail for the priority types; overview never richer than interior; mean overview parts per real asset below 5. There are no snapshot tests of the geometry.
 - Reproduce the review sheet: `cd web && ASSET_CONTACT_SHEET=sheet.svg npx playwright test tests/asset-catalog.spec.ts --project=desktop`, then open the SVG in a browser or screenshot it (the committed PNG was made this way).
-- `uv run fw check` was run once at the end of the session; results are in the combined summary in `docs/parallel/benchmark-handoff.md`.
+- `uv run fw check` (final, with Codex's concurrent changes in the tree) exited 0 (108 unit tests and every offline gate; details in `docs/parallel/benchmark-handoff.md`). It does not run Playwright; `fw ui-test` was not run, because Codex is editing the UI concurrently. The new spec needs no server and passes on its own.
 
 ## Limitations
 

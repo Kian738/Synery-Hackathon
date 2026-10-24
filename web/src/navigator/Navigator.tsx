@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ToolTrace } from "../components/ToolTrace";
+import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { BuildDialog } from "../components/BuildDialog";
 import { FloorRail } from "../components/FloorRail";
@@ -24,6 +25,8 @@ export default function Navigator() {
   const [voiceOut, setVoiceOut] = useState(false);
   const [weakOpen,setWeakOpen]=useState(false);
   const [questionOpen,setQuestionOpen]=useState(false);
+  const [phoneOpen,setPhoneOpen]=useState(false);
+  const [lookOffset,setLookOffset]=useState({yaw:0,pitch:0});
   const [focusRequest,setFocusRequest]=useState<{id:string;revision:number}|null>(null);
   const [heading,setHeading]=useState<string>("");
   const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
@@ -55,6 +58,8 @@ export default function Navigator() {
 
   const g = nav.geometry;
   const steps = nav.route?.guide?.steps ?? [];
+  const companionRouteId=nav.route?nav.sessionId??undefined:undefined;
+  useEffect(()=>setLookOffset({yaw:0,pitch:0}),[nav.route]);
   const cats = useMemo(() => (g ? categories(g) : []), [g]);
   // Example requests built from this building's own rooms, items and lifts, so every one of them works here.
   const examples = useMemo(() => {
@@ -82,7 +87,7 @@ export default function Navigator() {
     spokenFor.current = key;
     speak(nav.route.guide.spoken);
   }, [nav.route, voiceOut,following]);
-  useEffect(()=>{if(voiceOut&&view==="guide"&&steps[nav.activeStep])speak(steps[nav.activeStep].text);return()=>{stopSpeaking();};},[voiceOut,view,nav.activeStep]);
+  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speak(steps[nav.activeStep].text);return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
 
   const pins: Pin[] = useMemo(() => {
     if (!g) return [];
@@ -117,7 +122,7 @@ export default function Navigator() {
   const focusPoint = following&&previewPosition?[previewPosition.x,previewPosition.y] as [number,number]:focused?(focused.anchor??centroid(focused.polygon)):visualAnchor??(nav.route&&steps[nav.activeStep]?.floor_id===nav.floorId?steps[nav.activeStep]?.point??null:null);
 
   const focusRoom=(room:Space)=>{selectSpace(room);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
-  const toggleMap=()=>{setQuestionOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
+  const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
   if (!g) {
     return <div className="grid h-full place-items-center bg-ink font-sign text-xl text-concrete">{nav.notice ?? "Loading building…"}</div>;
   }
@@ -186,6 +191,10 @@ export default function Navigator() {
             </>}
           </div>
           <div className="model-actions">
+            <CompanionControl steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
+              onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
+              onLook={(yaw,pitch)=>{if(!nav.route)return;if(!following)setView("guide");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
+              onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
             {view === "3d" && <><select aria-label="Visible floors" value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="current">Current floor</option><option value="route" disabled={!nav.route}>Route floors</option><option value="building">Whole building</option></select>{scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}>{exploded?"Exploded":"Assembled"}</button>}</>}
             {following?<><button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button><button aria-label="Read aloud" aria-pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}><Pictogram name="speaker" size={18}/></button><button aria-expanded={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}>Ask</button></>:<><button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}>Stress test</button><Link to="/lab">Evidence</Link></>}
           </div>
@@ -198,7 +207,7 @@ export default function Navigator() {
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
                 <Building3D geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
                   closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
-                  onStep={nav.setActiveStep} onSpaceClick={selectSpace} />
+                  onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
         </div>

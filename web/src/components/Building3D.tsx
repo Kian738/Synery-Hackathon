@@ -1,8 +1,9 @@
-import { Html, Line, OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { SceneAssets } from "./SceneAssets";
+import { SceneLabels, type SceneLabel, type ProjectedLabel } from "./SceneLabels";
 import { GuidePlayer } from "./GuidePlayer";
 import { ExploreCamera } from "./ExploreCamera";
 import { Pictogram } from "./Pictogram";
@@ -57,7 +58,7 @@ function Walls({geometry,floorId,elevation,follow}:{geometry:Geometry;floorId:st
   },[geometry.scene?.revision,floorId,follow]);
   const edges=useMemo(()=>new THREE.EdgesGeometry(mesh,30),[mesh]);
   useEffect(()=>()=>{mesh.dispose();edges.dispose();},[mesh,edges]);
-  return <group position={[0,elevation,0]}><mesh geometry={mesh}><meshStandardMaterial color="#b5c5c6" roughness={0.85} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1}/></mesh>
+  return <group position={[0,elevation,0]}><mesh geometry={mesh} userData={{labelOccluder:true}}><meshStandardMaterial color="#b5c5c6" roughness={0.85} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1}/></mesh>
     <lineSegments geometry={edges}><lineBasicMaterial color="#f0f8fa" transparent opacity={0.18}/></lineSegments></group>;
 }
 
@@ -99,7 +100,6 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
         {geometry.connectors.flatMap(c=>c.space_ids.map(id=>({c,s:spaces.find(s=>s.id===id)}))).filter(pair=>pair.s).map(({c,s})=>{const b=bounds(s!.polygon);return <group key={s!.id} position={[(b.minX+b.maxX)/2,elevation+.08,-(b.minY+b.maxY)/2]}>
           <mesh rotation={[-Math.PI/2,0,0]}><planeGeometry args={[Math.min(1,b.maxX-b.minX),Math.min(1,b.maxY-b.minY)]}/><meshStandardMaterial color={c.kind==="lift"?"#5e92a4":"#b4a378"}/></mesh>
           {c.kind==="stairs"&&[-.3,0,.3].map(z=><mesh key={z} position={[0,.01,z]}><boxGeometry args={[.8,.015,.04]}/><meshBasicMaterial color="#e6e8e6"/></mesh>)}
-          {!follow&&floorId===labelFloor&&connectorSpaces.has(s!.id)&&<Html center occlude zIndexRange={[2,0]} position={[0,.7,0]} style={{pointerEvents:"none"}}><span className="connector-icon" title={c.name}><Pictogram name={c.kind} size={17}/></span></Html>}
         </group>;})}
         <SceneAssets interior={follow} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false} muted={highlights.size>0}/>
         <SceneAssets interior={follow} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
@@ -117,36 +117,47 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors}:{r
 }
 
 
-function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void}){
-  const {camera,invalidate,gl}=useThree();const lastReport=useRef(-1);const first=useRef(true);const lastTick=useRef(performance.now());
+function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number}}){
+  const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const lastTick=useRef(performance.now());
   useLayoutEffect(()=>{lastTick.current=performance.now();},[playing]);
   useEffect(()=>{first.current=true;invalidate();},[seekVersion,model,invalidate]);
+  useEffect(()=>{invalidate();},[lookOffset,invalidate]);
   useFrame((_,dt)=>{
     const now=performance.now(),elapsed=Math.max(0,(now-lastTick.current)/1000);lastTick.current=now;
     if(playing)clock.current=advancePreview(clock.current,elapsed,speed,model.duration);
     const sample=samplePreview(model,clock.current),p=sample.point;if(!p)return;
     const height=geometry.floors.find(f=>f.id===p.floor_id)?.elevation_m??0;
     camera.position.copy(frame(p.x,p.y,height+1.65));
-    const ahead=samplePreview(model,Math.min(model.duration,clock.current+.75));
-    const useAhead=!sample.transition&&!ahead.transition&&ahead.point?.floor_id===p.floor_id&&Math.hypot(ahead.point.x-p.x,ahead.point.y-p.y)>.01;
-    const direction=useAhead?new THREE.Vector3(ahead.point!.x-p.x,0,-(ahead.point!.y-p.y)):new THREE.Vector3(sample.heading[0],0,-sample.heading[1]);
+    // Look along the visible route ahead, rather than staring along each tiny raster edge.
+    // Walls constrain the viewing target; this changes orientation only, never walking geometry.
+    const walls:THREE.Object3D[]=[];scene.traverse(o=>{if(o.userData.labelOccluder)walls.push(o);});
+    let direction=new THREE.Vector3(sample.heading[0],0,-sample.heading[1]);
+    for(const seconds of [2,1.25,.75,.25]){
+      const ahead=samplePreview(model,Math.min(model.duration,clock.current+seconds));
+      if(sample.transition||ahead.transition||ahead.point?.floor_id!==p.floor_id)continue;
+      const v=new THREE.Vector3(ahead.point.x-p.x,0,-(ahead.point.y-p.y)),distance=v.length();
+      if(distance<.05)continue;
+      sight.set(camera.position,v.clone().normalize());sight.near=0;sight.far=Math.max(0,distance-.04);
+      if(!sight.intersectObjects(walls,false).length){direction=v;break;}
+    }
     direction.y=-direction.length()*.14;
     if(direction.lengthSq()>.00001){
       const matrix=new THREE.Matrix4().lookAt(camera.position,camera.position.clone().add(direction),new THREE.Vector3(0,1,0));
       const target=new THREE.Quaternion().setFromRotationMatrix(matrix);
+      if(lookOffset)target.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(lookOffset.pitch),-THREE.MathUtils.degToRad(lookOffset.yaw),0,"YXZ")));
       if(first.current)camera.quaternion.copy(target);else camera.quaternion.rotateTowards(target,Math.PI*dt);
       if(camera.quaternion.angleTo(target)>.002)invalidate();
       first.current=false;
     }
-    camera.updateProjectionMatrix();gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;
+    camera.updateProjectionMatrix();gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;gl.domElement.dataset.cameraQuaternion=JSON.stringify(camera.quaternion.toArray());
     if(Math.abs(clock.current-lastReport.current)>.08 || sample.arrived || !playing){lastReport.current=clock.current;onSample(clock.current);}
     if(playing)invalidate();
   });return null;
 }
 
-export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest}: {
+export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset}: {
  geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;closed?:Set<string>;previewDoor?:Opening|null;
- focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
+ lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
   const reduced=typeof matchMedia!=="undefined"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
   const emphasis=focusRequest?.id??(visualResult?.measurements.primary_ids as string[]|undefined)?.[0];
@@ -170,7 +181,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   useEffect(()=>{seek(0);setPlaying(false);},[route,follow]);
   useEffect(()=>{if(!previewMode)setPlaying(false);},[previewMode]);
   useEffect(()=>{const pause=()=>setPlaying(false);window.addEventListener("floorwise:voice-start",pause);return()=>window.removeEventListener("floorwise:voice-start",pause);},[]);
-  useEffect(()=>{if(model)seek(model.chapters[activeStep]??0);},[seekRequest]);
+  useEffect(()=>{if(model){setPlaying(false);seek(model.chapters[activeStep]??0);}},[seekRequest]);
   useEffect(()=>{const hidden=()=>{if(document.hidden)setPlaying(false);};document.addEventListener("visibilitychange",hidden);return()=>document.removeEventListener("visibilitychange",hidden);},[]);
   useEffect(()=>{if(!follow)return;const key=(e:KeyboardEvent)=>{if(e.defaultPrevented||/INPUT|SELECT|TEXTAREA|BUTTON/.test((e.target as HTMLElement)?.tagName))return;if(e.code==="Space"&&!reduced){e.preventDefault();if(!previewMode)onPreview?.();if(clock.current>=(model?.duration??Infinity))seek(0);setPlaying(v=>!v);}if(e.code==="ArrowRight"||e.code==="ArrowLeft"){e.preventDefault();seek(Math.max(0,Math.min(model?.duration??0,clock.current+(e.code==="ArrowRight"?5:-5))));}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);},[follow,previewMode,model,reduced,onPreview]);
   const report=(value:number)=>{setTime(old=>Math.abs(old-value)>.001?value:old);if(!model)return;const s=samplePreview(model,value);if(s.step!==activeStep)onStep?.(s.step);if(s.point)onPosition?.(s.point);if(s.arrived)setPlaying(false);};
@@ -189,6 +200,13 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   const floors=geometry.floors.filter(f=>(visualResult?.kind==="stacking"||visualResult?.kind==="distance")&&!follow?visualResult.floor_ids.includes(f.id):multi?(scope==="route"?route?.floors.includes(f.id):true):f.id===activeFloor);
   const visibleFloors=useMemo(()=>new Set(floors.map(f=>f.id)),[floors.map(f=>f.id).join()]);
   const roomHighlights=useMemo(()=>new Set([...highlights,...(selected?[selected]:[])]),[highlights,selected]);
+  const [projectedLabels,setProjectedLabels]=useState<ProjectedLabel[]>([]);
+  const sceneLabels=useMemo<SceneLabel[]>(()=>follow?[]:[
+    ...geometry.connectors.flatMap(c=>c.space_ids.flatMap(id=>{const s=geometry.spaces.find(s=>s.id===id&&s.floor_id===floorId);if(!s||!visibleFloors.has(s.floor_id)||!connectorSpaces.has(id))return [];const b=bounds(s.polygon);return [{id:`connector-${id}`,text:c.name,icon:c.kind,position:[(b.minX+b.maxX)/2,elevation(s.floor_id)+.7,-(b.minY+b.maxY)/2] as [number,number,number]}];})),
+    ...geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{const p=s.anchor??s.polygon[0];return {id:`room-${s.id}`,text:s.name,position:[p[0],elevation(s.floor_id)+1.7,-p[1]] as [number,number,number]};}),
+    ...(visualResult?.kind==="intervention"?(()=>{const o=visualResult.measurements.proposed_opening as Opening|undefined;return o&&visibleFloors.has(o.floor_id)?[{id:"proposed",text:"Proposed opening · not applied",position:[o.position[0],elevation(o.floor_id)+1.8,-o.position[1]] as [number,number,number]}]:[];})():[])
+  ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode]);
+
   return <div className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-visible-floors={[...visibleFloors].join(",")} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,1.5]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.06:.5,far:Math.max(200,span*6)}} gl={{antialias:true}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
@@ -198,7 +216,6 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       {geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{
         const anchor=s.anchor??s.polygon[0];return <group key={`focus-${s.id}`}>
           <Line points={[...s.polygon,s.polygon[0]].map(p=>frame(p[0],p[1],elevation(s.floor_id)+.12))} color="#74c9ef" lineWidth={3} depthTest={false} depthWrite={false} renderOrder={109}/>
-          {!follow&&<Html center occlude zIndexRange={[2,0]} position={[anchor[0],elevation(s.floor_id)+1.7,-anchor[1]]} style={{pointerEvents:"none"}}><span className="world-label selected-label">{s.name}</span></Html>}
         </group>;
       })}
       {visualResult?.lines?.map((line,i)=>{
@@ -210,7 +227,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
         const proposed=visualResult.measurements.proposed_opening as Opening|undefined;
         if(!proposed||!visibleFloors.has(proposed.floor_id))return null;
         const alignment=openingFrame(geometry,proposed);if(!alignment)return null;
-        return <group position={[alignment.x,elevation(proposed.floor_id)+.8,-alignment.y]} rotation={[0,alignment.angle,0]}><mesh><boxGeometry args={[proposed.width_m,1.6,.06]}/><meshBasicMaterial color="#74c9ef" transparent opacity={.5} depthTest={false}/></mesh><Html center position={[0,1,0]}><span className="world-label">Proposed opening · not applied</span></Html></group>;
+        return <group position={[alignment.x,elevation(proposed.floor_id)+.8,-alignment.y]} rotation={[0,alignment.angle,0]}><mesh><boxGeometry args={[proposed.width_m,1.6,.06]}/><meshBasicMaterial color="#74c9ef" transparent opacity={.5} depthTest={false}/></mesh></group>;
       })()}
       {previousRoute&&!follow&&<Path route={previousRoute} geometry={geometry} explode={explode} visibleFloors={visibleFloors} ghost/>}
       {route&&<Path route={route} geometry={geometry} explode={explode} visibleFloors={visibleFloors} xray={false}/>}
@@ -222,10 +239,12 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
         const b=bounds(s.polygon);return <mesh key={s.id} position={[(b.minX+b.maxX)/2,elevation(s.floor_id)+.8,-(b.minY+b.maxY)/2]}><boxGeometry args={[Math.max(b.maxX-b.minX,.5),1.6,Math.max(b.maxY-b.minY,.5)]}/><meshStandardMaterial color="#ff8a8f" transparent opacity={.65}/></mesh>;
       })}
       {here&&geometry.spaces.filter(s=>s.id===here&&visibleFloors.has(s.floor_id)).map(s=>{const point=route?.stops[0]===here?route.polyline[0]:null;const b=bounds(s.polygon);return <group key={s.id} position={[point?.x??s.anchor?.[0]??(b.minX+b.maxX)/2,elevation(s.floor_id)+.08,-(point?.y??s.anchor?.[1]??(b.minY+b.maxY)/2)]}><mesh rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.14,.22,24]}/><meshBasicMaterial color="#65d7ac" side={THREE.DoubleSide} depthTest={false}/></mesh><mesh position={[0,.12,0]}><sphereGeometry args={[.1,12,8]}/><meshStandardMaterial color="#65d7ac" emissive="#1e7a4c"/></mesh>{heading!==undefined&&<group rotation={[0,-heading*Math.PI/180,0]}><mesh position={[0,.15,-.65]} rotation={[-Math.PI/2,0,0]}><coneGeometry args={[.2,.5,3]}/><meshBasicMaterial color="#65d7ac"/></mesh></group>}</group>;})}
-      {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&previewMode&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report}/>
+      {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&previewMode&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report} lookOffset={lookOffset}/>
         :<><OrbitControls mouseButtons={{LEFT:orbiting?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.ROTATE}} touches={{ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_ROTATE}} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><ExploreCamera cacheKey={`${geometry.building.id}-${multi?scope:floorId}-${exploded}-${focusRequest?`${focusRequest.id}-${focusRequest.revision}`:visualResult?.id??"explore"}`} fitVersion={fitVersion} box={fitBox} height={multi?Math.max(...floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...floors.map(f=>elevation(f.id))):3.8} elevation={multi?Math.min(...floors.map(f=>elevation(f.id))):elevation(floorId)} action={action}/></>}
 
+      <SceneLabels labels={sceneLabels} onProject={setProjectedLabels}/>
     </Canvas>
+    {!follow&&<div className="scene-label-layer">{projectedLabels.map(l=><div key={l.id} style={{position:"absolute",left:l.x,top:l.y,transform:"translate(-50%,-50%)"}}>{l.icon?<span className="connector-icon" title={l.text}><Pictogram name={l.icon} size={17}/></span>:<span className="world-label selected-label">{l.text}</span>}</div>)}</div>}
     {follow&&sample?.transition&&<div className="landing-transition"><span>⇅</span><b>Use the mapped connector</b><p>{geometry.floors.find(f=>f.id===sample.point?.floor_id)?.name}</p><small>Landing preview · interior geometry not surveyed</small></div>}
     {follow&&route&&model&&<GuidePlayer route={route} model={model} time={time} speed={speed} playing={playing} step={activeStep} reduced={reduced} transition={sample?.transition?"Floor transition":null}
       onSeek={seek} onPlay={()=>{if(!previewMode)onPreview?.();if(sample?.arrived)seek(0);setPlaying(v=>sample?.arrived?true:!v);}}

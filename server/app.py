@@ -32,8 +32,10 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 SESSIONS: dict[str, dict] = {}
 
 from server.lab import router as lab_router  # noqa: E402
+from server.companion import create_companion_router  # noqa: E402
 
 app.include_router(lab_router)
+app.include_router(create_companion_router())
 
 
 @lru_cache(maxsize=1)
@@ -307,6 +309,7 @@ if WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
     @app.get("/")
+    @app.get("/phone")
     @app.get("/lab")
     @app.get("/lab/{rest:path}")
     def index(rest: str = "") -> FileResponse:

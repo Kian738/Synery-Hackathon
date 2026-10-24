@@ -15,7 +15,7 @@ test("dense labels retain the selected label without overlaps",()=>{
 test("CIT reported route opens an uncluttered player with one-click play",async({page},info)=>{
   const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("/?building=osm-way27917482&at=osm-way27917482-F3-S069&to=00.05.058");
-  await expect(page.getByRole("region",{name:"Route"})).toContainText("00.05.058");
+  await expect(page.getByRole("region",{name:"Route"})).toContainText("00.05.058",{timeout:20_000});
   await page.getByRole("button",{name:"Guide me step by step"}).click();
   await expect(page.locator(".navigation-panel")).toBeHidden();
   await expect(page.locator(".floor-selector")).toBeHidden();

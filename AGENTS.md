@@ -47,6 +47,8 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/fw.py` | `fw`: the one command | verified |
 | `eval/` | eval suites L0–L7, ledger, report | see `docs/EVALS.md` |
 | `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | tested; chat live on Groq |
+| `server/companion.py`, `web/src/companion/` | confirmed paired-phone relay and controller; `/phone`, touch/optional secure-context gyro | protocol + two-browser tested; physical hardware pending |
+| `web/src/scene-assets/` | bounded illustrative procedural visuals for all supplied asset types | catalogue + footprint tests |
 | `server/checks.py` | the Lab's inspection sheet: every check in plain words, target, cost, grading group | |
 | `server/lab.py` | Benchmark Lab API: runs, compare, dataset, launch suites with live logs | tested |
 | `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | desktop + phone regression coverage; see docs/STATUS.md |
@@ -63,6 +65,7 @@ uv sync                      # once
 uv run fw                    # list commands
 uv run fw doctor             # check setup (keys, data, web build)
 uv run fw start              # app at http://localhost:8000
+uv run fw start --lan        # same app reachable by a phone on this network
 uv run fw dev                # hot-reload dev (backend :8000, frontend :5173)
 uv run fw check              # all offline tests + eval gates; must stay green
 uv run fw ui-test            # Playwright UI tests (desktop + phone) against a fresh server

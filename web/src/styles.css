@@ -298,3 +298,6 @@ body {
 }
 .weak-points { bottom:75px; }
 @media(max-width:1023px){.scene-navigation{right:10px;bottom:10px;}.scene-navigation button{min-width:28px;min-height:30px;font-size:14px;}.scene-caption{bottom:50px;}.weak-points{bottom:50px;}}
+.companion-drawer{position:fixed;z-index:50;right:18px;top:78px;width:340px;max-height:calc(100dvh - 96px);overflow:auto;border:1px solid #52636c;background:#182329;box-shadow:0 12px 40px #0008;border-radius:10px;text-align:left;white-space:normal}.companion-drawer .cmp-laptop{min-height:0;padding:22px 16px 14px}.companion-close{position:absolute;right:8px;top:8px;z-index:1}.companion-setup-hint{padding:0 16px 18px;color:#b6c5cc;font-size:13px;line-height:1.5}.companion-setup-hint code{color:#edf3f5;font-family:inherit}.model-actions>button[aria-pressed=true][aria-label="Phone companion"]{color:#85dfb2;border-color:#85dfb2}@media(max-width:640px){.companion-drawer{left:10px;right:10px;top:72px;width:auto;max-height:calc(100dvh - 88px)}.model-actions>button[aria-label="Phone companion"]>span{display:none}}
+.model-panel .companion-drawer{bottom:auto;left:auto;max-width:calc(100vw - 36px);z-index:50}@media(max-width:640px){.model-panel .companion-drawer{left:10px;right:10px;max-width:none;padding:0}}
+.scene-label-layer{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}

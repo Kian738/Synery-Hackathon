@@ -17,6 +17,7 @@ dependencies = [
     "pillow>=13.0.0",
     "python-multipart>=0.0.32",
     "openai>=3.37.0",
+    "websockets>=17.3",
 ]
 
 [project.scripts]
