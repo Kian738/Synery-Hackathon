@@ -3,11 +3,12 @@ import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
 import { ApiError, api, chat } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
+import { audioStreamQueue } from "../lib/voice";
 import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "agent"; text: string; model?: string }
+  | { id: number; role: "agent"; text: string; model?: string; streaming?: boolean }
   | { id: number; role: "activity"; text: string }
   | { id: number; role: "error"; text: string }
   | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" }
@@ -211,6 +212,7 @@ export function useNavigator(buildingId: string) {
     setVisualResult(null);setHighlights(new Set());
     push({ role: "user", text });
     setBusy(true);
+    audioStreamQueue.reset();
     const current = generation.current;
     const g = geometryRef.current;
 
@@ -228,8 +230,60 @@ export function useNavigator(buildingId: string) {
             const r = event.data.route;
             setRouteMeta({ from: labelOf(g!, r.stops[0]), to: labelOf(g!, r.stops[r.stops.length - 1]) });
           }
-        } else if (event.type === "reply" && typeof event.data?.text === "string") {setTurnUsage(event.data.usage??null);push({ role: "agent", text: event.data.text, model: event.data.model });}
-        else if (event.type === "error") push({ role: "error", text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
+        } else if (event.type === "text_delta" && typeof event.data?.text === "string") {
+          const delta = event.data.text;
+          setMessages((all) => {
+            const last = all[all.length - 1];
+            if (last && last.role === "agent" && last.streaming) {
+              return [
+                ...all.slice(0, -1),
+                { ...last, text: last.text + delta },
+              ];
+            }
+            return [
+              ...all,
+              { id: nextId++, role: "agent", text: delta, streaming: true },
+            ];
+          });
+        } else if (event.type === "clear_deltas") {
+          setMessages((all) => {
+            const last = all[all.length - 1];
+            if (last && last.role === "agent" && last.streaming) {
+              return all.slice(0, -1);
+            }
+            return all;
+          });
+        } else if (event.type === "audio_chunk" && event.data?.audio) {
+          audioStreamQueue.enqueue(event.data.audio, event.data.index ?? 0, event.data.text);
+        } else if (event.type === "reply" && typeof event.data?.text === "string") {
+          setTurnUsage(event.data.usage ?? null);
+          setMessages((all) => {
+            const last = all[all.length - 1];
+            if (last && last.role === "agent" && last.streaming) {
+              return [
+                ...all.slice(0, -1),
+                {
+                  ...last,
+                  text: event.data.text,
+                  model: event.data.model,
+                  streaming: false,
+                },
+              ];
+            }
+            return [
+              ...all,
+              {
+                id: nextId++,
+                role: "agent",
+                text: event.data.text,
+                model: event.data.model,
+                streaming: false,
+              },
+            ];
+          });
+        } else if (event.type === "done") {
+          audioStreamQueue.markDone();
+        } else if (event.type === "error") push({ role: "error", text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
       },selectedSpace);
     } catch (e) {
       if (current === generation.current) push({ role: "error", text: String(e) });

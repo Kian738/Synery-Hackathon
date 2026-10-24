@@ -33,3 +33,63 @@ def test_lab_endpoints():
     assert client.post("/api/lab/jobs", json={"suite": "rm -rf", "args": []}).status_code == 422
     assert client.post("/api/lab/jobs", json={"suite": "routes", "args": ["--evil"]}).status_code == 422
     assert client.get("/api/lab/dataset").json()["splits"]["train"] == 200
+
+
+def test_tts_endpoints():
+    status = client.get("/api/tts/status").json()
+    assert "enabled" in status
+    assert "provider" in status
+    # Without cloud API keys, /api/tts returns 501
+    tts_resp = client.post("/api/tts", json={"text": "Hello world"})
+    assert tts_resp.status_code in (200, 501)
+    # Empty text validation
+    empty_resp = client.post("/api/tts", json={"text": ""})
+    assert empty_resp.status_code == 400
+
+
+def test_speech_text_processing():
+    from server.app import clean_speech_text, extract_speech_sentences
+
+    raw = "Here is the route to **Room 204**:\n# Steps\n- Walk down the hall.\n- Turn right!"
+    cleaned = clean_speech_text(raw)
+    assert "**" not in cleaned
+    assert "#" not in cleaned
+    assert "-" not in cleaned
+    assert "Room 204" in cleaned
+
+    sentences, remainder = extract_speech_sentences("Hello world! How are you doing? I am fine", is_final=False)
+    assert len(sentences) == 2
+    assert sentences[0] == "Hello world!"
+    assert sentences[1] == "How are you doing?"
+    assert remainder == "I am fine"
+
+    final_sentences, remainder = extract_speech_sentences(remainder, is_final=True)
+    assert final_sentences == ["I am fine"]
+    assert remainder == ""
+
+
+def test_tts_streamer_mock():
+    from server.app import TtsStreamer
+
+    chunks = []
+    def push_fn(kind, data):
+        chunks.append((kind, data))
+
+    # Mock synthesize method to avoid external HTTP calls during unit test
+    streamer = TtsStreamer(push_fn, api_key="test_key", voice_id="test_voice")
+    streamer._synthesize = lambda text: b"MPEG_AUDIO_FIXTURE"
+
+    streamer.feed_delta("First sentence here. ")
+    streamer.feed_delta("Second sentence ")
+    streamer.feed_delta("arrives now! ")
+    streamer.flush_and_close(timeout=2.0)
+
+    audio_chunks = [c for c in chunks if c[0] == "audio_chunk"]
+    assert len(audio_chunks) == 2
+    assert audio_chunks[0][1]["text"] == "First sentence here."
+    assert audio_chunks[0][1]["index"] == 0
+    assert audio_chunks[0][1]["format"] == "audio/mpeg"
+    assert audio_chunks[1][1]["text"] == "Second sentence arrives now!"
+    assert audio_chunks[1][1]["index"] == 1
+
+

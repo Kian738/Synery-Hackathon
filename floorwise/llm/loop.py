@@ -46,10 +46,28 @@ class Conversation:
         for _ in range(MAX_STEPS):
             budget.check()
             tools = [t.anthropic() for t in self.tools]
-            response = self.client.beta.messages.create(
-                model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
-                output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default",
-            )
+            streamed_chunks = []
+            if hasattr(self.client.beta.messages, "stream"):
+                with self.client.beta.messages.stream(
+                    model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
+                    output_config={"effort": self.effort}, betas=[FALLBACK_BETA],
+                ) as stream:
+                    for text in stream.text_stream:
+                        streamed_chunks.append(text)
+                        if on_event:
+                            on_event("text_delta", {"text": text})
+                    response = stream.get_final_message()
+            else:
+                response = self.client.beta.messages.create(
+                    model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
+                    output_config={"effort": self.effort}, betas=[FALLBACK_BETA],
+                )
+                for b in response.content:
+                    if getattr(b, "type", None) == "text" and getattr(b, "text", None):
+                        streamed_chunks.append(b.text)
+                        if on_event:
+                            on_event("text_delta", {"text": b.text})
+
             usage = response.usage
             budget.add(usage.input_tokens+(usage.cache_read_input_tokens or 0)+(usage.cache_creation_input_tokens or 0), usage.output_tokens)
             self.usage.update({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
@@ -61,6 +79,8 @@ class Conversation:
             uses = [b for b in response.content if b.type == "tool_use"]
             if not uses:
                 return "\n".join(b.text for b in response.content if b.type == "text").strip()
+            if on_event and streamed_chunks:
+                on_event("clear_deltas", {})
             results = []
             for block in uses:
                 if on_event:
