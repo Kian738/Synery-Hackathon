@@ -59,7 +59,7 @@ def test_fast_chaos_equals_rebuild_per_element(profile):
 
 
 def test_fast_chaos_respects_already_closed_elements():
-    building = next(b for b in sample(1) if b.connectors)
+    building = next(b for b in map(Building.load, small_buildings()) if b.connectors)
     closed = Constraints(closed=frozenset({next(iter(building.connectors))}))
     assert without_names(chaos_test(building, closed)) == without_names(reference_chaos(building, closed))
 
