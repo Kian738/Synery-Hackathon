@@ -117,7 +117,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
       if (e.key === "+" || e.key === "=") zoom(0.8);
       if (e.key === "-") zoom(1.25);
     }} tabIndex={0} aria-label={`Floor plan, ${geometry.floors.find((f) => f.id === floorId)?.name}`}>
-      <svg
+      <svg aria-label="Floor plan" role="img"
         ref={svg}
         className="h-full w-full touch-none cursor-grab active:cursor-grabbing"
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}

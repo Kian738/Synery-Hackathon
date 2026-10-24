@@ -68,15 +68,15 @@ def geometry_payload(b: Building) -> dict:
         "building": b.info,
         "floors": sorted(b.data["floors"], key=lambda f: f["level"]),
         "spaces": [
-            {k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon")} for s in b.spaces.values()
+            {k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")} for s in b.spaces.values()
         ],
         "openings": [
-            {k: o.get(k) for k in ("id", "floor_id", "space_ids", "kind", "position", "width_m", "step_free")}
+            {k: o.get(k) for k in ("id", "floor_id", "space_ids", "kind", "position", "width_m", "step_free", "synthetic")}
             for o in b.openings.values()
         ],
         "connectors": list(b.connectors.values()),
         "assets": [
-            {k: a.get(k) for k in ("id", "name", "type", "category", "space_id", "floor_id", "position", "footprint")}
+            {k: a.get(k) for k in ("id", "name", "type", "category", "space_id", "floor_id", "position", "footprint", "source")}
             for a in b.assets.values()
         ],
     }
@@ -109,7 +109,7 @@ class NewSession(BaseModel):
 @app.post("/api/sessions")
 def new_session(body: NewSession) -> dict:
     session_id = uuid.uuid4().hex[:12]
-    SESSIONS[session_id] = {"session": Session.for_building(load(body.building_id)), "agent": None, "lock": threading.Lock()}
+    SESSIONS[session_id] = {"session": Session.for_building(load(body.building_id)), "agent": None, "lock": threading.RLock()}
     return {"session_id": session_id, "building_id": body.building_id}
 
 
@@ -124,6 +124,13 @@ def session_state(session_id: str) -> dict:
 def session_geometry(session_id: str) -> dict:
     """Geometry including this session's edits (new doors, moved items)."""
     return geometry_payload(session_or_404(session_id)["session"].building)
+
+
+@app.get("/api/sessions/{session_id}/scene")
+def session_scene(session_id: str) -> dict:
+    from floorwise.core.scene import compile_scene
+    b = session_or_404(session_id)["session"].building
+    return {**geometry_payload(b), "scene": compile_scene(b)}
 
 
 class RouteBody(BaseModel):
@@ -142,16 +149,19 @@ def call(session: Session, method: str, *args, **kwargs) -> dict:
         result = getattr(session, method)(*args, **kwargs)
     except ResolveError as error:
         raise HTTPException(422, {"error": str(error), "candidates": error.candidates[:8]}) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     events, session.events[:] = list(session.events), []
     return {"result": result, "events": events}
 
 
 @app.post("/api/sessions/{session_id}/route")
 def route(session_id: str, body: RouteBody) -> dict:
-    s = session_or_404(session_id)["session"]
-    return call(s, "route", body.start, body.destination, body.via, step_free=body.step_free,
-                min_door_width_m=body.min_door_width_m, avoid=body.avoid, prefer_avoid=body.prefer_avoid,
-                avoid_stairs=body.avoid_stairs)
+    entry = session_or_404(session_id)
+    with entry["lock"]:
+        return call(entry["session"], "route", body.start, body.destination, body.via, step_free=body.step_free,
+                    min_door_width_m=body.min_door_width_m, avoid=body.avoid, prefer_avoid=body.prefer_avoid,
+                    avoid_stairs=body.avoid_stairs)
 
 
 class CloseBody(BaseModel):
@@ -161,7 +171,9 @@ class CloseBody(BaseModel):
 
 @app.post("/api/sessions/{session_id}/close")
 def close(session_id: str, body: CloseBody) -> dict:
-    return call(session_or_404(session_id)["session"], "set_closed", body.element, body.closed)
+    entry = session_or_404(session_id)
+    with entry["lock"]:
+        return call(entry["session"], "set_closed", body.element, body.closed)
 
 
 class DoorBody(BaseModel):
@@ -180,6 +192,9 @@ def door(session_id: str, body: DoorBody) -> dict:
 def search(session_id: str, q: str, floor: str | None = None) -> dict:
     return call(session_or_404(session_id)["session"], "search", q, floor)
 
+
+from server.insight import insight_router
+app.include_router(insight_router(session_or_404, call))
 
 # ---------- chat (Claude) ----------
 
@@ -241,7 +256,15 @@ async def build_from_plans(
 ) -> dict:
     from floorwise.build.builder import build
 
-    level_list = [int(v) for v in levels.split(",")]
+    import math
+    if not math.isfinite(width_m) or width_m <= 0 or width_m > 2000:
+        raise HTTPException(422, "Supply a positive plan width of at most 2000 metres.")
+    try:
+        level_list = [int(v) for v in levels.split(",")]
+    except ValueError as error:
+        raise HTTPException(422, "Floor levels must be comma-separated integers.") from error
+    if not files or len(files) > 20 or len(set(level_list)) != len(level_list):
+        raise HTTPException(422, "Supply 1-20 images, with one distinct level per image.")
     if len(level_list) != len(files):
         raise HTTPException(422, "one level per file")
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "building"
@@ -250,7 +273,10 @@ async def build_from_plans(
         images = {}
         for level, upload in zip(level_list, files):
             path = Path(folder) / f"floor_{level}.png"
-            path.write_bytes(await upload.read())
+            content = await upload.read(15 * 1024 * 1024 + 1)
+            if len(content) > 15 * 1024 * 1024:
+                raise HTTPException(422, "Each plan image must be at most 15 MB.")
+            path.write_bytes(content)
             images[level] = path
         building, report = await asyncio.to_thread(
             build, images, width_m=width_m, name=name, building_id=building_id, vision=vision)

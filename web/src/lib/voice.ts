@@ -6,25 +6,29 @@ const Recognition: any =
 export const canListen = () => Boolean(Recognition);
 export const canSpeak = () => typeof window !== "undefined" && "speechSynthesis" in window;
 
-export function listen(onPartial: (t: string) => void, onFinal: (t: string) => void, onEnd: () => void) {
+export function listen(onPartial: (t: string) => void, onFinal: (t: string) => void, onEnd: () => void, onError?: (message:string)=>void) {
+  if (!Recognition) { onError?.("Voice input is unavailable in this browser. Type your request instead."); onEnd(); return () => {}; }
   const r = new Recognition();
-  r.lang = navigator.language || "en-US";
-  r.interimResults = true;
-  r.continuous = false;
-  let final = "";
+  r.lang = document.documentElement.lang || "en-US";
+  r.interimResults = true; r.continuous = false;
+  let final = "", finished = false;
+  const finish = (send:boolean) => {
+    if(finished)return; finished=true;
+    if(send && final.trim())onFinal(final.trim());else onEnd();
+  };
   r.onresult = (event: any) => {
+    if(finished)return;
     let interim = "";
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const t = event.results[i][0].transcript;
-      if (event.results[i].isFinal) final += t;
-      else interim += t;
+      if (event.results[i].isFinal) final += t; else interim += t;
     }
     onPartial(final + interim);
   };
-  r.onerror = onEnd;
-  r.onend = () => (final.trim() ? onFinal(final) : onEnd());
-  r.start();
-  return () => r.abort();
+  r.onerror = (event:any) => { onError?.(event.error === "not-allowed" ? "Microphone access was denied. Type your request instead." : "Voice input stopped. Please retry or type your request."); finish(false); };
+  r.onend = () => finish(true);
+  try { r.start(); } catch { onError?.("Voice input could not start. Type your request instead."); finish(false); }
+  return () => { finish(false); r.abort(); };
 }
 
 /** Speak immediately, cutting off anything still talking (barge-in friendly). */

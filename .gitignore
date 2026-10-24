@@ -6,6 +6,7 @@ runs/
 agent_output/
 node_modules/
 web/dist/
+web/test-results/
 docs/industrial-agents-hackathon-2026/
 buildings/
 .playwright-mcp/

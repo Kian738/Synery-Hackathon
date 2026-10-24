@@ -85,3 +85,134 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--color-ink-3) transparent;
 }
+
+/* Cinematic building stage. The bright drawing remains available in Floor plan mode. */
+.navigator-shell { background:#10171c; color:#edf3f5; }
+.navigation-panel { background:#182329; border-right:1px solid #34464f; }
+.navigator-shell .text-ink-4 { color:#b6c5cc; }
+.navigator-shell .text-concrete { color:#edf3f5; }
+.navigator-shell .bg-ink { background-color:#182329; }
+.navigator-shell .bg-ink-2 { background-color:#213139; }
+.navigator-shell .border-ink-2 { border-color:#34464f; }
+.navigator-shell .text-mark { color:#ffd45c; }
+.navigator-shell .bg-mark { background-color:#ffd45c; }
+.navigator-shell .bg-white { color:#1c2226; }
+.navigator-shell .model-panel { background:#10171c; min-width:0; }
+.model-toolbar { position:absolute; z-index:15; top:20px; left:24px; right:24px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.mode-switch,.model-actions { display:flex; gap:3px; align-items:center; }
+.mode-switch { background:#182329; padding:4px; border:1px solid #485d68; border-radius:6px; }
+.mode-switch button,.model-actions button,.model-actions a { padding:9px 13px; font-size:14px; font-weight:600; white-space:nowrap; }
+.mode-switch button[aria-pressed=true] { background:#edf3f5; color:#182329; border-radius:3px; }
+.mode-switch button:disabled { opacity:.4; }
+.model-actions button,.model-actions a { background:#182329; color:#edf3f5; border:1px solid #485d68; border-radius:4px; }
+.model-actions button:disabled { opacity:.5; }
+.model-viewport { flex:1; min-width:0; position:relative; }
+.building-stage { width:100%; height:100%; position:relative; }
+.floor-selector { position:absolute; left:24px; top:90px; z-index:12; max-height:55%; overflow-y:auto; background:#182329; border:1px solid #485d68; color:#edf3f5; }
+.floor-selector button { min-height:44px; }
+.scene-caption { position:absolute; bottom:25px; left:25px; color:#edf3f5; font-size:13px; line-height:1.6; pointer-events:none; max-width:65%; }
+.scene-caption span { color:#b6c5cc; }
+.model-notice { position:absolute; z-index:20; top:88px; left:110px; right:24px; padding:14px 16px; border-left:3px solid #ffd45c; background:#213139; color:#edf3f5; display:flex; gap:16px; align-items:start; box-shadow:0 4px 15px #0005; }
+.model-notice span { flex:1; }
+.model-notice button { font-size:22px; line-height:1; }
+.playback-controls { position:absolute; bottom:24px; left:24px; right:24px; width:fit-content; max-width:calc(100% - 48px); padding:14px 16px; background:#182329; border:1px solid #485d68; color:#edf3f5; font-size:13px; }
+.playback-controls p { margin:10px 0; max-width:500px; }
+.playback-controls>div { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.playback-controls button { border:1px solid #b6c5cc; padding:8px 13px; min-height:40px; }
+.playback-controls button:disabled { opacity:.4; }
+.follow-instruction { position:absolute; left:110px; top:88px; right:24px; max-width:600px; padding:18px; background:#182329; border-left:3px solid #ffd45c; pointer-events:none; }
+.follow-instruction span { font-size:12px; color:#ffd45c; }
+.follow-instruction p { font-size:20px; line-height:1.35; margin-top:5px; }
+.weak-points { position:absolute; bottom:24px; right:24px; width:300px; max-width:75%; background:#182329; border:1px solid #485d68; padding:14px; }
+.weak-points h2 { font-weight:600; margin-bottom:10px; }
+.weak-points button { display:block; padding:10px 0; border-top:1px solid #34464f; text-align:left; width:100%; }
+.weak-points span { display:block; color:#b6c5cc; font-size:13px; margin-top:4px; }
+.recovery { display:flex; gap:16px; flex-direction:column; padding:32px; color:#edf3f5; background:#182329; min-height:100%; align-items:flex-start; justify-content:center; }
+.recovery h2 { font-size:24px; }
+.recovery button { border:1px solid #b6c5cc; padding:10px 16px; }
+.destination-shortcuts { background:transparent; gap:8px; }
+.destination-shortcuts button { border:1px solid #485d68; background:transparent; min-height:90px; }
+.navigator-shell .welcome-panel h1 { font-size:40px; letter-spacing:-1.2px; line-height:1.05; }
+.import-backdrop { position:fixed; inset:0; z-index:100; background:#000a; display:grid; place-items:center; padding:20px; }
+.import-dialog { width:min(760px,100%); max-height:92vh; overflow:auto; background:#182329; color:#edf3f5; border:1px solid #485d68; padding:26px; }
+.import-dialog header { display:flex; justify-content:space-between; gap:20px; margin-bottom:16px; }
+.import-dialog h2 { font-size:26px; font-weight:600; }
+.import-dialog p { color:#b6c5cc; margin:12px 0; }
+.import-dialog label { display:flex; flex-direction:column; gap:6px; margin:15px 0; font-size:14px; }
+.import-dialog input { padding:10px; border:1px solid #607682; background:#213139; color:#edf3f5; min-width:0; }
+.import-fields { display:grid; grid-template-columns:1fr 1fr; gap:15px; }
+.source-preview { max-height:200px; display:block; margin:12px auto; }
+.primary-action { background:#ffd45c; color:#182329; padding:12px 18px; font-weight:600; }
+.primary-action:disabled { opacity:.4; }
+.draft-preview { position:relative; height:350px; background:#e6e8e6; margin:16px 0; }
+.draft-preview>img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:.25; pointer-events:none; }
+@media(max-width:1023px) {
+ .model-toolbar { top:10px;left:10px;right:10px;gap:5px; }
+ .model-toolbar button,.model-toolbar a { padding:6px 9px;font-size:12px; }
+ .model-actions { margin-left:auto; }
+ .model-actions a { display:none; }
+ .floor-selector { left:10px;top:80px;max-height:45%; }
+ .model-notice,.follow-instruction { top:80px;left:80px;right:10px;padding:10px;font-size:13px; }
+ .follow-instruction p { font-size:16px; }
+ .scene-caption { bottom:10px;left:10px;font-size:11px;max-width:85%; }
+ .playback-controls { bottom:10px;left:10px;right:10px;padding:8px;max-width:calc(100% - 20px);font-size:11px; }
+ .playback-controls button { min-height:35px;font-size:12px;padding:4px 8px; }
+ .weak-points { bottom:10px;right:10px;width:240px;max-height:60%;overflow:auto;font-size:12px; }
+ .navigator-shell .welcome-panel h1 { font-size:32px; }
+}
+
+.floor-selector nav { background:#182329; }
+.floor-selector .bg-white { background:#182329; color:#edf3f5; }
+.floor-selector .text-ink-3 { color:#b6c5cc; }
+.floor-selector button:hover { background:#34464f; }
+
+.floor-selector { max-width:175px; }
+.follow-instruction,.model-notice { left:215px; }
+@media(max-width:1023px) { .follow-instruction,.model-notice { left:80px; } }
+
+.scene-navigation { position:absolute; bottom:24px;right:24px;display:flex;gap:4px; }
+.scene-navigation button { border:1px solid #607682;background:#182329;color:#edf3f5;min-width:36px;min-height:36px;font-size:18px; }
+.media-dock { position:absolute; z-index:16; bottom:20px; left:24px; width:min(520px,calc(100% - 330px)); padding:12px 16px; border:1px solid #485d68; border-radius:12px; background:#182329f5; box-shadow:0 8px 32px #0006; }
+.media-status { color:#c5d3d9; font-size:12px; min-height:18px; }
+.timeline { position:relative; margin:6px 0 10px; }
+.timeline input { width:100%; accent-color:#ffd45c; cursor:pointer; }
+.chapter-marks { position:absolute; left:8px;right:8px;bottom:0;pointer-events:none; }
+.chapter-marks button { position:absolute; width:5px;height:8px; background:#edf3f5;pointer-events:auto; }
+.media-buttons { display:flex; gap:8px; align-items:center; }
+.media-buttons button,.media-buttons select { min-height:44px; padding:8px; color:#edf3f5; background:#263941; border-radius:6px; }
+.media-buttons button:disabled { opacity:.35; }
+.media-buttons .media-play { background:#ffd45c; color:#182329; font-weight:700; min-width:58px; }
+.media-time { margin-left:auto; font-variant-numeric:tabular-nums; font-size:12px; white-space:nowrap; }
+.model-actions select { background:#182329; border:1px solid #485d68; padding:10px; border-radius:4px; max-width:160px; }
+.linked-plan { position:absolute;right:24px;bottom:24px;width:260px;height:185px;background:#e6e8e6; border:1px solid #607682;z-index:10;box-shadow:0 6px 20px #0005;display:flex;flex-direction:column; }
+.linked-plan header { display:flex;justify-content:space-between;padding:6px 10px;background:#182329;color:#edf3f5;font-size:12px;flex:none; }
+.linked-plan header button { text-decoration:underline; }
+.linked-plan>div { min-height:0;flex:1; }
+.linked-plan.expanded { width:min(600px,calc(100% - 220px));height:60%; }
+.current-decision { padding:16px; border-left:3px solid #ffd45c; background:#213139; }
+.current-decision span { font-size:12px; color:#ffd45c; }
+.current-decision p { font-size:19px;line-height:1.35;margin-top:5px; }
+.route-itinerary summary { cursor:pointer;padding:12px 16px;color:#b6c5cc;font-size:14px; }
+.model-panel [role=dialog] { bottom:230px;right:24px;left:auto;max-width:calc(100% - 230px);z-index:14; }
+.model-panel:has(.media-dock) .scene-caption { display:none; }
+.model-panel:has(.media-dock) .floor-selector { max-height:30%; }
+.model-panel:has(.media-dock) .follow-instruction { right:24px; }
+@media(min-width:1024px) { .scene-navigation { bottom:225px;right:24px; } }
+@media(max-width:1023px) {
+ .media-dock { bottom:8px;left:8px;width:calc(100% - 16px);padding:8px 10px; }
+ .media-buttons { gap:4px; }.media-buttons button,.media-buttons select { padding:6px;min-height:44px;font-size:12px; }
+ .linked-plan { right:8px;bottom:8px;width:130px;height:100px; }
+ .linked-plan header { padding:4px;font-size:10px; }.linked-plan header span { display:none; }
+ .linked-plan.expanded { width:calc(100% - 90px);height:65%;bottom:8px; }
+ .model-panel:has(.media-dock) .linked-plan { bottom:132px;width:120px;height:88px; }
+ .model-panel:has(.media-dock) .linked-plan.expanded { width:calc(100% - 90px);height:45%; }
+ .model-panel [role=dialog] { bottom:8px;left:8px;right:8px;max-width:none;padding:12px; }
+ .model-panel:has([role=dialog]) .linked-plan { display:none; }
+ .model-panel:has(.media-dock) .floor-selector { display:none; }
+ .follow-instruction { left:8px!important;top:70px;padding:8px;max-width:none; }
+ .follow-instruction p { font-size:15px; }.follow-instruction span { font-size:11px; }
+ .model-panel:has(.media-dock) .model-actions { display:none; }
+ .current-decision { padding:10px 16px; }.current-decision p { font-size:17px; }
+}
+.weak-points { bottom:75px; }
+@media(max-width:1023px){.scene-navigation{right:10px;bottom:10px;}.scene-navigation button{min-width:28px;min-height:30px;font-size:14px;}.scene-caption{bottom:50px;}.weak-points{bottom:50px;}}

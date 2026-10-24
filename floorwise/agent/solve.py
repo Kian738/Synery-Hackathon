@@ -133,7 +133,7 @@ def solve(building: Building, kind: str, inputs: dict) -> tuple[dict, str]:
             "reachable": True, "stops": stops, "length_m": route.length_m,
             "space_path": [n for leg in route.legs for n in (leg.space_path if leg is route.legs[0] else leg.space_path[1:])],
             "legs": [{"from": leg.from_space_id, "to": leg.to_space_id, "length_m": leg.length_m,
-                      "space_path": leg.space_path, "element_path": leg.element_path} for leg in route.legs],
+                      "space_path": leg.space_path, "element_path": leg.element_path, "nodes": leg.nodes} for leg in route.legs],
         }
         understood = " → ".join(b.label(s) for s in stops)
         notes = f" ({', '.join(route.constraints)})" if route.constraints else ""

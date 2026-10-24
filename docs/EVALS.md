@@ -34,3 +34,10 @@ Goal: measure everything the jury measures, without overfitting to buildings we 
 3. Followability check: parse the generated directions back into moves, execute them on the graph, and confirm they reach the goal.
 4. Generated question sets (avoid-X, multi-stop, closures) for all 280 buildings, to stress the LLM parser and agent. These test the parser and agent, not the solver (that would be circular).
 5. Playwright UI flows.
+
+
+## Verified demo checks (2026-10-24)
+
+`fw check` now enforces nonzero suite coverage and thresholds, adds train to the basic end-to-end gate and runs a differential smoke gate. Walkability separately reports withheld routes, requires zero emitted-path failures and at least 80% sampled route availability. It no longer counts collision-crossing fallback paths as valid guidance.
+
+`fw eval differential` compares 7200 deterministic cases across 240 train/dev buildings with the kit's independent graph implementation. `fw eval rehearse` runs bounded live model state checks and saves transcripts for wording review. `fw ui-test` launches a fresh server on a free port; it forwards Playwright filters such as `--project=desktop`.

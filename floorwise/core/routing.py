@@ -32,6 +32,8 @@ class Route:
     floors: list[str] = field(default_factory=list)
     polyline: list[dict] = field(default_factory=list)  # [{floor_id, x, y}] for drawing
     guide: dict = field(default_factory=dict)  # structured steps + spoken overview
+    preview_available: bool = True
+    warnings: list[str] = field(default_factory=list)
     walk_m: float | None = None  # humane walking length along the drawn path (navigation only)
 
     def to_dict(self) -> dict:
@@ -65,7 +67,14 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     # The dataset sums rounded legs; doing the same keeps tours equal to the centimetre.
     route = Route(stops=stops, length_m=round(sum(leg.length_m for leg in legs), 2), legs=legs,
                   constraints=constraints.describe())
-    segments = walking_segments(building, graph, all_nodes) if humane else None
+    try:
+        segments = walking_segments(building, graph, all_nodes) if humane else None
+    except walk.WalkBlocked as error:
+        if error.space_id in stops:
+            raise NoRoute(f"No validated walking passage at {building.label(error.space_id)}; furniture or geometry blocks this route.") from error
+        # Exclude the blocked space and re-plan; every retry strictly reduces available spaces.
+        from dataclasses import replace
+        return plan_route(building, stops, replace(constraints, closed=constraints.closed | {error.space_id}), humane=True)
     route.guide = guide(building, graph, all_nodes, segments)
     route.steps = [step["text"] for step in route.guide["steps"]]
     if segments:
@@ -82,6 +91,13 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     else:
         route.polyline = polyline(building, graph, all_nodes)
     route.floors = list(dict.fromkeys(p["floor_id"] for p in route.polyline))
+    if humane:
+        from floorwise.core.scene import compile_scene
+        unsupported = set(compile_scene(building)['unmatched_openings'])
+        used = {e for leg in route.legs for e in leg.element_path}
+        if unsupported & used:
+            route.preview_available = False
+            route.warnings.append("Some route openings cannot be aligned with the supplied room boundaries. Use the floor plan; eye-level playback is unavailable.")
     return route
 
 

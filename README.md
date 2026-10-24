@@ -72,3 +72,8 @@ web/               React + Vite: 2D plan, 3D floor stack, animated routes, chat 
 ## Licences
 
 Data under `docs/` is from the kit. OSM-derived buildings are ODbL 1.0 (© OpenStreetMap contributors). Swiss Dwellings and ResPlan are CC BY 4.0. Procedural buildings are CC0. See the kit's `ATTRIBUTION.md`.
+
+
+## Verified building demo
+
+The cinematic Navigator includes schematic 3D, first-person route preview, profile-aware closure impact, and verified hypothetical door-width repairs. See [judging evidence](docs/JUDGING.md), [demo script](docs/DEMO.md), [product brief](PRODUCT.md), and [design direction](DESIGN.md). Run `uv run fw eval differential` for the independent official-router comparison and `uv run fw eval rehearse` for bounded live Claude checks. Image-derived buildings require review; voice hardware is not yet verified.
