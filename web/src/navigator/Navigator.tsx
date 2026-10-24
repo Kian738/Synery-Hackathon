@@ -88,7 +88,7 @@ export default function Navigator() {
         <div className="flex flex-wrap items-center gap-2 border-b border-ink-2 px-4 py-2.5">
           <Toggle on={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} icon="wheelchair" label="Step-free" tone="escape" />
           <Toggle on={voiceOut} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} icon="speaker" label="Read aloud" tone="mark" />
-          <span className="ml-auto flex items-center gap-1.5 text-sm text-ink-4">
+          <span className="flex basis-full items-center gap-1.5 text-sm text-ink-4 sm:ml-auto sm:basis-auto">
             <Pictogram name="here" size={16} className={nav.here ? "text-escape" : ""} />
             {nav.here ? <>at <b className="font-semibold text-white">{labelOf(g, nav.here)}</b></> : "Tap the plan to set where you are"}
           </span>

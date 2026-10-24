@@ -36,15 +36,18 @@ Last updated: 2026-10-24. **verified** = measured by an eval or test in this rep
 | chat agent with tools | live-tested on Groq (`openai/gpt-oss-120b`) |
 | interaction suite (8 personas + judge) | runs on Groq; first 3 scenarios: wheelchair 5.0, vague 5.0, wrong_room 3.8 (failed the "said it doesn't exist" check) |
 | known agent flaws seen live | asks back when both matches are in the same room; did not call `remember_person` on "I use a wheelchair" (applied step-free per call instead) |
-| research-backed behaviour (ask-gate, answer-first header, landmark chunking, floor-change steps, voice step mode) | **missing**; planned in `UX_PLAN.md` |
+| research-backed behaviour | done: nearest-match ask-gate, answer-first header (prompt + UI route sign), landmark chunking and floor-change steps (`instructions.py`), spoken overview of 4 parts or fewer, step mode with next/repeat/back |
+| live check (Groq, via web SSE) | wheelchair + location → `remember_person`, nearest toilet without asking, header line, 2 steps, alternative mentioned |
+| interaction suite on Groq | 7 of 8 scenarios score 4.7–5.0; wrong_room 3.3 (no directions to the alternatives). The judge is a lenient open model: **calibrate before trusting** |
 
 ## UI
 
 | Item | Status |
 |---|---|
-| Navigator app (old MVP) | works: plan, 3D stack, click-to-route, chat, closures, door preview, build dialog. The design is generic and being replaced |
-| Benchmark lab (admin) | **missing**; planned in `UX_PLAN.md` |
-| Playwright UI tests | **missing**; the plugin is installed (active after a Claude Code restart) |
+| Navigator (rebuilt) | signage design; categories; tap a room for "Go here" / "I'm here"; route sign + steps; step mode; voice; closures from the room card; deep links `?at=&to=&step_free=1` |
+| Benchmark Lab `/lab` | overview with CIs and trends, launch any suite with live logs, runs list, drill-down (question, expected, reply, trace, places and route on the plan), compare runs, dataset browser |
+| Playwright UI tests | 18/18 (desktop 1440 px + phone 390 px), `fw ui-test` |
+| not yet ported to the new UI | build-from-plans dialog (API exists), 3D floor stack, chat-driven door preview UI only lightly tested |
 
 ## Known risks
 

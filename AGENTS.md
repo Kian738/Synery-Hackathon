@@ -26,7 +26,8 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/core/graph.py` | `RouteGraph`: the dataset's exact route model plus `Constraints` (step-free, min width, closed, avoid, soft-avoid, extra doors) | verified (L0 100 %) |
 | `floorwise/core/geometry.py` | areas, 3D centroids, shared walls (0.35 m, ≥1 m), stacking, wall midpoint | verified (L1 100 %) |
 | `floorwise/core/ops.py` | one operator per question family | verified (L1 100 %) |
-| `floorwise/core/routing.py` | `plan_route`, tours, turn-by-turn text with landmarks | lengths verified; wording heuristic |
+| `floorwise/core/routing.py` | `plan_route`, tours, polyline | verified (L0 100 %) |
+| `floorwise/core/instructions.py` | followable directions: decision points, salient landmarks, floor-change steps, spoken overview (research §3) | unit-checked; wording reviewed by hand |
 | `floorwise/core/resolve.py` | entity linking: floors, rooms, room types, item types, lifts; fuzzy, with candidates | verified on train/dev/test text |
 | `floorwise/agent/spec.py` | `QuerySpec` (mentions) → solver inputs; ambiguity readings | verified |
 | `floorwise/agent/parse_rules.py` | free regex parser for known phrasings | verified 655/655 + perturbations |
@@ -41,8 +42,10 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/cli.py` | `run_benchmark` (Sunday command) | verified offline |
 | `floorwise/fw.py` | `fw`: the one command | verified |
 | `eval/` | eval suites L0–L7, ledger, report | see `docs/EVALS.md` |
-| `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | route/close/door tested; chat live on Groq |
-| `web/` | React app (being rebuilt; see `docs/UX_PLAN.md`) | old MVP; redesign in progress |
+| `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | tested; chat live on Groq |
+| `server/lab.py` | Benchmark Lab API: runs, compare, dataset, launch suites with live logs | tested |
+| `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | Playwright 18/18 (desktop + phone) |
+| `web/src/lab/` | Benchmark Lab UI (overview, launcher, runs, drill-down on plan, compare, dataset) | Playwright |
 | `docs/` | our docs plus the kit (`docs/industrial-agents-hackathon-2026`, read-only) | |
 | `research_notes/`, `reports/` | sourced research behind the decisions | |
 
@@ -57,6 +60,7 @@ uv run fw doctor             # check setup (keys, data, web build)
 uv run fw start              # app at http://localhost:8000
 uv run fw dev                # hot-reload dev (backend :8000, frontend :5173)
 uv run fw check              # all offline tests + eval gates; must stay green
+uv run fw ui-test            # Playwright UI tests (desktop + phone) against a fresh server
 uv run fw submit             # regenerate submissions/team_floorwise_test.csv
 uv run fw bench B Q OUT      # Sunday run (see BENCHMARK.md)
 uv run fw eval <suite> ...   # one suite (docs/EVALS.md)

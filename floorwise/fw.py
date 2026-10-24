@@ -4,6 +4,7 @@
   fw start                  build the web app if needed and open it (http://localhost:8000)
   fw dev                    backend + frontend with hot reload (http://localhost:5173)
   fw check                  every offline test and eval gate (free, ~3 min)
+  fw ui-test                build the web app, start a server, run Playwright on desktop + phone
   fw submit                 answer the public test set -> submissions/team_floorwise_test.csv
   fw bench B Q OUT          Sunday run: building dir B, questions file Q, answers file OUT (.json/.csv)
   fw chat [B]               talk to a building in the terminal
@@ -96,6 +97,26 @@ def check() -> int:
     return code or run([sys.executable, "-m", "eval", "gates"])
 
 
+def ui_test() -> int:
+    import time
+    import urllib.request
+
+    if web_is_stale() and run(["npm", "run", "build"], ROOT / "web"):
+        return 1
+    server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.app:app", "--port", "8011"], cwd=ROOT)
+    try:
+        for _ in range(40):
+            try:
+                urllib.request.urlopen("http://localhost:8011/api/lab/suites", timeout=1)
+                break
+            except OSError:
+                time.sleep(0.5)
+        os.environ["FLOORWISE_URL"] = "http://localhost:8011"
+        return run(["npx", "playwright", "test"], ROOT / "web")
+    finally:
+        server.terminate()
+
+
 def submit() -> int:
     out = ROOT / "submissions" / "team_floorwise_test.csv"
     return run([sys.executable, "-m", "floorwise.cli", str(DATA / "test"), str(out)])
@@ -118,6 +139,8 @@ def main() -> None:
         sys.exit(dev())
     if command == "check":
         sys.exit(check())
+    if command == "ui-test":
+        sys.exit(ui_test())
     if command == "submit":
         sys.exit(submit())
     if command == "bench":
