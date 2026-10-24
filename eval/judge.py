@@ -68,12 +68,13 @@ def measure(bm, sequence: list[str], step_free: bool = False, closed: set[str] |
             return Verdict(True, round(d, 2))
         for neighbour, edges in graph[node].items():
             for edge in edges.values():
-                if edge.get("space") == sequence[i]:  # a walk inside the current space
+                space = edge.get("space") or (node if node in bm.spaces else neighbour if neighbour in bm.spaces else None)
+                if space == sequence[i]:  # a walk inside the current space
                     _relax(heap, dist, d + edge["weight"], i, neighbour)
                 elif "via" in edge and i < last and neighbour == sequence[i + 1] and node == sequence[i]:
                     _relax(heap, dist, d + edge["weight"], i + 1, neighbour)  # stairs or a lift to the next space
         if i < last and node.startswith("door:"):  # a door shared with the next space
-            if any(edge.get("space") == sequence[i + 1] for edges in graph[node].values() for edge in edges.values()):
+            if sequence[i + 1] in graph[node] or any(edge.get("space") == sequence[i + 1] for edges in graph[node].values() for edge in edges.values()):
                 _relax(heap, dist, d, i + 1, node)
     return Verdict(False, None, "a step does not go through an open door, opening, stair or lift")
 

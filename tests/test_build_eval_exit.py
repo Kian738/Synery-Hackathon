@@ -26,7 +26,7 @@ def test_build_exit_reflects_floor_quality(monkeypatch, tmp_path, good):
         def record(self,**row):self.rows.append(row)
         def finish(self):return {'total':len(self.rows),'correct':sum(r['correct'] for r in self.rows)}
     monkeypatch.setattr(build,'Ledger',Ledger)
-    monkeypatch.setattr(sys,'argv',['eval.build','--split','dev','--limit','1','--mode','assisted']+(['--mode','assisted'] if whole_pipeline else []))
+    monkeypatch.setattr(sys,'argv',['eval.build','--split','dev','--limit','1']+(['--mode','assisted'] if whole_pipeline else []))
     if good:
         build.main()
     else:

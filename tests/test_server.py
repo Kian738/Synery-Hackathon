@@ -112,17 +112,27 @@ def test_tts_streamer_fallback_on_reply():
 
 
 def test_openai_loop_emits_text_delta(monkeypatch):
+    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from floorwise.llm.loop import Conversation
 
+    class MockStream:
+        def __init__(self, chunks):
+            self.chunks = chunks
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def __iter__(self):
+            return iter(self.chunks)
+
+    chunks = [
+        SimpleNamespace(usage=None, choices=[SimpleNamespace(delta=SimpleNamespace(content="Walk to room 101.", tool_calls=None))]),
+        SimpleNamespace(usage=None, choices=[SimpleNamespace(delta=SimpleNamespace(content=" ", tool_calls=None))]),
+        SimpleNamespace(usage=None, choices=[SimpleNamespace(delta=SimpleNamespace(content="Turn left.", tool_calls=None))]),
+    ]
     mock_client = MagicMock()
-    mock_resp = MagicMock()
-    mock_choice = MagicMock()
-    mock_choice.message.content = "Walk to room 101. Turn left."
-    mock_choice.message.tool_calls = None
-    mock_resp.choices = [mock_choice]
-    mock_resp.usage = None
-    mock_client.chat.completions.create.return_value = mock_resp
+    mock_client.chat.completions.create.return_value = MockStream(chunks)
 
     monkeypatch.setattr("floorwise.llm.client", lambda provider: mock_client)
 

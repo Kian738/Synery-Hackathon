@@ -107,8 +107,6 @@ from server.companion import create_companion_router  # noqa: E402
 
 app.include_router(lab_router)
 app.include_router(create_companion_router())
-from server.scenarios import router as scenario_router
-app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 
 @lru_cache(maxsize=1)

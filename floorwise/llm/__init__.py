@@ -72,7 +72,11 @@ def client(provider: str | None = None):
     if provider == "anthropic":
         import anthropic
 
-        return anthropic.Anthropic(timeout=timeout_s(), max_retries=retries())
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        if not key and not token:
+            raise KeyError("no API key for anthropic in .env (set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN)")
+        return anthropic.Anthropic(api_key=key, auth_token=token, timeout=timeout_s(), max_retries=retries())
     import openai
 
     config = PROVIDERS[provider]
