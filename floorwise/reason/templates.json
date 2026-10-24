@@ -1,0 +1,62 @@
+{
+  "evacuation": {
+    "doc": "A hazard in a building: close it, count the people, send them out, find the bottleneck, route responders, propose a door. The solver steps are placeholders until floorwise/evacuation is registered.",
+    "required": ["spec"],
+    "optional": [],
+    "steps": [
+      {"id": "spec", "op": "scenario", "args": {"spec": "$spec"}},
+      {"id": "g1", "op": "apply_hazards", "args": {"world": "#world", "spec": "#spec"}},
+      {"id": "occ", "op": "occupants", "args": {"world": "#g1", "spec": "#spec"}},
+      {"id": "exits", "op": "exits", "args": {"world": "#g1"}},
+      {"id": "evac", "op": "evacuate", "args": {"world": "#g1", "occupants": "#occ", "spec": "#spec"}},
+      {"id": "bn", "op": "bottleneck", "args": {"world": "#g1", "evacuation": "#evac"}},
+      {"id": "resp", "op": "responder_route", "args": {"world": "#g1", "spec": "#spec", "evacuation": "#evac"}},
+      {"id": "cand", "op": "door_candidates", "args": {"world": "#g1", "evacuation": "#evac", "bottleneck": "#bn"}},
+      {"id": "best", "op": "best_door", "args": {"world": "#g1", "candidates": "#cand", "spec": "#spec", "evacuation": "#evac"}}
+    ],
+    "answer": "#best"
+  },
+  "delivery": {
+    "doc": "Carry an item type from where it is to a destination: find holders, pick the nearest, route both legs under a width limit, and re-plan when an element is blocked.",
+    "required": ["item", "start", "destination"],
+    "optional": ["min_width_m", "step_free", "blocked"],
+    "steps": [
+      {"id": "blk", "op": "resolve_element", "when": "blocked", "args": {"world": "#world", "text": "$blocked"}},
+      {"id": "wx", "op": "close", "when": "blocked", "args": {"world": "#world", "element": "#blk"}},
+      {"id": "item", "op": "resolve_item", "args": {"world": "#world", "text": "$item"}},
+      {"id": "s", "op": "resolve", "args": {"world": "#world", "text": "$start"}},
+      {"id": "d", "op": "resolve", "args": {"world": "#world", "text": "$destination"}},
+      {"id": "hold", "op": "find", "args": {"world": {"$if": "blocked", "then": "#wx", "else": "#world"}, "item": "#item"}},
+      {"id": "pick", "op": "nearest", "args": {"world": {"$if": "blocked", "then": "#wx", "else": "#world"}, "start": "#s", "candidates": "#hold", "min_width_m": "$min_width_m", "step_free": "$step_free"}},
+      {"id": "leg1", "op": "route", "args": {"world": {"$if": "blocked", "then": "#wx", "else": "#world"}, "start": "#s", "end": "#pick", "min_width_m": "$min_width_m", "step_free": "$step_free"}},
+      {"id": "leg2", "op": "route", "args": {"world": {"$if": "blocked", "then": "#wx", "else": "#world"}, "start": "#pick", "end": "#d", "min_width_m": "$min_width_m", "step_free": "$step_free"}},
+      {"id": "l1", "op": "length", "args": {"route": "#leg1"}},
+      {"id": "l2", "op": "length", "args": {"route": "#leg2"}},
+      {"id": "total", "op": "add", "args": {"left": "#l1", "right": "#l2"}}
+    ],
+    "answer": "#total"
+  },
+  "maintenance_closure": {
+    "doc": "Take one element out of service: who can no longer be reached from a start, and, for an optional pair of places, how the route changes.",
+    "required": ["element", "start"],
+    "optional": ["step_free", "from_space", "to_space"],
+    "together": [["from_space", "to_space"]],
+    "steps": [
+      {"id": "start", "op": "resolve", "args": {"world": "#world", "text": "$start"}},
+      {"id": "el", "op": "resolve_element", "args": {"world": "#world", "text": "$element"}},
+      {"id": "g1", "op": "close", "args": {"world": "#world", "element": "#el"}},
+      {"id": "before", "op": "reach", "args": {"world": "#world", "start": "#start", "step_free": "$step_free"}},
+      {"id": "after", "op": "reach", "args": {"world": "#g1", "start": "#start", "step_free": "$step_free"}},
+      {"id": "lost", "op": "difference", "args": {"left": "#before", "right": "#after"}},
+      {"id": "n_lost", "op": "count", "args": {"items": "#lost"}},
+      {"id": "a", "op": "resolve", "when": "from_space", "args": {"world": "#world", "text": "$from_space"}},
+      {"id": "b", "op": "resolve", "when": "from_space", "args": {"world": "#world", "text": "$to_space"}},
+      {"id": "r0", "op": "route", "when": "from_space", "args": {"world": "#world", "start": "#a", "end": "#b", "step_free": "$step_free"}},
+      {"id": "r1", "op": "route", "when": "from_space", "args": {"world": "#g1", "start": "#a", "end": "#b", "step_free": "$step_free"}},
+      {"id": "l0", "op": "length", "when": "from_space", "args": {"route": "#r0"}},
+      {"id": "l1", "op": "length", "when": "from_space", "args": {"route": "#r1"}},
+      {"id": "cmp", "op": "compare", "when": "from_space", "args": {"left": "#l0", "right": "#l1"}}
+    ],
+    "answer": {"$if": "from_space", "then": "#cmp", "else": "#n_lost"}
+  }
+}

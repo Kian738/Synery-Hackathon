@@ -11,7 +11,7 @@ from floorwise.paths import DATA
 
 def test_cit_route_does_not_trap_start_in_diagonal_only_grid_region():
     building=Building.load(DATA/'dev'/'osm-way27917482')
-    route=plan_route(building,['osm-way27917482-F3-S069','osm-way27917482-F0-S332'],Constraints(outside='none'),humane=True)
+    route=plan_route(building,['osm-way27917482-F3-S069','osm-way27917482-F0-S332'],Constraints(),humane=True)
     assert route.preview_available and route.walk_m is not None
     assert route.floors[0].endswith('F3') and route.floors[-1].endswith('F0')
     assert all(p['node']!='outside' for p in route.polyline)

@@ -40,7 +40,7 @@ def footprint(asset: dict) -> Polygon:
 
 def check(building: Building, a: str, b: str) -> dict | None:
     try:
-        route = plan_route(building, [a, b], Constraints(outside="none"), humane=True)
+        route = plan_route(building, [a, b], Constraints(), humane=True)
     except NoRoute:
         return None
     by_floor: dict[str, list] = {}

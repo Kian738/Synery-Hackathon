@@ -48,7 +48,7 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     """humane=True: also compute real walking lines through each room (floorwise.core.walk) and use them for
     drawing, distances and turns. The graph length (length_m) is unchanged either way."""
     graph = RouteGraph(building, constraints, keep=frozenset(stops))
-    legs, total, all_nodes = [], 0.0, []
+    legs, path = [], []
     for start, end in itertools.pairwise(stops):
         found = graph.shortest(start, end)
         if found is None:
@@ -57,16 +57,13 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
                 + (f" ({'; '.join(constraints.describe())})" if constraints.describe() else "")
             )
         length, nodes = found
-        elements = []
-        for first, second in itertools.pairwise(nodes):
-            elements.append(graph.edge_via(first, second)["via"])
-        legs.append(Leg(start, end, round(length, 2), nodes,
-                        [n for n in nodes if not n.startswith(DOOR_PREFIX)], elements))
-        total += length
-        all_nodes += nodes if not all_nodes else nodes[1:]
-    # The dataset sums rounded legs; doing the same keeps tours equal to the centimetre.
-    route = Route(stops=stops, length_m=round(sum(leg.length_m for leg in legs), 2), legs=legs,
-                  constraints=constraints.describe())
+        spaces = [n for n in graph.expand(nodes) if not n.startswith(DOOR_PREFIX)]
+        legs.append(Leg(start, end, round(length, 2), nodes, [n for i, n in enumerate(spaces) if not i or n != spaces[i - 1]],
+                        graph.elements(nodes)))
+        path += nodes if not path else nodes[1:]
+    all_nodes = graph.expand(path)
+    # The expected answers sum the rounded legs (the kit's own router rounds the exact sum, 0.01 m apart at most).
+    route = Route(stops=stops, length_m=round(sum(leg.length_m for leg in legs), 2), legs=legs, constraints=constraints.describe())
     try:
         segments = walking_segments(building, graph, all_nodes) if humane else None
     except walk.WalkBlocked as error:
@@ -81,8 +78,8 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
         route.polyline = []
         previous = None
         for i in sorted(segments):
-            # A new piece starts after a floor change or a stretch outside: never join those with a line.
-            gap = previous is not None and i - previous != 2  # 2 = through one door; 1 = lift/stairs; 4 = outside
+            # A new piece starts after a floor change: never join those with a line.
+            gap = previous is not None and i - previous != 2  # 2 = through one door; 1 = lift/stairs
             for k, (x, y) in enumerate(segments[i]):
                 route.polyline.append({"floor_id": building.spaces[all_nodes[i]]["floor_id"], "x": round(x, 3), "y": round(y, 3),
                                        "node": all_nodes[i], **({"gap": True} if gap and k == 0 else {})})

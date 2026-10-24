@@ -10,3 +10,4 @@ web/test-results/
 docs/industrial-agents-hackathon-2026/
 buildings/
 .playwright-mcp/
+.cache/
