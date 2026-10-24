@@ -98,9 +98,14 @@ def answer_with_trace(building_directory: Path | str, question: str, hints: dict
                 trace.setdefault("solve_errors", []).append(str(error))
         if not solved:
             return fallback(building, question, trace, "; ".join(trace.get("solve_errors", [])))
-        votes = Counter(committed(reply) for _, reply in solved)
+        def vote_key(item: tuple[dict, str]) -> str:
+            # Routes are compared by length (the judges score best length / our length), not by their space ids.
+            result_, reply_ = item
+            return f"{result_['length_m']:.2f} m" if result_.get("reachable") and "length_m" in result_ else committed(reply_)
+
+        votes = Counter(vote_key(item) for item in solved)
         winner = pick_reading(list(votes.elements()))
-        result, reply = next(item for item in solved if committed(item[1]) == winner)
+        result, reply = next(item for item in solved if vote_key(item) == winner)
         trace["kind"] = spec.kind
         trace["result"] = result
         if len(readings) > 1:

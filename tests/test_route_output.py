@@ -36,7 +36,7 @@ def test_node_path_is_a_real_walk_through_the_route_graph(campus, route):
     nodes, graph = node_path(result), RouteGraph(campus, Constraints())
     assert nodes[0] == start and nodes[-1] == end
     assert any(node.startswith(DOOR_PREFIX) for node in nodes)
-    walked = sum(graph.edge_via(a, b)["weight"] for a, b in zip(nodes, nodes[1:], strict=False))
+    walked = graph.path_length(nodes)
     assert abs(walked - result["length_m"]) <= TOLERANCE_M
 
 

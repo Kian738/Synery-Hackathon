@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
-import { ApiError, api, chat } from "../lib/api";
+import { ApiError, api, chat, cancelChat } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
 import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "agent"; text: string; model?: string }
+  | { id: number; role: "agent"; text: string; model?: string;streamId?:string;status?:'streaming'|'complete'|'interrupted' }
+  | { id:number;role:'result';text:string;result:VisualResult & {total_rows:number};query?:string }
   | { id: number; role: "activity"; text: string; tool?:string; input?:Record<string,unknown>;result?:unknown;failed?:boolean }
   | { id: number; role: "error"; text: string }
   | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" }
@@ -59,12 +60,17 @@ export function useNavigator(buildingId: string) {
   const [routeMeta, setRouteMeta] = useState<{ from: string; to: string; alternatives?: { room: string; walk_m: number }[] } | null>(null);
   const [highlights, setHighlights] = useState<Set<string>>(new Set());
   const [closed, setClosed] = useState<Set<string>>(new Set());
-  const [here, setHere] = useState<string | null>(null);
+  const [here, setHereState] = useState<string | null>(null);
+  const [hereSource, setHereSource] = useState<"default" | "declared" | "link">("default");
+  const setHere = useCallback((id: string | null) => { setHereState(id); setHereSource("declared"); }, []);
   const [stepFree, setStepFree] = useState(false);
   const [previewDoor, setPreviewDoor] = useState<Opening | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [busyLabel,setBusyLabel]=useState("Working…");
+  const requestRef=useRef<{id:string;controller:AbortController;session:string}|null>(null);
+  const queryRef=useRef('');
+  const stop=useCallback(()=>{const active=requestRef.current;if(!active)return;requestRef.current=null;void cancelChat(active.session,active.id).catch(()=>{});active.controller.abort();setBusy(false);},[]);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
   const geometryRef = useRef<Geometry | null>(null);
@@ -89,10 +95,13 @@ export function useNavigator(buildingId: string) {
       setMessages([]); setActiveStep(0);
       // Start where a visitor actually stands: the QR/deep-link spot, else the main entrance.
       const at = new URLSearchParams(window.location.search).get("at");
-      setHere(at && g.spaces.some((s) => s.id === at) ? at : mainEntrance(g));
+      const linkedStart = at && g.spaces.some((s) => s.id === at);
+      setHereState(linkedStart ? at : mainEntrance(g));
+      setHereSource(linkedStart ? "link" : "default");
     })().catch((e) => setNotice(String(e.message ?? e)));
     return () => { cancelled = true; };
   }, [buildingId]);
+  useEffect(()=>()=>stop(),[buildingId,stop]);
 
   const showRoute = useCallback((r: Route) => {
     if (!isRoute(r)) {
@@ -115,6 +124,7 @@ export function useNavigator(buildingId: string) {
         const result=e.result;
         if(!isVisualResult(result)||!Number.isInteger(e.total_rows)||e.total_rows<0){setNotice("An incomplete visual answer was ignored. Please retry.");continue;}
         setVisualResult({...result,total_rows:e.total_rows});
+        setMessages(all=>all.some(m=>m.role==='result'&&m.result.id===result.id)?all:[...all,{id:nextId++,role:'result',text:result.title,result:{...result,total_rows:e.total_rows},query:queryRef.current}]);
         setHighlights(new Set(result.entities.map(entity=>entity.id)));
         const primary=(result.measurements.primary_ids as string[]|undefined)?.[0];
         const primaryFloor=result.entities.find(e=>e.id===primary)?.floor_id;
@@ -209,7 +219,9 @@ export function useNavigator(buildingId: string) {
 
   const ask = useCallback(async (text: string,selectedSpace?:string|null) => {
     if (!sessionId) return;
-    setVisualResult(null);setHighlights(new Set());
+    if(requestRef.current)return;
+    queryRef.current=text;
+    const active={id:crypto.randomUUID(),controller:new AbortController(),session:sessionId};requestRef.current=active;
     push({ role: "user", text });
     setBusy(true);
     setBusyLabel("Starting your request…");
@@ -219,7 +231,11 @@ export function useNavigator(buildingId: string) {
     try {
       await chat(sessionId, text, (event) => {
         if (current !== generation.current || !event || typeof event !== "object") return;
+        if(active.controller.signal.aborted)return;
         if(event.type==='progress'){setBusyLabel(event.data.message+'…');return;}
+        if(event.type==='assistant_start'){setMessages(all=>[...all,{id:nextId++,role:'agent',text:'',model:event.data.model,streamId:event.data.message_id,status:'streaming'}]);return;}
+        if(event.type==='assistant_delta'){setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,text:m.text+event.data.text}:m));return;}
+        if(event.type==='assistant_end'){setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,status:'complete'}:m));return;}
         if (event.type === "tool") push({ role: "activity",tool:event.data.name,input:event.data.input, text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
         else if(event.type==="tool_result"){
           let result:unknown=event.data.content;try{result=JSON.parse(event.data.content);}catch{}
@@ -235,13 +251,14 @@ export function useNavigator(buildingId: string) {
             const r = event.data.route;
             setRouteMeta({ from: labelOf(g!, r.stops[0]), to: labelOf(g!, r.stops[r.stops.length - 1]) });
           }
-        } else if (event.type === "reply" && typeof event.data?.text === "string") {setTurnUsage(event.data.usage??null);push({ role: "agent", text: event.data.text, model: event.data.model });}
+        } else if (event.type === "reply" && typeof event.data?.text === "string") {setTurnUsage(event.data.usage??null);setMessages(all=>event.data.message_id&&all.some(m=>m.role==='agent'&&m.streamId===event.data.message_id)?all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,text:event.data.text,status:'complete'}:m):[...all,{id:nextId++,role:'agent',text:event.data.text,model:event.data.model}]);}
         else if (event.type === "error") push({ role: "error", text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
-      },selectedSpace);
+      },selectedSpace,active.id,active.controller.signal);
     } catch (e) {
-      if (current === generation.current) push({ role: "error", text: String(e) });
+      if (current === generation.current&&!active.controller.signal.aborted) push({ role: "error", text: String(e) });
     } finally {
-      if (current === generation.current) setBusy(false);
+      if (current === generation.current) {setMessages(all=>all.map(m=>m.role==='agent'&&m.status==='streaming'?{...m,status:'interrupted'}:m));setBusy(false);}
+      if(requestRef.current===active)requestRef.current=null;
     }
   }, [sessionId, here, stepFree, apply]);
 
@@ -256,8 +273,8 @@ export function useNavigator(buildingId: string) {
   const clearRoute = () => { setRoute(null); setRouteMeta(null); setActiveStep(0); };
 
   return {
-    visualResult,setVisualResult,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
-    here, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
-    goTo, ask, toggleClosed, decideChange,busyLabel,
+    visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
+    here, hereSource, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
+    goTo, ask, toggleClosed, decideChange,busyLabel,apply,
   };
 }

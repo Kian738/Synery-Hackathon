@@ -14,7 +14,7 @@ LARGEST_BUILDING_BUDGET_S = 20
 
 
 def reference_chaos(building: Building, constraints: Constraints) -> dict:
-    constraints = replace(constraints, outside='free')
+    constraints = replace(constraints, outside='exits')
     rooms = {s for s, r in building.spaces.items() if r['type'] == 'room'}
     baseline = RouteGraph(building, constraints).reachable(OUTSIDE) & rooms
     groups = {}

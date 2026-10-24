@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { RoomText } from "../components/RoomText";
+import {ScenarioPanel} from '../components/ScenarioPanel';
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -25,10 +26,20 @@ export default function Navigator() {
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
   const [weakOpen,setWeakOpen]=useState(false);
+  const [scenarioOpen,setScenarioOpen]=useState(false);
   const [questionOpen,setQuestionOpen]=useState(false);
   const [phoneOpen,setPhoneOpen]=useState(false);
   const [compact,setCompact]=useState(()=>matchMedia("(max-width:1023px)").matches);
   const [toolsOpen,setToolsOpen]=useState(false);
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const outside = (e: PointerEvent) => { if (!toolsRef.current?.contains(e.target as Node)) setToolsOpen(false); };
+    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { setToolsOpen(false); toolsRef.current?.querySelector("summary")?.focus(); } };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [toolsOpen]);
   useEffect(()=>{const q=matchMedia("(max-width:1023px)");const changed=()=>{setCompact(q.matches);setToolsOpen(false);};q.addEventListener("change",changed);return()=>q.removeEventListener("change",changed);},[]);
   const [lookOffset,setLookOffset]=useState({yaw:0,pitch:0});
   const [focusRequest,setFocusRequest]=useState<{id:string;revision:number}|null>(null);
@@ -98,7 +109,7 @@ export default function Navigator() {
     if(following&&previewPosition)out.push({id:"preview",at:[previewPosition.x,previewPosition.y],floor_id:previewPosition.floor_id,label:"Preview avatar (not your location)",tone:"info"});
     const at = (id: string) => g.spaces.find((s) => s.id === id);
     const here = nav.here ? at(nav.here) : null;
-    if (here) out.push({ id: "here", at: here.anchor??centroid(here.polygon), floor_id: here.floor_id, label: `You are in ${here.name}`, tone: "start" });
+    if (here) out.push({ id: "here", at: here.anchor??centroid(here.polygon), floor_id: here.floor_id, label: `Starting from ${here.name}`, tone: "start" });
     if (nav.route?.polyline.length) {
       const first = nav.route.polyline[0], last = nav.route.polyline[nav.route.polyline.length - 1];
       if(nav.route.stops[0]!==nav.here)out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Route start", tone: "start" });
@@ -131,7 +142,7 @@ export default function Navigator() {
   }
 
   return (
-    <div className={`navigator-shell flex h-full flex-col lg:flex-row ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`}>
+    <div className={`navigator-shell flex h-full flex-col lg:flex-row ${!nav.route && nav.messages.length === 0 ? "first-use" : ""} ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`}>
       {/* ---------- sign column ---------- */}
       <aside className="order-2 flex min-h-0 flex-1 flex-col navigation-panel bg-ink text-white lg:order-1 lg:w-[370px] lg:flex-none">
         <header className="flex items-center gap-2 border-b border-ink-2 px-4 py-3">
@@ -152,6 +163,7 @@ export default function Navigator() {
             </span>
             <span className="shrink-0 text-sm text-ink-4 underline underline-offset-4">change</span>
           </button>
+          {nav.here && <p className="mt-1 text-[13px] text-ink-4">{nav.hereSource === "default" ? "Entrance used as start. Change it if you’re elsewhere." : nav.hereSource === "link" ? "Start supplied by link. Change it if you’re elsewhere." : "Start set by you. Location is not tracked."}</p>}
           {picking && (
             <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
           )}
@@ -166,7 +178,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));}} onRerun={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -179,7 +191,7 @@ export default function Navigator() {
           </div>
         )}
         {nav.turnUsage&&<div className="turn-usage" role="status">{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}</div>}
-        <Composer busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
+        <Composer onStop={nav.stop} busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
       </aside>
 
       <main className="model-panel relative order-1 flex h-[46vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
@@ -195,8 +207,9 @@ export default function Navigator() {
           <div className="model-actions">
             <button aria-label="Show map" aria-pressed={planExpanded} onClick={toggleMap}><Pictogram name="map" size={18}/><span>Map</span></button>
             {following&&<button aria-expanded={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}>Ask</button>}
-            <details className="building-tools" open={!compact||toolsOpen} onToggle={e=>{if(compact)setToolsOpen(e.currentTarget.open);}}>
-              <summary aria-label="Building tools" title="Building tools">•••</summary><div className="building-tools-content">
+            <details ref={toolsRef} className="building-tools" open={toolsOpen}>
+              <summary aria-label="Building tools" title="Building tools" onClick={e=>{e.preventDefault();setToolsOpen(v=>!v);}}>Tools</summary><div className="building-tools-content">
+            {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}>Scenarios</button>}
             <CompanionControl buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
               onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
               onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
@@ -225,7 +238,8 @@ export default function Navigator() {
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span><button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
-        {weakOpen&&!following&&<section className="stress-drawer" aria-label="Building stress test">
+        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel geometry={g} sessionId={nav.sessionId} room={selected?.id??nav.here} onClose={()=>setScenarioOpen(false)} onResult={nav.apply}/>}
+        {weakOpen&&!following&&!scenarioOpen&&<section className="stress-drawer" aria-label="Building stress test">
           <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>
           <p>Each result closes one connector independently and checks step-free routes to mapped exits.</p>
           {nav.busy?<p role="status">Checking connector closures…</p>:nav.weakPoints.length?nav.weakPoints.map((item,i)=><button className="stress-result" key={i} onClick={()=>{nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}>
@@ -246,21 +260,24 @@ export default function Navigator() {
 }
 
 function VisualAnswer({result,total,sessionId,onClose,onPick,onFloor,geometry}:{result:VisualResult;total:number;sessionId:string;onClose:()=>void;onPick:(id:string)=>void;onFloor:(id:string)=>void;geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>}) {
-  const [rows,setRows]=useState<Record<string,unknown>[]>([]),[offset,setOffset]=useState(0),[error,setError]=useState("");
-  useEffect(()=>{setOffset(0);setRows([]);},[result.id]);
-  useEffect(()=>{let current=true;setError("");api.resultPage(sessionId,result.id,offset).then(page=>{if(current)setRows(page.rows);}).catch(e=>{if(current)setError(e.message);});return()=>{current=false;};},[sessionId,result.id,offset]);
+  const grouped=!!result.measurements.grouped;
+  const [rows,setRows]=useState<Record<string,unknown>[]>([]),[offset,setOffset]=useState(0),[error,setError]=useState(''),[pageTotal,setPageTotal]=useState(total),[room,setRoom]=useState('');
+  useEffect(()=>{setOffset(0);setRows([]);setRoom('');},[result.id]);
+  useEffect(()=>{let current=true;setError('');setRows([]);api.resultPage(sessionId,result.id,offset,grouped?(room?'items':'rooms'):'default',room).then(page=>{if(current){setRows(page.rows);setPageTotal(page.total);}}).catch(e=>{if(current)setError(e.message);});return()=>{current=false;};},[sessionId,result.id,offset,grouped,room]);
   return <section className="visual-answer" aria-label="Visual answer">
-    <header><span>{result.kind.replaceAll("_"," ")}</span><button aria-label="Close visual answer" onClick={onClose}>Close</button></header>
-    <h2>{result.title}</h2>
-    <p className="result-provenance">{result.provenance}</p>
+    <header><span>{grouped?'Equipment by room':result.kind.replaceAll('_',' ')}</span><button aria-label="Close visual answer" onClick={onClose}>Close</button></header>
+    <h2>{result.title}</h2><p className="result-provenance">{result.provenance}</p>
+    {grouped&&<p className="result-measure"><b>{String(result.measurements.item_count)} items</b><span>in {String(result.measurements.room_count)} rooms</span></p>}
+    {room&&<button onClick={()=>{setRoom('');setOffset(0);}}>Back to rooms</button>}
     <div className="result-floors">{result.floor_ids.map(id=><button key={id} onClick={()=>onFloor(id)}>{geometry.floors.find(f=>f.id===id)?.name??id}</button>)}</div>
-    {Object.entries(result.measurements).filter(([,v])=>typeof v==="number").map(([key,value])=><p key={key} className="result-measure"><span>{key.replace(/_m2$|_m$/," ").replaceAll("_"," ")}</span><b>{String(value)}{key.includes("m2")?" m²":key.endsWith("_m")?" m":""}</b></p>)}
+    {!grouped&&Object.entries(result.measurements).filter(([,v])=>typeof v==='number').map(([key,value])=><p key={key} className="result-measure"><span>{key.replace(/_m2$|_m$/,' ').replaceAll('_',' ')}</span><b>{String(value)}{key.includes('m2')?' m²':key.endsWith('_m')?' m':''}</b></p>)}
     {result.warnings.map((warning,i)=><p key={i}>{warning}</p>)}
-    {error&&<p role="alert">{error}</p>}
-    {!rows.length&&total>0&&!error&&<p className="result-provenance" role="status">Loading result page…</p>}
-    <ol className="result-list">{rows.map((row,i)=><li key={String(row.id??i)}><button onClick={()=>geometry.floors.some(f=>f.id===row.id)?onFloor(String(row.id)):onPick(String(row.id))} disabled={!geometry.spaces.some(s=>s.id===row.id)&&!geometry.assets.some(a=>a.id===row.id)&&!geometry.floors.some(f=>f.id===row.id)}><span>{String(row.label??row.name??row.id)}</span><b>{row.count!==undefined?String(row.count):row.area_m2!==undefined?`${row.area_m2} m²`:row.overlap_m2!==undefined?`${row.overlap_m2} m² overlap`:row.reachable!==undefined?(row.reachable?"Reachable":"Unavailable"):row.before_m!==undefined?`${row.before_m} → ${row.after_m} m`:"Show"}</b></button></li>)}</ol>
-    {total>25&&<nav aria-label="Result pages"><button disabled={offset===0} onClick={()=>{setRows([]);setOffset(Math.max(0,offset-25));}}>Previous</button><span>{offset+1}–{Math.min(offset+25,total)} of {total}</span><button disabled={offset+25>=total} onClick={()=>{setRows([]);setOffset(offset+25);}}>Next</button></nav>}
-    <p className="result-provenance">All {result.entities.length} entities are highlighted across the listed floors. The list is paged.</p>
+    {Array.isArray(result.measurements.assumptions)&&<details><summary>Inputs, method and assumptions</summary><p>{String(result.measurements.method??'')}</p><ul>{result.measurements.assumptions.map((a,i)=><li key={i}>{String(a)}</li>)}</ul></details>}
+    {error&&<p role="alert">{error.includes('404')?'This earlier result expired. Use Run again on its chat card.':error}</p>}
+    {!rows.length&&pageTotal>0&&!error&&<p role="status">Loading results…</p>}
+    <ol className="result-list">{rows.map((row,i)=><li key={String(row.id??i)}><button onClick={()=>geometry.floors.some(f=>f.id===row.id)?onFloor(String(row.id)):onPick(String(row.id))} disabled={!geometry.spaces.some(s=>s.id===row.id)&&!geometry.assets.some(a=>a.id===row.id)&&!geometry.floors.some(f=>f.id===row.id)}><span>{String(row.label??row.name??row.id)}</span><b>{row.count!==undefined?String(row.count):row.area_m2!==undefined?`${row.area_m2} m²`:row.overlap_m2!==undefined?`${row.overlap_m2} m² overlap`:row.reachable!==undefined?(row.reachable?'Reachable':'Unavailable'):row.before_m!==undefined?`${row.before_m} → ${row.after_m} m`:'Show'}</b></button>{grouped&&!room&&<button aria-label={`Items in ${row.label}`} onClick={()=>{setRoom(String(row.id));setOffset(0);}}>Items</button>}</li>)}</ol>
+    {pageTotal>25&&<nav aria-label="Result pages"><button disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-25))}>Previous</button><span>{offset+1}–{Math.min(offset+25,pageTotal)} of {pageTotal}</span><button disabled={offset+25>=pageTotal} onClick={()=>setOffset(offset+25)}>Next</button></nav>}
+    <p className="result-provenance">{result.entities.length} matching entities across {result.floor_ids.length} floors. Lists are paged; map matches are complete.</p>
   </section>;
 }
 
@@ -318,12 +335,12 @@ function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examp
           ))}
         </div>
       )}
-      <p className="mt-6 font-sign text-sm text-ink-4">Things you can say</p>
+      <details className="example-requests mt-5"><summary className="cursor-pointer font-sign text-sm text-ink-4">Things you can say</summary>
       <ul className="mt-2 space-y-1.5">
         {examples.map((t) => (
           <li key={t}><button onClick={() => onAsk(t)} className="text-left text-[15px] text-concrete underline decoration-ink-3 underline-offset-4 hover:decoration-mark">“{t}”</button></li>
         ))}
-      </ul>
+      </ul></details>
     </section>
   );
 }
@@ -392,14 +409,14 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel }: {
-  busyLabel:string;
+function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun }: {
+  busyLabel:string;onResult:(r:VisualResult & {total_rows:number})=>void;onRerun:(q:string)=>void;
   geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
 }) {
   const [history,setHistory]=useState(false);
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { const panel = end.current?.parentElement; if (panel) panel.scrollTop = panel.scrollHeight; }, [messages, busy]);
+  useEffect(() => { const panel = end.current?.parentElement; if (panel && panel.scrollHeight-panel.scrollTop-panel.clientHeight<100) panel.scrollTop = panel.scrollHeight; }, [messages, busy]);
   const turns=useMemo(()=>{
     const turns:Message[][]=[];
     messages.forEach(m=>{if(m.role==="user"||!turns.length)turns.push([]);turns[turns.length-1].push(m);});
@@ -417,6 +434,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
       {turns.length>2&&<button className="conversation-history" aria-expanded={history} onClick={()=>setHistory(!history)}>{history?"Collapse history":`Earlier conversation (${turns.length-2} turns)`}</button>}
       {visible.map((m) => {
         if(m.role==="trace")return <ToolTrace key={m.id} activities={m.activities} busy={m.busy}/>;
+        if(m.role==='result')return <div key={m.id} className="answer-reference"><span>{m.text}</span><button onClick={()=>onResult(m.result)}>View results</button>{m.query&&<button onClick={()=>onRerun(m.query!)} disabled={busy}>Run again</button>}</div>;
         if (m.role === "user") return <p key={m.id} className="ml-10 border-r-4 border-concrete pr-3 text-right text-[15.5px] text-concrete">{m.text}</p>;
         if (m.role === "error") return <p key={m.id} className="border-l-4 border-signal bg-ink-2 px-3 py-2 text-[14.5px]">{m.text}</p>;
         if (m.role === "options")
@@ -447,6 +465,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
           );
         return (
           <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
+            {m.role==='agent'&&m.status==='interrupted'&&<p role="status">Answer interrupted. Computed results remain available.</p>}
             {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}><RoomText text={line.replace(/\*\*/g, "")} spaces={geometry.spaces} onRoom={onRoom}/></p>)}
           </div>
         );
@@ -457,7 +476,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
   );
 }
 
-function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void }) {
+function Composer({ busy, onSend,onStop }: { busy: boolean; onSend: (t: string) => void;onStop:()=>void }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState("");
@@ -481,6 +500,7 @@ function Composer({ busy, onSend }: { busy: boolean; onSend: (t: string) => void
       )}
       <input value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Ask the building"}
         aria-label="Message" className="h-12 min-w-0 flex-1 border border-ink-3 bg-ink-2 px-3 text-[16px] text-white placeholder:text-ink-4 focus:border-white focus:outline-none" />
+      {busy&&<button type="button" className="border border-ink-3 px-3" onClick={onStop}>Stop</button>}
       <button type="submit" disabled={busy || !text.trim()} aria-label="Send"
         className="grid h-12 w-12 shrink-0 place-items-center bg-mark text-ink disabled:opacity-40"><Pictogram name="send" size={20} /></button>
     </form>
@@ -546,14 +566,16 @@ function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; inde
 
 function StartPicker({ geometry, onPick }: { geometry: NonNullable<ReturnType<typeof useNavigator>["geometry"]>; onPick: (id: string) => void }) {
   const [query, setQuery] = useState("");
-  const options = query.trim()
-    ? geometry.spaces.filter((x) => `${x.name} ${x.ref ?? ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
-    : entrances(geometry).slice(0, 6);
+  const normalized = query.trim().toLocaleLowerCase();
+  const matches = normalized
+    ? geometry.spaces.filter((x) => `${x.name} ${x.ref ?? ""} ${geometry.floors.find(f => f.id === x.floor_id)?.name ?? ""}`.toLocaleLowerCase().includes(normalized))
+    : entrances(geometry);
+  const options = matches.slice(0, 8);
   return (
     <div className="mt-2 space-y-1.5">
       <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Room name or number"
         aria-label="Search for your room" className="h-10 w-full border border-ink-3 bg-ink-2 px-3 text-white placeholder:text-ink-4 focus:border-white focus:outline-none" />
-      <p className="text-[13px] text-ink-4">{query ? "Matching rooms" : "Entrances, or tap your room on the plan"}</p>
+      <p role="status" className="text-[13px] text-ink-4">{normalized ? `${matches.length} matching rooms` : "Entrances, or tap your room on the plan"}{matches.length > options.length ? ` · Showing ${options.length} of ${matches.length}. Keep typing to narrow the list.` : ""}</p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((x) => (
           <button key={x.id} onClick={() => onPick(x.id)} className="border border-ink-3 px-2.5 py-1 font-sign text-[14.5px] hover:border-white">

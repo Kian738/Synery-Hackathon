@@ -135,7 +135,7 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
             if index + 2 < len(nodes) and nodes[index + 1].startswith(DOOR_PREFIX):
                 after = nodes[index + 2]
                 if after in building.spaces:
-                    exit_hint = f" When you come out, head into {building.spaces[after]['name']}."
+                    exit_hint = f" At the landing, look for the door to {building.spaces[after]['name']}."
             verb = f"Take the {connector['name']} {direction}"
             text = f"{lead}{verb} to {building.floor_name(floor)}.{exit_hint}"
             steps.append(Step("floor", "lift" if is_lift else "stairs", text,

@@ -182,4 +182,5 @@ def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = F
 
         tools += [set_closed, add_door, move_item]
     from floorwise.agent.insight_tools import make_insight_tools
-    return tools + make_insight_tools(session, allow_edits, exact_items=exact_items)
+    from floorwise.agent.scenarios import tools as scenario_tools
+    return tools + make_insight_tools(session, allow_edits, exact_items=exact_items) + ([] if exact_items else scenario_tools(session))

@@ -112,7 +112,7 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         """Fetch the nearest item then visit the largest room of a type. Returns route-model metres, not walking metres."""
         def compute():
             b = session.building
-            c = replace(session.constraints(), no_stairs=not stairs_ok, outside="free")
+            c = replace(session.constraints(), no_stairs=not stairs_ok, outside="exits")
             result = ops.errand(b, session.place(start), resolve.resolve_asset_type(b, item_type),
                                 resolve.resolve_floor(b, floor), resolve.resolve_room_type(b, target_room_type), c)
             if 'error' not in result:

@@ -139,7 +139,7 @@ def run_scenario(scenario: Scenario) -> dict:
                 calls.append({"turn": turn, **payload})
                 transcript.append(f"  [tool {payload['name']} {json.dumps(payload['input'], ensure_ascii=False)}]")
             elif kind == "tool_result":
-                transcript.append(f"  [result {payload['content'][:700]}]")
+                transcript.append(f"  [result {payload['content']}]")
 
         reply = agent.ask(text, on_event=on_event)
         replies.append(reply)
@@ -148,9 +148,9 @@ def run_scenario(scenario: Scenario) -> dict:
 
 
 def judge(scenario: Scenario, transcript: str, model: str | None) -> Grade | None:
-    grade, _ = structured.parse("judge", "You grade conversations between a building guide and a person.",
+    grade, usage = structured.parse("judge", "You grade conversations between a building guide and a person.",
                                 f"Persona: {scenario.persona}\n\n{RUBRIC}\n\nTranscript:\n{transcript}", Grade, model=model)
-    return grade
+    return grade, usage
 
 
 def main() -> None:
@@ -165,7 +165,8 @@ def main() -> None:
         run = run_scenario(scenario)
         ledger.add_usage(run["usage"])
         check_results = [(fn.__name__, *fn(run["calls"], run["replies"])) for fn in scenario.checks]
-        grade = judge(scenario, run["transcript"], args.judge_model)
+        grade, judge_usage = judge(scenario, run["transcript"], args.judge_model)
+        ledger.add_usage(judge_usage)
         scores = grade.model_dump(exclude={"issues"}) if grade else {}
         mean = sum(scores.values()) / len(scores) if scores else 0
         ok = all(c[1] for c in check_results) and mean >= 4.0

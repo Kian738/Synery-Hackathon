@@ -12,6 +12,7 @@ test("paired phone operates the real Navigator without changing declared locatio
   const location=page.locator(".navigation-panel button").filter({hasText:"Starting from"});
   await expect(location).toHaveCount(1);
   const declared=await location.textContent();
+  await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("button",{name:"Phone companion",exact:true}).click();
   await page.getByRole("button",{name:"Pair a phone",exact:true}).click();
   const code=page.locator(".cmp-code");await expect(code).toHaveText(/^\d{6}$/);

@@ -26,6 +26,14 @@ def compare_building(building: Building, pairs: int = 3, closures: int = 4) -> l
     sample = connectors[:closures]
     sample += rng.sample(opening_ids, min(max(0, closures-len(sample)), len(opening_ids)))
     rows = []
+    for step_free in [False, True]:  # every edge of the whole graph, not only sampled routes
+        reference.closed = set()
+        ours = RouteGraph(building, Constraints(step_free=step_free))
+        official = reference.graph(step_free)
+        theirs = sorted((tuple(sorted((u, v))), round(d['weight'], 3)) for u, v, d in official.edges(data=True))
+        mine = sorted((tuple(sorted((u, v))), round(d['weight'], 3)) for u, v, d in ours.graph.edges(data=True))
+        rows.append({'correct': theirs == mine, 'kind': 'graph equality', 'step_free': step_free, 'closed': None,
+                     'start': None, 'end': None, 'expected_m': len(theirs), 'actual_m': len(mine)})
     for step_free in [False, True]:
         for closed in [None, *sample]:
             reference.closed = {closed} if closed else set()
@@ -36,7 +44,7 @@ def compare_building(building: Building, pairs: int = 3, closures: int = 4) -> l
                 actual = ours.shortest(a, b)
                 ok = (expected is None and actual is None) or (expected is not None and actual is not None and abs(expected-actual[0]) < 1e-7)
                 if actual and closed:
-                    ok = ok and all(ours.edge_via(u,v)['via'] != closed for u,v in zip(actual[1],actual[1][1:]))
+                    ok = ok and closed not in ours.elements(actual[1])
                 rows.append({'correct': ok, 'start': a, 'end': b, 'closed': closed, 'step_free': step_free,
                              'expected_m': expected, 'actual_m': actual[0] if actual else None})
     assert building.data == original, 'Differential evaluation mutated its input'
@@ -55,7 +63,7 @@ def main():
     for path in paths:
         b = Building.load(path)
         for i, row in enumerate(compare_building(b, args.pairs, args.closures)):
-            ledger.record(id=f'{b.id}:{i}', kind='closure differential', building=b.id, source=b.info['source'], **row)
+            ledger.record(id=f'{b.id}:{i}', **{'kind': 'route differential', **row}, building=b.id, source=b.info['source'])
     summary = ledger.finish()
     if summary['correct'] != summary['total'] or not summary['total']:
         raise SystemExit('Differential routing mismatch')

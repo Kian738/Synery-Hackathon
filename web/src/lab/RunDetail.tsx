@@ -110,6 +110,7 @@ function collectIds(value: unknown, out: Set<string>) {
 }
 
 function ItemDetail({ row }: { row: any }) {
+  const {run}=useParams<{run:string}>();
   const [geometry, setGeometry] = useState<Geometry | null>(null);
   const [floorId, setFloorId] = useState("");
   const [route, setRoute] = useState<Route | null>(null);
@@ -144,6 +145,12 @@ function ItemDetail({ row }: { row: any }) {
           <Link to={`/?building=${building}`} className="ml-auto text-sm text-mandatory underline">open building</Link>
         </div>
         {row.question && <p className="border-l-4 border-ink pl-3 leading-snug">{row.question}</p>}
+        {row.reason&&<p role="status">{row.reason}</p>}
+        {row.outcome&&<p>Outcome: {row.outcome}. {row.review_source??''}</p>}
+        {row.checks&&<details open><summary>Assertions: expected versus observed</summary><pre className="whitespace-pre-wrap text-xs">{JSON.stringify(row.checks,null,2)}</pre></details>}
+        {row.review&&<details open><summary>Language review (model, not human)</summary><pre className="whitespace-pre-wrap text-xs">{JSON.stringify(row.review,null,2)}</pre></details>}
+        {row.events&&<details><summary>Complete tool and response evidence</summary><pre className="whitespace-pre-wrap text-xs">{JSON.stringify(row.events,null,2)}</pre></details>}
+        {row.screenshot&&<a href={`/api/lab/runs/${run}/artifacts/${encodeURIComponent(String(row.screenshot).split(/[\\/]/).at(-1)!)}`} target="_blank" rel="noreferrer"><img alt="Observed UI for this case" loading="lazy" src={`/api/lab/runs/${run}/artifacts/${encodeURIComponent(String(row.screenshot).split(/[\\/]/).at(-1)!)}`}/></a>}
         {row.expected && <Field label="Expected"><span className="font-semibold">{expectedText(row.expected)}</span></Field>}
         {row.reply && <Field label="Reply (last lines)"><pre className="whitespace-pre-wrap font-sans text-[13.5px]">{String(row.reply).split("\n").slice(-4).join("\n")}</pre></Field>}
         {row.parser && <Field label="Path">{row.parser}{row.fallback ? ` → fallback: ${row.fallback}` : ""}{row.readings > 1 ? ` · ${row.readings} readings voted` : ""}</Field>}

@@ -68,7 +68,7 @@ def step_free_reachable_count(building: Building, start: str, floor_id: str, clo
 
 def errand(building: Building, start: str, asset_type: str, floor_id: str, room_type: str,
            constraints: Constraints = Constraints()) -> dict:
-    graph = RouteGraph(building, constraints)
+    graph = RouteGraph(building, constraints, keep=frozenset({start}))
     from_start = graph.distances_from(start)
     holders = {asset["space_id"] for asset in building.assets.values() if asset["type"] == asset_type}
     candidates = sorted((from_start[space_id], space_id) for space_id in holders if space_id in from_start)
@@ -113,7 +113,7 @@ def straight_line_3d(building: Building, first: str, second: str) -> dict:
 
 
 def distances_to_exit(building: Building, constraints: Constraints = Constraints()) -> dict[str, float]:
-    graph = RouteGraph(building, replace(constraints, outside="free"))
+    graph = RouteGraph(building, replace(constraints, outside="exits"))
     return graph.distances_from(OUTSIDE)
 
 

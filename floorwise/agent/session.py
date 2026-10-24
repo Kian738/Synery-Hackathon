@@ -187,20 +187,35 @@ class Session:
                   'floor_ids': sorted({e['floor_id'] for e in entities}), 'measurements': measurements or {},
                   'rows': rows or [], 'lines': lines or [], 'warnings': warnings or [],
                   'provenance': 'Computed from supplied building data; current session edits apply.'}
+        # Immutable grouped snapshots; list paging must not hold the chat's write lock.
+        items = [b.assets[i] for i in ids if i in b.assets]
+        if items:
+            from collections import Counter
+            grouped = Counter(a['space_id'] for a in items)
+            result['room_rows'] = [{'id': sid, 'label': b.label(sid), 'floor_id': b.spaces[sid]['floor_id'],
+                                    'count': count} for sid, count in sorted(grouped.items(), key=lambda p: (b.level(b.spaces[p[0]]['floor_id']), -p[1], p[0]))]
+            result['item_rows'] = [{'id': a['id'], 'label': a['name'], 'room_id': a['space_id'],
+                                   'floor_id': a['floor_id']} for a in items]
+            result['measurements'] = {**result['measurements'], 'grouped': True, 'item_count': len(items), 'room_count': len(grouped)}
         self.visual_results[result['id']] = result
         while len(self.visual_results)>16:
             del self.visual_results[next(iter(self.visual_results))]
         self.emit('highlight', ids=ids)
-        self.emit('visual_result', result={k:v for k,v in result.items() if k!='rows'}, total_rows=len(result['rows']))
+        self.emit('visual_result', result={k:v for k,v in result.items() if k not in ('rows','room_rows','item_rows')}, total_rows=len(result['rows']))
         return result
 
-    def result_page(self, result_id: str, offset: int = 0, limit: int = 25) -> dict:
+    def result_page(self, result_id: str, offset: int = 0, limit: int = 25, view: str = 'default', room: str | None = None) -> dict:
         if offset<0 or not 1<=limit<=100:
             raise ValueError('offset must be nonnegative; limit must be 1 to 100')
         result = self.visual_results[result_id]
-        return {'id': result_id, 'total': len(result['rows']), 'offset': offset,
-                'rows': result['rows'][offset:offset+limit],
-                'next_offset': offset+limit if offset+limit<len(result['rows']) else None}
+        if view not in ('default', 'rooms', 'items'): raise ValueError('Unknown result view')
+        rows = result.get('room_rows', result['rows']) if view == 'rooms' else result.get('item_rows', result['rows']) if view == 'items' else result['rows']
+        if room is not None:
+            if view != 'items': raise ValueError('Room filtering requires item view')
+            rows = [r for r in rows if r.get('room_id') == room]
+        return {'id': result_id, 'total': len(rows), 'offset': offset,
+                'rows': rows[offset:offset+limit],
+                'next_offset': offset+limit if offset+limit<len(rows) else None}
 
     def search(self, query: str, floor: str | None = None, offset: int = 0, limit: int = 12) -> dict:
         b = self.building
@@ -372,6 +387,7 @@ class Session:
                 "constraints": constraints.describe()}
 
     def set_closed(self, element: str, closed: bool) -> dict:
+        previous_walk = self.last_route.walk_m if self.last_route else None
         before = self.impact_snapshot()
         element_id = self.element(element)
         (self.closed.add if closed else self.closed.discard)(element_id)
@@ -390,6 +406,9 @@ class Session:
         if request:
             start, target, via, kwargs = request
             result["route_update"] = self.route(start, target, via, **kwargs)
+            current_walk = self.last_route.walk_m if self.last_route else None
+            if previous_walk is not None and current_walk is not None:
+                result['walking_change_m'] = round(current_walk-previous_walk,1)
         return result
 
     def door_preview(self, first: str, second: str) -> dict:
@@ -456,7 +475,7 @@ class Session:
         snapshots = {"general": ops.distances_to_exit(self.building, general),
                      "step_free": ops.distances_to_exit(self.building, replace(general, step_free=True))}
         if self.profile.min_door_width_m is not None:
-            snapshots["your_needs"] = ops.distances_to_exit(self.building, replace(self.constraints(), outside="free", extra_openings=extra))
+            snapshots["your_needs"] = ops.distances_to_exit(self.building, replace(self.constraints(), outside="exits", extra_openings=extra))
         return snapshots
 
     def impact_diff(self, before: dict, after: dict) -> dict:
@@ -486,7 +505,7 @@ class Session:
 
     def weak_points(self, step_free: bool = True) -> list[dict]:
         from floorwise.core.resilience import chaos_test
-        result = chaos_test(self.building, replace(self.constraints(step_free=step_free), outside="free"))
+        result = chaos_test(self.building, replace(self.constraints(step_free=step_free), outside="exits"))
         items = result["critical"][:3]
         self.emit("weak_points", items=items, profile="step-free" if step_free else "general")
         self.emit("highlight", ids=list(dict.fromkeys(s for item in items for s in item["room_ids"])))

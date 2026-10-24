@@ -411,7 +411,9 @@ test.describe("paired demo in two browser contexts", () => {
     await build({ configFile: false, root: path.resolve(process.cwd(), "src/companion/demo"), base: "./", logLevel: "silent", plugins: [react()], build: { outDir, emptyOutDir: true, minify: false } });
     const port = await freePort();
     origin = `http://127.0.0.1:${port}`;
-    server = spawn("uv", ["run", "--with", "websockets", "python", "-m", "server.companion", "--port", String(port), "--static", outDir], { cwd: repoRoot, stdio: "ignore", detached: process.platform !== "win32" });
+    // The parent fw command already synchronized dependencies. Reinstalling its
+    // running fw.exe from a child fails on Windows; websockets is a project dependency.
+    server = spawn("uv", ["run", "--no-sync", "python", "-m", "server.companion", "--port", String(port), "--static", outDir], { cwd: repoRoot, stdio: "ignore", detached: process.platform !== "win32" });
     const deadline = Date.now() + 60_000;
     for (;;) {
       try { if ((await fetch(`${origin}/companion/info`)).ok) break; } catch { /* not up yet */ }

@@ -31,11 +31,58 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 SESSIONS: dict[str, dict] = {}
 
+
+@app.on_event('startup')
+def record_build():
+    from eval.evidence import fingerprint
+    app.state.boot_fingerprint = fingerprint()
+
+
+@app.get('/api/version')
+def version():
+    from eval.evidence import fingerprint
+    current = fingerprint()
+    boot = getattr(app.state, 'boot_fingerprint', current)
+    return {'boot': boot, 'current': current, 'restart_required': boot != current}
+
+
+@app.get('/api/sessions/{session_id}/state')
+def state(session_id: str):
+    session = session_or_404(session_id)['session']
+    return {'profile': dict(session.profile.__dict__), 'closed': list(session.closed), 'edits': list(session.edits),
+            'route': session.last_route.to_dict() if session.last_route else None,
+            'results': [{k:v for k,v in r.items() if k not in ('rows','item_rows','room_rows')}
+                        for r in list(session.visual_results.values())]}
+
+
+@app.post('/api/lab/evaluate-conversation')
+def evaluate_conversation(body: dict):
+    if os.environ.get('FLOORWISE_EVAL_API') != '1': raise HTTPException(404, 'Evaluation endpoint disabled')
+    from eval.conversations import cases, assertions, grade
+    from floorwise.llm import budget
+    case = next((c for c in cases() if c['id'] == body.get('case_id')), None)
+    if not case: raise HTTPException(422, 'Unknown evaluation case')
+    events = body.get('events', [])
+    snapshot = state(body['session_id'])
+    checks = assertions(case, snapshot, events)
+    try:
+        review, usage = grade(case, events)
+    except budget.BudgetExceeded:
+        return {'checks': checks, 'correct': False, 'incomplete': True, 'budget_used': budget.used(),
+                'reason': 'Batch token budget exhausted', 'state': snapshot}
+    scores = [v for k,v in (review or {}).items() if k != 'issues' and v is not None]
+    review_passed = bool(scores) and min(scores) >= 4 and sum(scores)/len(scores) >= 4.5
+    return {'checks': checks, 'review': review, 'review_usage': usage, 'budget_used': budget.used(),
+            'correct': all(c['passed'] for c in checks) and review_passed,
+            'review_source': 'model, not human', 'state': snapshot}
+
 from server.lab import router as lab_router  # noqa: E402
 from server.companion import create_companion_router  # noqa: E402
 
 app.include_router(lab_router)
 app.include_router(create_companion_router())
+from server.scenarios import router as scenario_router
+app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 
 @lru_cache(maxsize=1)
@@ -200,15 +247,14 @@ from server.insight import insight_router
 app.include_router(insight_router(session_or_404, call))
 
 @app.get("/api/sessions/{session_id}/results/{result_id}")
-def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: int = 25) -> dict:
+def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: int = 25, view: str = 'default', room: str | None = None) -> dict:
     entry=session_or_404(session_id)
-    with entry['lock']:
-        try:
-            return entry['session'].result_page(result_id, offset, limit)
-        except KeyError as error:
-            raise HTTPException(404, 'Result expired or belongs to another session') from error
-        except ValueError as error:
-            raise HTTPException(422, str(error)) from error
+    try:
+        return entry['session'].result_page(result_id, offset, limit, view, room)
+    except KeyError as error:
+        raise HTTPException(404, 'Result expired or belongs to another session') from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 # ---------- chat (Claude) ----------
@@ -216,6 +262,33 @@ def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: 
 class ChatBody(BaseModel):
     text: str
     selected_space: str | None = None
+    request_id: str | None = None
+
+
+class AnalysisBody(BaseModel):
+    kind: str
+    item: str = ''
+    floor: str | None = None
+    room: str | None = None
+
+
+@app.post('/api/sessions/{session_id}/analysis')
+def analysis(session_id: str, body: AnalysisBody):
+    """Structured map actions; natural-language chat always goes through Claude."""
+    operations={'count':'count_items','ranking':'rank_by_items','area':'room_info'}
+    if body.kind not in operations: raise HTTPException(422,'Unknown analysis kind')
+    entry=session_or_404(session_id)
+    with entry['lock']:
+        if body.kind=='area':return call(entry['session'],'room_info',body.room or body.item)
+        return call(entry['session'],operations[body.kind],body.item,body.floor)
+
+
+@app.post('/api/sessions/{session_id}/chat/cancel')
+def cancel_chat(session_id: str, body: dict):
+    entry = session_or_404(session_id)
+    event = entry.get('requests', {}).get(body.get('request_id'))
+    if event: event.set()
+    return {'stopped': event is not None}
 
 
 @app.post("/api/sessions/{session_id}/chat")
@@ -223,9 +296,12 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
     entry = session_or_404(session_id)
     queue: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_running_loop()
+    request_id = body.request_id or uuid.uuid4().hex
+    cancelled = threading.Event()
+    entry.setdefault('requests', {})[request_id] = cancelled
 
     def push(kind: str, payload) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload})
+        loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
 
     def work() -> None:
         if not entry['lock'].acquire(timeout=5):
@@ -241,29 +317,39 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
 
                     entry["agent"] = ChatAgent(entry["session"])
                 agent = entry["agent"]
+                agent.cancelled = cancelled.is_set
                 entry["session"].events.clear()
                 if body.selected_space is not None and body.selected_space not in entry["session"].building.spaces:
                     raise ValueError("Selected room does not belong to this building")
                 entry["session"].ui_selection=body.selected_space
                 reply = agent.ask(body.text, on_event=push)
-                push("reply", {"text": reply, "usage": agent.turn_usage, "model": agent.model})
+                push("reply", {"text": reply, "usage": agent.turn_usage, "model": agent.model,
+                               'message_id': getattr(agent.conversation, 'last_message_id', None)})
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
-                message = 'The language service timed out. Please retry, or use the map controls. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else f"{type(error).__name__}: {error}"
-                push("error", {"message": message})
+                message = ('Request stopped. Computed results remain available.' if isinstance(error, InterruptedError) else
+                           'The language service timed out. Please retry. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else
+                           'The language service could not complete this request. Please retry; computed results remain available.')
+                diagnostic=str(getattr(error,'body',{}).get('error',{}).get('message','')) if isinstance(getattr(error,'body',None),dict) else ''
+                for key,value in os.environ.items():
+                    if any(word in key for word in ('KEY','TOKEN','SECRET')) and len(value)>8:diagnostic=diagnostic.replace(value,'[redacted]')
+                push("error", {"message": message, 'code': type(error).__name__, 'request_id': request_id, 'diagnostic':diagnostic[:800]})
             finally:
                 push("done", None)
         finally:
+            entry.get('requests', {}).pop(request_id, None)
             entry['lock'].release()
 
     push('progress',{'stage':'queued','message':'Starting your request'})
     threading.Thread(target=work, daemon=True).start()
 
     async def stream():
-        while True:
-            item = await queue.get()
-            yield f"data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n"
-            if item["type"] == "done":
-                break
+        try:
+            while True:
+                item = await queue.get()
+                yield f"data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n"
+                if item["type"] == "done": break
+        finally:
+            cancelled.set()
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 

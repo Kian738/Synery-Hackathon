@@ -19,7 +19,8 @@ test("start defaults to the main entrance, so a category routes in one tap", asy
 
 test("example requests only mention things this building has", async ({ page }) => {
   await page.goto(CAMPUS);
-  const examples = page.locator("ul li button");
+  await page.getByText("Things you can say",{exact:true}).click();
+  const examples = page.locator(".example-requests li button");
   await expect(examples.first()).toBeVisible();
   const text = (await examples.allTextContents()).join(" ");
   expect(text).not.toContain("3D printer");
@@ -85,14 +86,14 @@ test("preview has a seekable player, speed, arrival and replay", async ({page})=
   await page.getByRole("button",{name:"Guide me step by step"}).click();
   const progress=page.getByRole("slider",{name:"Preview progress"});
   await expect(progress).toBeVisible();
-  await page.getByRole("combobox",{name:"Playback speed"}).selectOption("2");
+  await page.getByRole("button",{name:"Playback speed 2×",exact:true}).click();
   await progress.focus();
   await progress.press("End");
   await expect(page.getByText("Destination reached in preview")).toBeVisible();
   await expect(page.getByRole("button",{name:"Continue at landing"})).toHaveCount(0);
   await page.getByRole("button",{name:"Replay preview"}).click();
   await expect(page.getByRole("button",{name:"Pause preview"})).toBeVisible();
-  await expect(page.getByRole("combobox",{name:"Playback speed"})).toHaveValue("2");
+  await expect(page.getByRole("button",{name:"Playback speed 2×",exact:true})).toHaveAttribute("aria-pressed","true");
 });
 
 test("floor-plan fallback remains available", async ({ page }) => {

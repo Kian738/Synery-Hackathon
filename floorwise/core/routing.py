@@ -56,12 +56,11 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
                 f"No route from {building.label(start)} to {building.label(end)}"
                 + (f" ({'; '.join(constraints.describe())})" if constraints.describe() else "")
             )
-        length, nodes = found
-        elements = []
-        for first, second in itertools.pairwise(nodes):
-            elements.append(graph.edge_via(first, second)["via"])
-        legs.append(Leg(start, end, round(length, 2), nodes,
-                        [n for n in nodes if not n.startswith(DOOR_PREFIX)], elements))
+        length, raw = found
+        nodes = graph.expand(raw)  # alternates space, door, space; its spaces are every space the route passes through
+        spaces = [n for n in nodes if not n.startswith(DOOR_PREFIX)]
+        spaces = [n for i, n in enumerate(spaces) if i == 0 or n != spaces[i - 1]]  # a walk can pass a door node of a room it never leaves
+        legs.append(Leg(start, end, round(length, 2), nodes, spaces, graph.elements(raw)))
         total += length
         all_nodes += nodes if not all_nodes else nodes[1:]
     # The dataset sums rounded legs; doing the same keeps tours equal to the centimetre.
@@ -98,6 +97,15 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
         if unsupported & used:
             route.preview_available = False
             route.warnings.append("Some route openings cannot be aligned with the supplied room boundaries. Use the floor plan; eye-level playback is unavailable.")
+        from floorwise.core.preview_check import issues
+        collisions = issues(building, route.polyline)
+        if collisions:
+            route.preview_available = False
+            route.walk_m = None
+            route.warnings.append('Walking preview withheld: supplied geometry crosses ' + ', '.join(collisions) + '. The room sequence remains available.')
+        if not route.preview_available:
+            # Retain endpoint/room references, but never draw unsafe joins as a walk.
+            route.polyline = [{**p, 'gap': True} for p in route.polyline]
     return route
 
 

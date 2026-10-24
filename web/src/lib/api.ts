@@ -24,7 +24,7 @@ const post = (url: string, body: unknown) =>
 type WithEvents<T> = { result: T; events: UiEvent[] };
 
 export const api = {
-  resultPage: (session:string,result:string,offset=0) => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),
+  resultPage: (session:string,result:string,offset=0,view='default',room='') => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25&view=${view}${room?`&room=${encodeURIComponent(room)}`:""}`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),
   profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
   widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
   weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
@@ -43,11 +43,14 @@ export const api = {
 };
 
 export type ChatEvent =
+  | { type: "assistant_start"; data: {message_id:string;model:string} }
+  | { type: "assistant_delta"; data: {message_id:string;text:string} }
+  | { type: "assistant_end"; data: {message_id:string} }
   | { type: "progress"; data: {stage:string;message:string} }
   | { type: "tool"; data: { name: string; input: Record<string, any> } }
   | { type: "tool_result"; data:{name:string;content:string;is_error:boolean} }
   | { type: "ui"; data: UiEvent }
-  | { type: "reply"; data: { text: string; usage: Record<string, unknown>; model: string } }
+  | { type: "reply"; data: { text: string; usage: Record<string, unknown>; model: string;message_id?:string } }
   | { type: "error"; data: { message: string } }
   | { type: "done"; data: null };
 
@@ -81,8 +84,10 @@ export async function readEvents<T>(response: Response, onEvent: (e: T) => void)
   }
 }
 
-export const chat = (sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null) =>
-  post(`/api/sessions/${sessionId}/chat`, { text,selected_space:selectedSpace??null }).then((r) => readEvents(r, onEvent));
+export const chat = (sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null,requestId?:string,signal?:AbortSignal) =>
+  fetch(`/api/sessions/${sessionId}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,selected_space:selectedSpace??null,request_id:requestId}),signal}).then((r) => readEvents(r, onEvent));
+
+export const cancelChat=(session:string,request_id:string)=>post(`/api/sessions/${session}/chat/cancel`,{request_id});
 
 // ---------- Lab ----------
 

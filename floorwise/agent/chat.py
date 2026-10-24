@@ -45,15 +45,27 @@ Remembering the person:
 
 Changes:
 - Exit-impact distances use route-model metres including lift/stair penalties. Never call those physical walking metres.
-- Closures (lift out of service, blocked aisle): apply with set_closed and always report the step_free impact counts, even when general cut_off_count is zero.
+- Closures (lift out of service, blocked aisle): apply with set_closed and always report the step_free impact counts, even when general cut_off_count is zero. set_closed automatically replans the last route and returns route_update. Reuse that result; do not call find_route again unless the requested origin or destination changed. Use walking_change_m for any difference, never subtract distances yourself.
 - Proposed door widenings are hypothetical building edits requiring physical work. Show the verified fix, and call apply_fix only after the person explicitly agrees.
-- Never assess survivability of jumping from windows or guide unsafe actions. Offer ordinary mapped exits instead.
+- Never assess survivability of jumping from windows or guide unsafe actions. Offer ordinary mapped exits instead, but do not assume the person's location or automatically start a route when they have not asked for one.
 - Use find_places to combine room type, floor relation and contained equipment. A room must satisfy every descriptor; if no room matches, say so and offer real alternatives.
 - Use count_items (floor optional), rank_rooms_by_items, filter_rooms and aggregate_stats for complete counts, rankings and compound requests. Search pages never limit computed totals. result_page reads more rows. Use shared_walls, distance_3d, errand and door_effect for geometry questions. Never compute numbers yourself.
 - There is no booking, capacity, access-hours or window geometry data. Lecture seating rows are not seat counts. Use capabilities when unsure.
 - Tool results have result_id references: complete visual answers are already shown to the person. Do not enumerate hundreds of entities in text.
 - New doors: call add_door with confirm=false first, explain the effect, and apply with confirm=true only after the person agrees.
 - "This machine is now in room X": move_item.
+
+Conversation quality:
+- Interpret the complete request, including follow-up clauses such as "and where". For counts plus locations use count_items once; its room groups and total answer both parts.
+- Group equipment by room and floor. Prefer a concise total and room breakdown over lists of individual objects. Use all groups returned; explicitly say when further groups are in the card.
+- A user's suggested quantity is a claim to check, not an instruction to modify the data. Explain room totals versus building totals.
+- Preserve the latest explicitly stated origin, goal and accessibility constraints across corrections. Preview playback never establishes a physical location. A changed destination does not reset the origin.
+- If no room satisfies all requested constraints, say so and retain that empty result. Do not broaden room type, floor or equipment requirements unless the person asks.
+- Never claim a tool cannot count or rank because a search page is limited. Use the complete analytical tools.
+- For hypothetical population/capacity scenarios, ask for missing occupancy, throughput units, exits or responder assumptions before calculating; never invent them.
+- Do not mention technical tool names, raw entity ids or token usage in ordinary answers.
+- Search pages are samples. Never describe all matches or all floors from a partial page. Use complete grouped tool totals or result_page.
+- Preserve the tool's corridor names and door landmarks when giving directions. A floor transition count means a connector ride, not the number of levels passed.
 
 Building overview:
 {overview}"""
@@ -108,34 +120,23 @@ class ChatAgent:
 
             @tool
             def load_tools(names: list[str]) -> str:
-                """Enable specialized tools before using them. Available names: find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, nearest, reachable_rooms, rank_rooms, set_closed, add_door, move_item, apply_fix. Only tools permitted in this session can be loaded."""
+                """Get argument schemas for specialized tools: find_places, result_page, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, nearest, reachable_rooms, rank_rooms, set_closed, add_door, move_item, apply_fix, simulate_egress, reasoning_capabilities, run_reasoning_plan. Invoke specialized tools through run_tool; this never changes the conversation's tool definitions."""
                 unknown=[n for n in names if n not in self._tool_catalog]
                 if unknown:raise ValueError(f'Tools unavailable in this session: {unknown}')
-                for name in names:
-                    if name not in self.conversation.by_name:
-                        self.conversation.tools.append(self._tool_catalog[name])
-                        self.conversation.by_name[name]=self._tool_catalog[name]
-                return json.dumps({'enabled':names})
+                return json.dumps({'tools':[self._tool_catalog[n].anthropic() for n in names],
+                                   'invoke':'Call run_tool(name, arguments) using these schemas.'})
 
-            base={'building_overview','search','room_info','find_route','remember_person'}
-            tools=list(self._tool_catalog.values()) if self.benchmark else [t for n,t in self._tool_catalog.items() if n in base]+[load_tools]
+            @tool
+            def run_tool(name:str, arguments:dict) -> str:
+                """Execute one specialized building tool by name with locally validated arguments. Call load_tools first if its argument schema is unknown. Every fact is computed, never estimated."""
+                from floorwise.llm.tools import call, ToolFailure
+                result,error=call(self._tool_catalog,name,arguments)
+                if error:raise ToolFailure(result)
+                return result
+
+            base={'building_overview','search','room_info','find_route','remember_person','count_items','rank_rooms_by_items','filter_rooms','aggregate_stats','capabilities','set_closed','weak_points'}
+            tools=list(self._tool_catalog.values()) if self.benchmark else [t for n,t in self._tool_catalog.items() if n in base]+[load_tools,run_tool]
             self.conversation=Conversation(system=self._system,tools=tools,provider=self._provider,model=self._model,effort=self._effort)
-        groups=[
-            (r'closed|blocked|maintenance|reopen',{'set_closed','weak_points'}),
-            (r'count|most|many|rank',{'count_items','rank_rooms_by_items','aggregate_stats','result_page'}),
-            (r'with|contains|equipment|upstairs|downstairs',{'find_places','filter_rooms'}),
-            (r'door|widen|trolley|pallet',{'add_door','door_effect','apply_fix','reachable_rooms'}),
-            (r'move|moved',{'move_item'}),
-            (r'above|below|wall|straight.line|3d distance',{'stacked_room','shared_walls','distance_3d'}),
-            (r'nearest|closest|fetch|errand',{'nearest','errand'}),
-            (r'largest|area|biggest',{'rank_rooms','aggregate_stats'}),
-            (r'tools|capabilit|available|booking|seats',{'capabilities'}),
-        ]
-        for pattern,names in groups:
-            if re.search(pattern,text,re.I):
-                for name in sorted(names):
-                    if name in self._tool_catalog and name not in self.conversation.by_name:
-                        self.conversation.tools.append(self._tool_catalog[name]);self.conversation.by_name[name]=self._tool_catalog[name]
 
     @interactive_turn
     def ask(self, user_text: str, on_event=None) -> str:
@@ -144,8 +145,10 @@ class ChatAgent:
 
         def relay(kind, payload):
             nonlocal seen
+            if getattr(self, 'cancelled', lambda: False)():
+                raise InterruptedError('Request stopped')
             if on_event:
-                if kind in ("tool", "tool_result", "progress"):
+                if kind in ("tool", "tool_result", "progress", "assistant_start", "assistant_delta", "assistant_end"):
                     on_event(kind, payload)
                 for event in self.session.events[seen:]:
                     on_event("ui", event)
@@ -156,33 +159,6 @@ class ChatAgent:
         self.last_model='deterministic'
         models=[]
         reply=None
-        if not self.benchmark:
-            from floorwise.agent.local import dispatch, execute_spec
-            from floorwise.core.resolve import ResolveError
-            try:
-                relay('progress',{'stage':'compute','message':'Checking building data'})
-                reply=dispatch(self.session,user_text)
-                complex_request=re.search(r'\b(?:closed|blocked|maintenance|reopen|avoid|without|except|prefer|widen|move|moved|apply|approve|via|then|fetch|carry|upstairs|downstairs|containing)\b|\bwith\b|next to|add (?:a )?door|pick up',user_text,re.I)
-                if reply is None and not complex_request and llm.info().available:
-                    relay('progress',{'stage':'parse','message':'Understanding your request'})
-                    from floorwise.agent.parse_llm import LLMParser
-                    spec,usage=LLMParser(provider=self._provider).parse(self.session.building,user_text)
-                    self._usage.update(usage)
-                    self.last_model=f'{self._provider}:{llm.model_for("parser",self._provider)}'
-                    models.append({'model':self.last_model,'usage':dict(usage)})
-                    if spec and spec.kind!='other':
-                        reply=execute_spec(self.session,spec)
-            except ResolveError as error:
-                choices=error.candidates[:4]
-                reply=str(error) + (' Choose: '+ '; '.join(c.get('label',c.get('id','')) for c in choices) if choices else '')
-            except (ValueError, KeyError):
-                # Unknown syntax or unsupported parse: the full agent can recover using tools.
-                reply=None
-        if reply is not None:
-            self.local_history=(self.local_history+[{'user':user_text,'reply':reply}])[-6:]
-            relay('step',{})
-            self._finish_usage(started,before,'deterministic' if self.last_model=='deterministic' else 'parser',models)
-            return reply
         self._prepare_conversation(user_text)
         relay('progress',{'stage':'model','message':'Planning with the building tools'})
         self.last_model=f'{self.conversation.provider}:{self.conversation.model}'

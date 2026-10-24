@@ -64,6 +64,8 @@ def info() -> ProviderInfo:
 
 def client(provider: str | None = None):
     """SDK client for the provider: anthropic.Anthropic or openai.OpenAI (compatible endpoint)."""
+    if os.environ.get('FLOORWISE_OFFLINE') == '1':
+        raise RuntimeError('Live model calls are disabled in the offline test profile.')
     provider = provider or provider_name()
     from floorwise.llm.budget import timeout_s, retries
 

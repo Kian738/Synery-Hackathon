@@ -1,7 +1,7 @@
 """Single-element closure analysis rooted at the exits, independent of navigation mode."""
 from dataclasses import asdict, dataclass, replace
 
-from floorwise.core.graph import Constraints, RouteGraph
+from floorwise.core.graph import DOOR_PREFIX, Constraints, RouteGraph
 from floorwise.core.model import Building, OUTSIDE
 
 
@@ -16,14 +16,19 @@ class WeakPoint:
 
 
 def chaos_test(building: Building, constraints: Constraints = Constraints()) -> dict:
-    constraints = replace(constraints, outside='free')
+    constraints = replace(constraints, outside='exits')
     rooms = {s for s, r in building.spaces.items() if r['type'] == 'room'}
     route_graph = RouteGraph(building, constraints)
     graph = route_graph.graph
     baseline = route_graph.reachable(OUTSIDE) & rooms
     edges_by_element = {}
     for u, v, key, attributes in graph.edges(keys=True, data=True):
-        edges_by_element.setdefault(attributes['via'], []).append((u, v, key, dict(attributes)))
+        if attributes.get('via') in building.connectors:
+            edges_by_element.setdefault(attributes['via'], []).append((u, v, key, dict(attributes)))
+    for opening_id in building.openings:
+        node = DOOR_PREFIX + opening_id
+        if node in graph:  # closing an opening removes its door node and every walk through it
+            edges_by_element[opening_id] = [(u, v, key, dict(a)) for u, v, key, a in graph.edges(node, keys=True, data=True)]
     groups = {}
     elements = list(building.connectors.values()) + list(building.openings.values())
     for element in elements:
