@@ -84,6 +84,7 @@ export interface Route {
   floors: string[];
   polyline: RoutePoint[];
   guide: { steps: GuideStep[]; spoken: string };
+  walk_m?: number | null;
 }
 
 export interface Impact {

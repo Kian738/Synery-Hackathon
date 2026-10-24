@@ -8,3 +8,4 @@ node_modules/
 web/dist/
 docs/industrial-agents-hackathon-2026/
 buildings/
+.playwright-mcp/

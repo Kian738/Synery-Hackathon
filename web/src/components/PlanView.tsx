@@ -82,7 +82,11 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     if (!route) return [] as XY[][];
     const out: XY[][] = [];
     let current: XY[] = [];
-    for (const p of route.polyline) {
+    for (const p of route.polyline as (typeof route.polyline[number] & { gap?: boolean })[]) {
+      if (p.gap && current.length) {
+        out.push(current);
+        current = [];
+      }
       if (p.floor_id === floorId) current.push([p.x, p.y]);
       else if (current.length) {
         out.push(current);

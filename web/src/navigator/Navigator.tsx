@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { FloorRail } from "../components/FloorRail";
 import { Pictogram } from "../components/Pictogram";
@@ -10,6 +10,7 @@ import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-factory-dev-003";
+const Building3D = lazy(() => import("../components/Building3D"));
 
 export default function Navigator() {
   const [params, setParams] = useSearchParams();
@@ -19,6 +20,8 @@ export default function Navigator() {
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
   const [stepMode, setStepMode] = useState(false);
+  const [view, setView] = useState<"2d" | "3d">(params.get("view") === "3d" ? "3d" : "2d");
+  const [allFloors, setAllFloors] = useState(false);
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
   useEffect(() => { setSelected(null); setStepMode(false); }, [buildingId]);
@@ -119,13 +122,30 @@ export default function Navigator() {
 
       {/* ---------- plan ---------- */}
       <main className="relative order-1 h-[46vh] shrink-0 bg-concrete lg:order-2 lg:h-auto lg:flex-1">
-        <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed}
-          pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint}
-          onSpaceClick={(s) => setSelected(s)} />
+        {view === "2d" ? (
+          <PlanView geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} closed={nav.closed}
+            pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint}
+            onSpaceClick={(s) => setSelected(s)} />
+        ) : (
+          <Suspense fallback={<div className="grid h-full place-items-center font-sign text-ink-3">Loading 3D…</div>}>
+            <Building3D geometry={g} floorId={nav.floorId} route={nav.route} highlights={nav.highlights} showAll={allFloors} />
+          </Suspense>
+        )}
+        <div className="absolute right-3 top-3 flex border border-ink bg-white font-sign text-[15px]">
+          {(["2d", "3d"] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)} aria-pressed={view === v}
+              className={`px-3 py-1.5 font-semibold ${view === v ? "bg-ink text-white" : "hover:bg-concrete"}`}>{v.toUpperCase()}</button>
+          ))}
+          {view === "3d" && (
+            <button onClick={() => setAllFloors(!allFloors)} aria-pressed={allFloors} className={`border-l border-ink px-3 py-1.5 ${allFloors ? "bg-ink text-white" : "hover:bg-concrete"}`}>
+              All floors
+            </button>
+          )}
+        </div>
         <div className="absolute left-3 top-3 max-h-[calc(100%-1.5rem)] overflow-y-auto">
           <FloorRail floors={g.floors} active={nav.floorId} route={nav.route} onPick={nav.setFloorId} here={hereFloor} />
         </div>
-        <Legend />
+        {view === "2d" && <Legend />}
         {nav.notice && (
           <div role="status" className="absolute inset-x-3 top-3 mx-auto flex max-w-xl items-start gap-3 border-l-4 border-mandatory bg-white p-3 text-[15px] shadow-[0_2px_0_var(--color-ink)] lg:left-auto lg:right-3">
             <span className="flex-1">{nav.notice}</span>
@@ -216,7 +236,8 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
 }) {
   const steps = route.guide.steps;
   const floorChanges = steps.filter((s) => s.kind === "floor").length;
-  const minutes = Math.max(1, Math.round(route.length_m / 1.2 / 60));
+  const outside = steps.some((s) => s.kind === "outside");
+  const minutes = Math.max(1, Math.round((route.walk_m ?? route.length_m) / 1.2 / 60) + floorChanges);
   return (
     <section aria-label="Route">
       <div className="border-b-4 border-mark bg-ink-2 px-4 pb-3 pt-4">
@@ -229,12 +250,13 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
           <button onClick={onClear} className="text-sm text-ink-4 hover:text-white" aria-label="Clear route"><Pictogram name="close" size={20} /></button>
         </div>
         <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-sign text-[15px]">
-          <span className="font-semibold">{Math.round(route.length_m)} m</span>
+          <span className="font-semibold">{Math.round(route.walk_m ?? route.length_m)} m walk</span>
           <span>about {minutes} min</span>
           {floorChanges > 0 && <span>{floorChanges} floor change{floorChanges > 1 ? "s" : ""}</span>}
           {stepFree && <span className="flex items-center gap-1 text-[#7fd4a8]"><Pictogram name="wheelchair" size={15} /> step-free</span>}
           {route.constraints.filter((c) => c !== "step-free").map((c) => <span key={c} className="text-mark">{c}</span>)}
         </p>
+        {outside && <p className="mt-1.5 text-sm text-mark">No indoor connection: this route goes outside between two entrances.</p>}
         {meta?.alternatives?.length ? (
           <p className="mt-1.5 text-sm text-ink-4">Nearest match. Also: {meta.alternatives.map((a) => `${a.room} (${a.walk_m} m)`).join(", ")}</p>
         ) : null}

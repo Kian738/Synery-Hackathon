@@ -15,6 +15,7 @@ GATES = [
     ["e2e_basic", "--split", "dev"],
     ["robust", "--split", "dev"],
     ["metamorphic", "--split", "dev"],
+    ["walkability", "--split", "dev", "--pairs", "4"],
     ["report"],
 ]
 

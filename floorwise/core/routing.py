@@ -69,10 +69,15 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     route.guide = guide(building, graph, all_nodes, segments)
     route.steps = [step["text"] for step in route.guide["steps"]]
     if segments:
-        route.polyline = [
-            {"floor_id": building.spaces[all_nodes[i]]["floor_id"], "x": round(x, 3), "y": round(y, 3), "node": all_nodes[i]}
-            for i in sorted(segments) for x, y in segments[i]
-        ]
+        route.polyline = []
+        previous = None
+        for i in sorted(segments):
+            # A new piece starts after a floor change or a stretch outside: never join those with a line.
+            gap = previous is not None and i - previous != 2  # 2 = through one door; 1 = lift/stairs; 4 = outside
+            for k, (x, y) in enumerate(segments[i]):
+                route.polyline.append({"floor_id": building.spaces[all_nodes[i]]["floor_id"], "x": round(x, 3), "y": round(y, 3),
+                                       "node": all_nodes[i], **({"gap": True} if gap and k == 0 else {})})
+            previous = i
         route.walk_m = round(sum(walk.length(seg) for seg in segments.values()), 1)
     else:
         route.polyline = polyline(building, graph, all_nodes)
