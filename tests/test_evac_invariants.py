@@ -222,3 +222,20 @@ def test_dt_sweep_and_flow_band_move_the_answer_in_the_right_direction():
         times[specific] = evacuate(building, occupants, params=FlowParams(specific_flow=specific),
                                    with_ccrp=False, with_nearest=False).T_s
     assert times[1.0] >= times[1.316] >= times[1.6] and times[1.0] > times[1.6]
+
+
+def test_heuristics_lose_to_the_optimum_somewhere_and_never_win():
+    """Measured, deterministic: nearest-exit and CCRP are strictly worse on at least one building each."""
+    rows = {name: run(name, "none") for name in BUILDINGS}
+    assert any(r.nearest_exit.T_s > r.T_s for r in rows.values())
+    assert any(r.ccrp.T_s > r.T_s for r in rows.values())
+    assert all(r.T_s <= r.ccrp.T_s and r.T_s <= r.nearest_exit.T_s for r in rows.values())
+
+
+@pytest.mark.parametrize("name", ["proc-campus-dev-000", "osm-way27326387"])
+def test_coarse_steps_round_up_so_they_never_report_less_than_fine_steps(name):
+    """Measured on these buildings, not a theorem: every hop is rounded up to whole steps."""
+    building, occupants = building_of(name), occupants_of(name)
+    times = [evacuate(building, occupants, params=FlowParams(dt_s=dt), with_ccrp=False, with_nearest=False).T_s
+             for dt in (1, 5, 10)]
+    assert times[0] <= times[1] <= times[2] and times[0] < times[2]

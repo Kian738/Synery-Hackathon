@@ -45,7 +45,7 @@ class Quickest:
 def quickest(problem: Problem, incumbent_steps: int | None = None) -> Quickest | None:
     """Binary search on the horizon. With incumbent_steps, return None unless a strictly smaller T exists
     and everybody the incumbent evacuated is still evacuated (one max-flow decides)."""
-    free, evacuable = problem.free_flow_steps()
+    evacuable = problem.evacuable()
     possible = int(problem.occ[evacuable].sum())
     if possible == 0:
         return Quickest(0, None, None, 0, evacuable, 0)
@@ -57,8 +57,12 @@ def quickest(problem: Problem, incumbent_steps: int | None = None) -> Quickest |
         return memo[steps]
 
     top = problem.steps_max
-    if incumbent_steps is not None and (incumbent_steps - 1 < free or flow(incumbent_steps - 1).value < possible):
-        return None
+    if incumbent_steps is not None:
+        if incumbent_steps < 2 or not (problem.latest(incumbent_steps - 1)[evacuable] >= 0).all():
+            return None  # walking time alone already rules out a faster evacuation
+        if flow(incumbent_steps - 1).value < possible:
+            return None
+    free = problem.free_flow_steps(evacuable, None if incumbent_steps is None else incumbent_steps - 1)
     low, high, target = 0, top, possible
     if flow(free).value == possible:
         high = free

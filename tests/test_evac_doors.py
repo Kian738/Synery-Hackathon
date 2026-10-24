@@ -135,3 +135,17 @@ def test_real_building_fixes_never_increase_time_and_are_verified(name):
     times = [plan.T_before_s] + [fix.T_after_s for fix in plan.fixes]
     assert times == sorted(times, reverse=True) and len(set(times)) == len(times)
     assert all(fix.verified for fix in plan.fixes)
+
+
+@pytest.mark.parametrize("name", ["proc-campus-dev-000", "osm-way27326387", "proc-factory-dev-003"])
+def test_pruning_changes_nothing_but_the_work_done(name, monkeypatch):
+    """Soundness of the min-cut prune: with pruning off (every candidate re-solved) the fixes are identical."""
+    building = real_building(name)
+    occ = Occupants.from_seats(building)
+    pruned = best_doors(building, occ, max_fixes=3)
+    monkeypatch.setattr(doors_module, "_crosses", lambda *args, **kwargs: True)
+    exhaustive = best_doors(building, occ, max_fixes=3)
+    assert exhaustive.evaluated >= pruned.evaluated
+    assert [(f.kind, f.element, f.T_after_s) for f in pruned.fixes] == [(f.kind, f.element, f.T_after_s)
+                                                                       for f in exhaustive.fixes]
+    assert pruned.T_after_s == exhaustive.T_after_s

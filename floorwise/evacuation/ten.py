@@ -128,7 +128,6 @@ class Problem:
         params = self.params
         rows: list[tuple[int, int, int]] = []
         self.arc_element: list[str] = []
-        self.arc_leg_s: list[float] = []
         self.arc_seconds: list[float] = []  # continuous walking time of the whole hop, before rounding
         arrays: list[np.ndarray] = []
         agg_of: list[int] = []
@@ -159,7 +158,6 @@ class Problem:
                     continue
                 rows.append((self.index[tail], TO_SINK if element.is_exit else self.index[head], tau))
                 self.arc_element.append(element.id)
-                self.arc_leg_s.append(leg / params.speed_mps)
                 self.arc_seconds.append(element.length_m / (params.speed_mps * element.speed_factor))
                 arrays.append(step_cap)
                 if total is None:
@@ -180,9 +178,6 @@ class Problem:
             self.out_arcs[int(self.arc_tail[arc])].append(arc)
             if self.arc_head[arc] != TO_SINK:
                 self.in_arcs[int(self.arc_head[arc])].append(arc)
-
-    def alive(self, space: int, step: int) -> bool:
-        return step < self.alive_until[space]
 
     # ---------- reachability with deadline (no queueing) ----------
 
@@ -214,20 +209,23 @@ class Problem:
                 relax(arc, best[space])
         return np.array(best, dtype=np.int64)
 
-    def free_flow_steps(self) -> tuple[int, np.ndarray]:
-        """(smallest deadline at which every evacuable occupied space can make it alone, bool mask evacuable)."""
-        occupied = self.occ > 0
-        evacuable = occupied & (self.latest(self.steps_max) >= 0)
+    def evacuable(self) -> np.ndarray:
+        """Occupied spaces from which one person can reach the outside at all."""
+        return (self.occ > 0) & (self.latest(self.steps_max) >= 0)
+
+    def free_flow_steps(self, evacuable: np.ndarray, upper: int | None = None) -> int:
+        """Smallest deadline (steps) at which every evacuable space can make it alone, no queueing. `upper` must
+        be a deadline at which they can."""
         if not evacuable.any():
-            return 0, evacuable
-        low, high = 0, self.steps_max
+            return 0
+        low, high = 0, upper or self.steps_max
         while high - low > 1:
             middle = (low + high) // 2
             if (self.latest(middle)[evacuable] >= 0).all():
                 high = middle
             else:
                 low = middle
-        return high, evacuable
+        return high
 
     # ---------- the expanded network ----------
 
@@ -244,23 +242,18 @@ class Problem:
         t_wait, s_wait = np.nonzero(alive[:-1] & alive[1:])
         parts.append((t_wait * n + s_wait, (t_wait + 1) * n + s_wait, np.full(t_wait.size, self.big), KIND_WAIT,
                       s_wait, t_wait))
-        for arc in range(len(self.arc_tail)):
-            tau, tail, head = int(self.arc_tau[arc]), int(self.arc_tail[arc]), int(self.arc_head[arc])
-            if tau > steps:
-                continue
-            when = np.arange(steps - tau + 1)
-            cap = self.arc_cap[arc, when]
-            ok = (cap > 0) & alive[when, tail]
-            if head != TO_SINK:
-                ok &= alive[when + tau, head]
-            when, cap = when[ok], cap[ok]
-            if not when.size:
-                continue
-            if head != TO_SINK:
-                target = (when + tau) * n + head
-            else:
-                target = np.full(when.size, sink if self.arc_agg[arc] < 0 else first_agg + self.arc_agg[arc])
-            parts.append((when * n + tail, target, cap, KIND_ELEMENT, np.full(when.size, arc), when))
+        if len(self.arc_tail):
+            when = np.arange(steps)[None, :]  # departure steps; tau >= 1 so the last useful one is steps - 1
+            land = when + self.arc_tau[:, None]
+            to_space = self.arc_head >= 0
+            ok = (self.arc_cap[:, :steps] > 0) & (land <= steps) & alive[when, self.arc_tail[:, None]]
+            ok &= ~to_space[:, None] | alive[np.minimum(land, steps), np.where(to_space, self.arc_head, 0)[:, None]]
+            arc_index, depart = np.nonzero(ok)  # arc-major, then time: a fixed order
+            head = self.arc_head[arc_index]
+            sink_target = np.where(self.arc_agg[arc_index] < 0, sink, first_agg + self.arc_agg[arc_index])
+            target = np.where(head >= 0, (depart + self.arc_tau[arc_index]) * n + head, sink_target)
+            parts.append((depart * n + self.arc_tail[arc_index], target, self.arc_cap[arc_index, depart],
+                          KIND_ELEMENT, arc_index, depart))
         origin = np.flatnonzero((self.occ > 0) & alive[0])
         parts.append((np.full(origin.size, source), origin, self.occ[origin], KIND_SOURCE, origin,
                       np.zeros(origin.size, dtype=np.int64)))
@@ -296,11 +289,14 @@ class Problem:
         """Parallel arcs share one matrix entry; hand its flow out in arc order, each up to its capacity."""
         flow = flow_unique[inverse].copy()
         counts = np.bincount(inverse)
-        for group in np.flatnonzero(counts > 1):
-            members = np.flatnonzero(inverse == group)
-            remaining = int(flow_unique[group])
-            for member in members:
-                take = min(remaining, int(net.cap[member]))
-                flow[member] = take
-                remaining -= take
+        parallel = np.flatnonzero(counts > 1)
+        if parallel.size:
+            order = np.argsort(inverse, kind="stable")  # members of a group in arc order
+            starts = np.concatenate([[0], np.cumsum(counts)])
+            for group in parallel:
+                remaining = int(flow_unique[group])
+                for member in order[starts[group]: starts[group + 1]]:
+                    take = min(remaining, int(net.cap[member]))
+                    flow[member] = take
+                    remaining -= take
         return flow

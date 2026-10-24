@@ -110,3 +110,15 @@ def test_real_building_responders_reach_a_fire_room_without_crossing_it():
                            responders=Responders(target=fire, k_routes=2, max_candidates=4))
     assert plan.status == "ok"
     assert fire not in plan.chosen.spaces[:-1] and plan.T_with_s >= plan.T_without_s
+
+
+def test_a_large_team_in_a_single_entrance_visibly_slows_the_evacuation():
+    building = make_building(
+        {"C": (0, 0, 20, 4), "R": (14, 4, 18, 8)},
+        [("E", "C", "outside", 1.0, (20, 2)), ("RC", "C", "R", 0.9, (16, 4))],
+    )
+    occupants = Occupants.explicit({"C": 60})
+    small = with_responders(building, occupants, Hazard(spaces=("R",)), responders=Responders(target="R", team_size=1))
+    large = with_responders(building, occupants, Hazard(spaces=("R",)), responders=Responders(target="R", team_size=12))
+    assert large.T_with_s > large.T_without_s == small.T_without_s
+    assert large.delay_s > small.delay_s >= 0
