@@ -4,6 +4,7 @@ from dataclasses import replace
 from floorwise.core import ops, resolve
 from floorwise.core.analytics import shared_wall_lines
 from floorwise.llm.tools import tool
+from floorwise.reason.report import scenario_report
 
 
 def make_insight_tools(session, allow_edits=True, exact_items=False):
@@ -147,4 +148,16 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         # Explicit tool arguments remain validated by the deterministic session operation.
         return guarded(session.widen_door)(opening_id, width_m)
 
-    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points] + ([apply_fix] if allow_edits else [])
+    @tool
+    def plan_scenario(hazard_rooms: list[str], audience: str = "safety_officer", responders: bool = True) -> str:
+        """Evacuation with a hazard in the named rooms: exact evacuation time, exits used, the bottleneck, a responder route that does not clash with evacuees, and verified door fixes. Every number is re-solved by checked steps; if a step cannot be answered the reply names it. Audience: occupant, safety_officer, builder or regulator."""
+        def run():
+            spaces = [resolve.resolve_space(session.building, room).id for room in hazard_rooms]
+            spec = {"hazards": [{"spaces": spaces}], "responders": {"auto": responders}}
+            report = scenario_report(session.building, "evacuation", {"spec": spec}, audience)
+            if report["evacuation"]:  # the per-step movement table is for the 3D replay, not for the model's context
+                report["evacuation"] = {k: v for k, v in report["evacuation"].items() if k != "schedule"}
+            return report
+        return guarded(run)()
+
+    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario] + ([apply_fix] if allow_edits else [])

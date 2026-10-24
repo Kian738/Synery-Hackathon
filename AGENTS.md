@@ -80,7 +80,7 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 2. **No building-specific code.** Never put building IDs, room names or test-set strings in `floorwise/`. Test questions have no answers; never hand-label them (that is against the rules). The Sunday building is unseen.
 3. **Semantics are settled against gold, then frozen.** Examples: "rooms" in reach counts means `type == "room"` including the start; shared walls exclude corridors, stairs and lifts but include halls. If you change one, re-run L1 on train+dev.
 4. **LLM code must work on both providers.** Use `floorwise.llm` (`Conversation`, `structured.parse`, `tool`). Never import `anthropic` or `openai` outside `floorwise/llm/`, except in the build-vision labeller.
-5. **Secrets live only in `.env`** (gitignored). The Groq key is for testing until Claude credits arrive.
+5. **Secrets live only in `.env`** (gitignored). The Groq key is for testing; no live Claude call has been verified on the current setup (Anthropic API or AWS Bedrock only, never Vertex).
 6. **Keep docs true.** After a change, update `docs/STATUS.md`, and also this file if paths or commands change.
 7. **UI work follows `docs/UX_PLAN.md`** and the design rules in it, not generic dashboard defaults.
 

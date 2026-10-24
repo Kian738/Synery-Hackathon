@@ -69,3 +69,14 @@ def test_it_asks_one_question_for_what_is_missing_and_none_when_complete(client,
     complete = {"hazards": [{"spaces": [fire_room]}], "occupants": {"source": "seats"}, "objective": "min_evacuation_time",
                 "responders": {"auto": True}}
     assert client.post(f"/api/sessions/{session}/scenario/ask", json={"spec": complete}).json()["question"] is None
+
+
+def test_claude_can_plan_a_scenario_by_room_name_and_gets_no_replay_table():
+    from floorwise.agent.session import Session
+    from floorwise.agent.tools import make_tools
+    import json
+    session = Session.for_building(Building.load(DATA / "dev" / BUILDING))
+    tool = next(t for t in make_tools(session, allow_edits=False) if t.name == "plan_scenario")
+    reply = json.loads(tool.fn(hazard_rooms=["Canteen 0.28"]))
+    assert reply["abstained"] is None and reply["evacuation"]["T_s"] > 0 and "schedule" not in reply["evacuation"]
+    assert any(f["suggestion"] for f in reply["findings"])
