@@ -184,3 +184,14 @@ def test_readiness_distinguishes_safe_previews_from_navigation_coverage(monkeypa
     assert next(r for r in readiness.readiness([sample])['requirements'] if r['id']=='walls')['status']=='limited'
     unrelated={'suite':'browser','accuracy':1.,'fingerprint':current,'coverage':{'passed':['unrelated browser case'],'failed':[]}}
     assert all(f['status']!='verified and visible' for f in readiness.features([unrelated]))
+
+
+def test_subset_live_pass_cannot_replace_full_pack_failures(monkeypatch):
+    from server import readiness
+    current={'version':1,'source':'source','dataset':'kit','frontend':'web','provider':'fixture','models':{},'effort':'low'}
+    monkeypatch.setattr(readiness,'fingerprint',lambda:current)
+    full={'suite':'live_chat','correct':25,'total':30,'accuracy':25/30,'fingerprint':current}
+    subset={'suite':'live_chat','correct':1,'total':1,'accuracy':1.,'fingerprint':current,
+            'config':{'selected_cases':['availability']}}
+    item=next(r for r in readiness.readiness([full,subset])['requirements'] if r['id']=='conversation')
+    assert item['status']=='fail' and item['latest']['total']==30

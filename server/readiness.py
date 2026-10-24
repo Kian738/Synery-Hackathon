@@ -47,6 +47,9 @@ def readiness(summaries):
     requirements = []
     for identifier, group, title, suite, target, section in REQUIREMENTS:
         candidates = [s for s in summaries if s.get('suite') == suite]
+        if suite in ('live_chat','demo'):
+            expected=30 if suite=='live_chat' else 3
+            candidates=[s for s in candidates if s.get('total')==expected and not s.get('config',{}).get('selected_cases')]
         fresh = [s for s in candidates if compatible(s.get('fingerprint'), current)]
         latest = fresh[-1] if fresh else candidates[-1] if candidates else None
         state = ('untested' if not latest else 'historical' if not fresh else

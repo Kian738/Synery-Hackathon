@@ -6,7 +6,7 @@ const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
   const browser=await chromium.launch({channel:'chrome',headless:true});
   let exhausted=false;
   try{for(const [index,scenario] of input.cases.entries()){
-    if(exhausted){console.log('FW_CASE '+JSON.stringify({id:scenario.id,correct:false,outcome:'incomplete',reason:'batch token budget exhausted'}));continue;}
+    if(exhausted){console.log('FW_CASE '+JSON.stringify({id:scenario.id,kind:scenario.family,building:scenario.building,correct:false,outcome:'incomplete',reason:'batch token budget exhausted'}));continue;}
     const context=await browser.newContext({viewport:index%2?{width:390,height:844}:{width:1440,height:900},isMobile:index%2===1,hasTouch:index%2===1});
     const page=await context.newPage();const started=Date.now();let result={id:scenario.id,kind:scenario.family,building:scenario.building,correct:false,outcome:'failed'};
     try{

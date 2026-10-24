@@ -113,7 +113,9 @@ def live(ledger, selected, selected_cases=None):
 def main():
     cli=argparse.ArgumentParser();cli.add_argument('profile',choices=['smoke','full','live','demo']);cli.add_argument('--case',action='append',dest='selected_cases');args=cli.parse_args()
     if args.selected_cases and args.profile not in ('live','demo'):cli.error('--case is only valid for live/demo profiles')
-    ledger=Ledger('live_chat' if args.profile=='live' else args.profile,{'profile':args.profile,'transport':'real browser + SSE' if args.profile in ('live','demo') else 'offline fixtures'})
+    ledger=Ledger('live_chat' if args.profile=='live' else args.profile,{'profile':args.profile,'selected_cases':args.selected_cases,
+                  'scope':'selected cases only' if args.selected_cases else 'complete profile',
+                  'transport':'real browser + SSE' if args.profile in ('live','demo') else 'offline fixtures'})
     py=sys.executable
     try:
         if args.profile in ('live','demo'):
