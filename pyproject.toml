@@ -1,0 +1,29 @@
+[project]
+name = "floorwise"
+version = "0.1.0"
+description = "Talk to your building: neurosymbolic indoor navigation agent (Synera Track 01)"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.1.0",
+    "shapely>=2.2.0",
+    "networkx>=3.7",
+    "numpy>=2.0",
+    "pydantic>=2.8",
+    "rapidfuzz>=3.9",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "matplotlib>=3.11.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["floorwise", "eval", "server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
