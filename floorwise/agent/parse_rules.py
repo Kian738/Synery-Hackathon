@@ -1,0 +1,77 @@
+"""Fast, free parser for the question shapes we know. Returns None when a question doesn't fit, so the
+Claude parser takes over: rules give determinism on known shapes, Claude gives coverage on new wording."""
+
+import re
+
+from floorwise.agent.spec import QuerySpec
+
+FLOOR_NAME = r"(?:ground floor|floor\s*-?\d+|basement\s*\d+|level\s*-?\d+)"
+SPACE = r"(?P<{name}>.+?\(" + FLOOR_NAME + r"\))"  # "Bathroom 0.05 (apartment 2) (Ground floor)"
+FLOOR = r"(?:the\s+)?(?P<floor>ground floor|floor\s*-?\d+|basement\s*\d+|level\s*-?\d+)"
+
+
+def _space(name: str) -> str:
+    return SPACE.format(name=name)
+
+
+PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("largest_room", re.compile(rf"which is the largest (?P<room_type>.+?) on {FLOOR}\s*,", re.I)),
+    ("floor_area_total", re.compile(rf"total floor area of (?:every|all) (?P<room_type>.+?) on {FLOOR}", re.I)),
+    (
+        "errand",
+        re.compile(
+            rf"i'?m in {_space('start')}\.\s*i need to grab an? (?P<asset_type>.+?) from the room that has one closest"
+            rf".*?carry it to the largest (?P<room_type>.+?) on {FLOOR}\.(?P<rest>.*)",
+            re.I | re.S,
+        ),
+    ),
+    (
+        "wide_delivery_count",
+        re.compile(
+            rf"(?P<width>\d+(?:\.\d+)?)\s*m wide.*?arrives through the entrance into {_space('start')}\."
+            rf"\s*into how many rooms on {FLOOR}",
+            re.I | re.S,
+        ),
+    ),
+    (
+        "step_free_reachable_count",
+        re.compile(
+            rf"^(?P<closed>.+?) is (?:out of service|closed).*?entrance into {_space('start')}\."
+            rf"\s*how many rooms on {FLOOR}",
+            re.I | re.S,
+        ),
+    ),
+    ("room_stacked_above", re.compile(rf"(?:ceiling|roof) (?:in|of) {_space('start')}\.\s*which room is directly above", re.I)),
+    ("room_stacked_below", re.compile(rf"floor of {_space('start')}\.\s*which room directly below", re.I)),
+    ("shared_walls_count", re.compile(rf"soundproofing {_space('start')}\.\s*how many other rooms", re.I)),
+    ("straight_line_3d", re.compile(rf"between {_space('first')} and {_space('second')}\.\s*what is the straight-line distance", re.I)),
+    (
+        "what_if_door",
+        re.compile(
+            rf"add a door between {_space('first')} and {_space('second')}\s*,.*?how many rooms on {FLOOR}\s+would",
+            re.I | re.S,
+        ),
+    ),
+]
+
+
+def parse_rules(question: str) -> QuerySpec | None:
+    text = " ".join(question.split())
+    for kind, pattern in PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        groups = {k: (v.strip() if isinstance(v, str) else v) for k, v in match.groupdict().items()}
+        spec = {"kind": kind}
+        if kind.startswith("room_stacked"):
+            spec = {"kind": "room_stacked", "direction": "above" if kind.endswith("above") else "below"}
+        for key in ("floor", "room_type", "asset_type", "start", "first", "second", "closed"):
+            if groups.get(key):
+                spec[key] = groups[key]
+        if groups.get("width"):
+            spec["min_width"] = float(groups["width"])
+        if kind == "errand":
+            rest = (groups.get("rest") or "").lower()
+            spec["stairs_allowed"] = not ("can't" in rest and "stairs" in rest) and "cannot use the stairs" not in rest
+        return QuerySpec(**spec)
+    return None
