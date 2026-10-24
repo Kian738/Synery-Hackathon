@@ -18,5 +18,5 @@ def scenario_report(building: Building, template: str, params: dict, audience: s
         "abstained": None if trace.abstained is None else asdict(trace.abstained),
         "answer": to_dict(trace.answer),
         "evacuation": None if evacuation is None else to_dict(evacuation),
-        "findings": [asdict(f) for f in assess(trace, audience)] if evacuation is not None or trace.abstained else [],
+        "findings": [asdict(f) for f in assess(trace, audience, building)] if evacuation is not None or trace.abstained else [],
     }

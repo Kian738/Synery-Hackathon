@@ -145,3 +145,15 @@ export interface VisualResult {
   warnings:string[];
   provenance:string;
 }
+
+export type Audience = "safety_officer" | "occupant" | "builder" | "regulator";
+export interface ScenarioStep { id: string; op: string; ok: boolean; summary: string; reason: string | null; ms: number }
+export interface ScenarioFinding { severity: "blocker" | "risk" | "improve" | "info"; title: string; detail: string; evidence: string[]; tier: string; suggestion: string | null }
+export interface ScenarioFix { element: string; width_m: number; previous_width_m: number; between: string[]; T_before_s: number; T_after_s: number }
+export interface ScenarioReport {
+  steps: ScenarioStep[];
+  abstained: { step?: string; reason?: string } | string | null;
+  answer: { fixes?: ScenarioFix[] } | null;
+  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null } | null;
+  findings: ScenarioFinding[];
+}
