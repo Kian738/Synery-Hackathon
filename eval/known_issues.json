@@ -1,0 +1,14 @@
+{
+  "_doc": "Questions whose wording cannot identify the intended space. Every id here was diagnosed (docs/parallel/benchmark-handoff.md): the mention names several spaces of one floor and nothing in the question separates them. They are reported as known, never as passes, and any failure NOT listed here fails the gate. Do not add an id without evidence.",
+  "osm-way37850565-H03": {"reason": "ambiguous_name", "detail": "'Büro (Ground floor)' names 3 offices; the text gives no room number"},
+  "osm-way37850565-H04": {"reason": "ambiguous_name", "detail": "'Büro (Floor 1)' names 9 offices; the text gives no room number"},
+  "osm-way37850565-Q05": {"reason": "ambiguous_name", "detail": "'Büro (Floor 1)' names 9 offices"},
+  "osm-way37850565-Q06": {"reason": "ambiguous_name", "detail": "'Büro (Floor 1)' names 9 offices"},
+  "osm-way37850565-Q08": {"reason": "ambiguous_name", "detail": "'Büro (Ground floor)' names 3 offices"},
+  "osm-way37850565-Q09": {"reason": "ambiguous_name", "detail": "'Büro (Floor 1)' names 9 offices"},
+  "osm-way37850565-Q10": {"reason": "ambiguous_name", "detail": "three 'Büro' stops, 3 x 3 x 9 readings"},
+  "osm-way58216509-Q02": {"reason": "duplicate_rooms", "detail": "two co-located rooms with identical name, number, type and floor"},
+  "osm-way58216509-Q03": {"reason": "duplicate_rooms", "detail": "two co-located rooms with identical name, number, type and floor"},
+  "osm-way58216509-Q05": {"reason": "duplicate_rooms", "detail": "two co-located rooms with identical name, number, type and floor"},
+  "osm-way58216509-Q06": {"reason": "duplicate_rooms", "detail": "two co-located rooms with identical name, number, type and floor"}
+}

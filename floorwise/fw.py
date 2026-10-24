@@ -6,7 +6,7 @@
   fw dev                    backend + frontend with hot reload (http://localhost:5173)
   fw check                  every offline test and eval gate (free, ~3 min)
   fw ui-test                build the web app, start a server, run Playwright on desktop + phone
-  fw submit                 answer the public test set -> submissions/team_floorwise_test.csv
+  fw submit                 validated SUBMISSION/{BENCHMARK.md,answers.json} + legacy CSV
   fw bench B Q OUT          Sunday run: building dir B, questions file Q, answers file OUT (.json/.csv)
   fw chat [B]               talk to a building in the terminal
   fw eval SUITE [args]      one eval suite (routes solver parser e2e e2e_basic robust metamorphic build interaction report)
@@ -123,8 +123,14 @@ def ui_test(extra: list[str] | None = None) -> int:
 
 
 def submit() -> int:
-    out = ROOT / "submissions" / "team_floorwise_test.csv"
-    return run([sys.executable, "-m", "floorwise.cli", str(DATA / "test"), str(out)])
+    from floorwise.submission import package_submission
+
+    candidate = ROOT / "runs" / "submission-candidate" / "answers.json"
+    code = run([sys.executable, "-m", "floorwise.cli", str(DATA / "test"), str(candidate)])
+    if code:
+        return code
+    package_submission(ROOT, DATA / "test", candidate)
+    return 0
 
 
 def main() -> None:
@@ -147,6 +153,8 @@ def main() -> None:
         sys.exit(dev())
     if command == "check":
         sys.exit(check())
+    if command == 'test':
+        sys.exit(run([sys.executable, '-u', '-m', 'eval.product', *rest]))
     if command == "ui-test":
         sys.exit(ui_test(rest))
     if command == "submit":

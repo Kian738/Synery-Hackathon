@@ -52,7 +52,13 @@ def check(building: Building, question: dict) -> tuple[bool, str]:
         route = plan_route(building, stops, constraints)
     except NoRoute as error:
         return False, str(error)
-    return abs(route.length_m - answer["optimal_length_m"]) <= TOLERANCE_M, f"got {route.length_m} want {answer['optimal_length_m']}"
+    if abs(route.length_m - answer["optimal_length_m"]) > TOLERANCE_M:
+        return False, f"got {route.length_m} want {answer['optimal_length_m']}"
+    legs = answer.get("legs") or [answer]
+    for ours, want in zip(route.legs, legs):
+        if "space_path" in want and ours.space_path != want["space_path"]:
+            return True, "same length, different space path (tie)"
+    return True, ""
 
 
 def main() -> None:

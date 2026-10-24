@@ -1,14 +1,22 @@
-# Three-minute demo and fallback
+# Strictly two-minute demo and fallback
 
 Before starting: `uv run fw doctor`, `uv run fw check`, `uv run fw ui-test`. Launch with `uv run fw start`; use `uv run fw start --lan` for the paired-phone showcase and follow `docs/PHONE_DEMO.md`. Pair and test before the timed pitch. Use a local screen recording if network or model latency interferes. Do not claim live positioning or certification.
 
-1. 0:00-0:15: "Floor plans are drawings. Floorwise makes the building answer questions and predict what a change will do."
-2. 0:15-0:45: optional PNG ingest, one known real width, review the inferred draft, confirm activation. Generated plans work best. Keep a preloaded campus building for the main sequence.
-3. 0:45-1:25: on proc-campus-dev-000 ask "I use a wheelchair. How do I get from Lab 2.17 to Lab 4.26?" Show Route floors, then Guide me. Start playback explicitly; seek or use Next instruction. For the paired-phone variation, press Next and turn/recenter the view from the already-paired phone. Keep this beat under 20 seconds.
-4. 1:25-1:55: "Lift 2 is closed for maintenance. What changes for my route?" Show the closed lift, previous-route ghost and recomputed route. Measured horizontal walking distance: 49.7 to 96.1 m.
-5. 1:55-2:25: "Can a 1.1 m trolley reach Print room 0.16 from Main lobby?" The model proposes O0015 widening from 0.9 to 1.1 m and verifies connectivity. Apply to model. Explain that actual building work is still required.
-6. 2:25-2:45: "Claude handles language. Deterministic geometry and graph algorithms compute every fact. We checked 7200 route comparisons against the official implementation."
-7. 2:45-3:00: "For facilities, logistics and accessibility teams, starting with one building. Reconstructed plans are drafts for review."
+Latest organizer announcement supersedes the earlier three-minute plan: the final
+export must be **120 seconds**. Record and edit the product in the first minute and
+architecture in the second. Do not spend the timed pitch waiting for model responses.
+
+1. 0:00–0:10: “Floor plans are drawings. Floorwise lets a visitor ask the building where to go, and a facilities team ask what changes when a lift closes.” Show the preloaded campus.
+2. 0:10–0:35: “I use a wheelchair. How do I get from Lab 2.17 to Lab 4.26?” Show the understood endpoints and step-free constraint. Open Tools → Route floors; start Guide me and advance one decision. “These are recorded rooms and computed directions. The start is set manually.”
+3. 0:35–1:00: “Lift 3 is closed for maintenance. What changes for my route?” Show the closure and reroute via Lift 2. “The agent remembers step-free access and computes another route.” Cut to the verified widening preview: “Changes are reviewed before applying them to the model.”
+4. 1:00–1:25: Show a simple architecture graphic or code: image/data → Building → deterministic geometry and route graph → tools → language/UI. “The model parses language and explains tool results. It never estimates distances or invents routes. We use the challenge's door-to-door walking and vertical travel rules.”
+5. 1:25–1:45: Show the latest raw benchmark results and two-file SUBMISSION folder. “Tests check exact geometry, route validity, text parsing and interaction recovery. Public test answers are generated from the supplied data. The unseen building remains unseen.” Use only results actually measured for the current revision.
+6. 1:45–2:00: Show a brief plan import draft and paired-phone control if already recorded. “Plans can be rebuilt with a real dimension and reviewed. A paired phone controls the view and instructions. This is a model-based guide; live positioning and physical-device validation remain future work.” End on Floorwise at exactly 2:00.
+
+Keep the master export at 120 seconds, including titles and end card. Verify the
+actual media duration with a media inspector before uploading; the automated fallback
+below is raw footage, not an edited two-minute submission. The form also needs the
+GitHub repository link and [technical explanation](SUBMISSION_TECHNICAL.md).
 
 Shock shot alternative: factory-dev-003, Office lift closure, 29/56 rooms lose step-free exit access.
 

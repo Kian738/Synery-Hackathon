@@ -28,7 +28,7 @@ export function FloorRail({ floors, active, route, onPick, here }: {
             </span>
             <span className="font-semibold">{f.level === 0 ? "G" : f.level > 0 ? f.level : `B${-f.level}`}</span>
             <span className={`hidden sm:inline text-[13px] ${f.id === active ? "text-concrete" : "text-ink-3"}`}>{f.name}</span>
-            {here === f.id && <span className="ml-auto text-[11px] font-semibold text-escape">YOU</span>}
+            {here === f.id && <span className="ml-auto text-[11px] font-semibold text-escape">Start</span>}
           </button>
         );
       })}

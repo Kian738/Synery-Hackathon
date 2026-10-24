@@ -45,6 +45,7 @@ test("phone drag works before any route and can open its own building view",asyn
   await page.goto("/?building=proc-campus-dev-000");
   const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));
   await expect(page.locator("canvas")).toHaveAttribute("data-scene-painted","true");
+  await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("button",{name:"Phone companion",exact:true}).click();await page.getByRole("button",{name:"Pair a phone",exact:true}).click();
   const code=page.locator(".cmp-code");await expect(code).toHaveText(/^\d{6}$/);
   const context=await browser.newContext({baseURL,viewport:{width:390,height:844},isMobile:true,hasTouch:true});

@@ -31,8 +31,8 @@ means above; leaking onto a floor means below.
 a shorter walk out of the building.
 - locate: where is an item (item).
 - count: how many items of a type on a floor (item, floor).
-- route: how to get from start to destination; step_free if the person needs it; closed if a lift/stair is closed.
-- tour: visit stops in order (stops, start first).
+- route: how to get from start to destination; step_free if the person needs it; closed if a lift/stair/room/door is closed or blocked (closed_more for further closed places). Rules that may be stated: without stairs (stairs_allowed=false: lifts, ramps and doors only), a forklift (forklift=true: aisles and openings of 3 m or wider), production bays are destinations that may be entered but not crossed as a shortcut (bays_destinations=true), places to avoid (avoid).
+- tour: visit stops in order (stops, start first); the same route rules apply.
 - other: anything else.
 
 Use the vocabulary below to normalise words (e.g. "WCs" -> the matching room type), but keep names of \
@@ -58,11 +58,17 @@ class WireQuery(BaseModel):
     stops: list[str] = []
     step_free: bool = False
     stairs_allowed: bool = True
+    forklift: bool = False
+    bays_destinations: bool = False
+    avoid: list[str] = []
+    closed_more: list[str] = []
 
     def to_spec(self) -> QuerySpec:
         data = {k: v for k, v in self.model_dump().items() if v not in ("", [], 0.0)}
         data["step_free"] = self.step_free or None
         data["stairs_allowed"] = None if self.stairs_allowed else False
+        data["forklift"] = self.forklift or None
+        data["bays_destinations"] = self.bays_destinations or None
         return QuerySpec(**data)
 
 

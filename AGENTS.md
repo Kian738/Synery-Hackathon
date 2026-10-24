@@ -24,13 +24,14 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 |---|---|---|
 | `floorwise/core/analytics.py` | complete chat counts, item rankings/ties, content filters and grouped stats; benchmark semantics unchanged | unit-tested |
 | `floorwise/core/scene.py` | cached schematic walls and opening gaps; display-only wall deduplication | unit-tested |
-| `floorwise/agent/local.py` | free deterministic chat dispatch and validated parser-to-session adapter | unit-tested |
+| `floorwise/agent/local.py` | deterministic benchmark/helper dispatch and validated parser-to-session adapter; normal chat is Claude-first | unit-tested |
 | `floorwise/core/model.py` | `Building`: typed, cached view of one `building.json` | verified |
-| `floorwise/core/graph.py` | `RouteGraph`: the dataset's exact route model plus `Constraints` (step-free, min width, closed, avoid, soft-avoid, extra doors) | verified (L0 100 %) |
+| `floorwise/core/spacewalk.py` | the judges' walking rule (kit 1.1.0): door to door inside each space, 15 cm off the walls, round corners, doors land 30 cm inside; cached per building on disk (`runs/.walk-cache`) | gold to the cm, 280 buildings graph-equal to the kit |
+| `floorwise/core/graph.py` | `RouteGraph`: the judges' route model (stairs 2 m per metre climbed, lift 15 m + 1 m per metre, no outside hop) plus `Constraints` (step-free, min width, closed, avoid, soft-avoid, forklift, bays as destinations, extra doors) | verified (L0 100 %, `eval.rules`, `eval.differential`) |
 | `floorwise/core/geometry.py` | areas, 3D centroids, shared walls (0.35 m, ≥1 m), stacking, wall midpoint | verified (L1 100 %) |
 | `floorwise/core/ops.py` | one operator per question family | verified (L1 100 %) |
 | `floorwise/core/routing.py` | `plan_route`, tours, polyline | verified (L0 100 %) |
-| `floorwise/core/walk.py` | humane walking lines per room: grid A* around furniture with clearance, door-exact smoothing; no entrance teleports for people (`Constraints(outside="none")`) | exact collision validation; dev: 134 validated / 160 sampled, 26 withheld |
+| `floorwise/core/walk.py` | drawn walking lines per room: taut string (visibility graph) around furniture, 15 cm off walls, straight lines and corners only; doorway-connected origins and strict preview collision gating; blocked previews are withheld | drawn length ≈ official + clearance; few withheld |
 | `floorwise/core/instructions.py` | followable directions: decision points, salient landmarks, floor-change steps, spoken overview (research §3) | unit-checked; wording reviewed by hand |
 | `floorwise/core/resolve.py` | entity linking: floors, rooms, room types, item types, lifts; fuzzy, with candidates | verified on train/dev/test text |
 | `floorwise/agent/spec.py` | `QuerySpec` (mentions) → solver inputs; ambiguity readings | verified |
@@ -44,6 +45,7 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/llm/` | provider layer: `anthropic` (prod), `groq`/`openrouter` (testing) | Groq verified |
 | `floorwise/build/` | floor plan images → `building.json` (CV + learned palette + optional vision labels) | procedural 100 %; OSM/Swiss weaker |
 | `floorwise/cli.py` | `run_benchmark` (Sunday command) | verified offline |
+| `floorwise/submission.py` | validates complete public-test predictions and packages exactly `SUBMISSION/BENCHMARK.md` and `SUBMISSION/answers.json`, plus legacy CSV | unit-tested |
 | `floorwise/fw.py` | `fw`: the one command | verified |
 | `eval/` | eval suites L0–L7, ledger, report | see `docs/EVALS.md` |
 | `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | tested; chat live on Groq |
@@ -69,7 +71,11 @@ uv run fw start --lan        # same app reachable by a phone on this network
 uv run fw dev                # hot-reload dev (backend :8000, frontend :5173)
 uv run fw check              # all offline tests + eval gates; must stay green
 uv run fw ui-test            # Playwright UI tests (desktop + phone) against a fresh server
-uv run fw submit             # regenerate submissions/team_floorwise_test.csv
+uv run fw test smoke         # product contracts and focused desktop/phone checks
+uv run fw test full          # comprehensive offline product evidence
+uv run fw test live          # 30 real-browser conversations, three bounded batches
+uv run fw test demo          # three continuous live showcase rehearsals
+uv run fw submit             # validate SUBMISSION/{BENCHMARK.md,answers.json} + legacy CSV
 uv run fw bench B Q OUT      # Sunday run (see BENCHMARK.md)
 uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 ```
@@ -89,6 +95,6 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 
 - Coordinates are **metres** in one frame per building (some Swiss floors are centred per floor). Plan images have **no scale**: the builder needs one real dimension (or uses its door-width estimate).
 - Route anchors are `representative_point()`, not centroids. Centroids are only for `straight_line_3d`.
-- Stairs cost 12 m per floor; lifts cost 15 m plus 6 m per floor; entrances join at a free `outside` node. **That free hop is benchmark-only**: navigation for people uses `outside="none"` and the walking layer, and reports walking metres.
+- **Route model (kit 1.1.0, README section 3):** walking is door to door inside each space, 15 cm off the walls, round corners, never through walls; a door lands 30 cm inside the space. Stairs cost **2 m per metre climbed**, a lift **15 m once per ride plus 1 m per metre climbed** (lifts join every pair of stops). Furniture is never an obstacle for distances. **There is no way round the outside**: entrances are door nodes of one space, and two parts that only meet outside have no route (`reachable: false`). `Constraints(outside="exits")` exists only for exit-distance analyses (what-if door, weak points).
 - LLM spend is capped per process (`FLOORWISE_MAX_TOKENS`, default 400k) with request timeouts. Lab jobs time out after 20 min and can be cancelled.
 - OSM buildings repeat names (e.g. 9 × "Büro" on one floor). The benchmark path then solves every reading and votes; chat asks back.

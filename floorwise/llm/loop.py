@@ -4,6 +4,8 @@ The conversation history is kept in the provider's own message format inside Con
 
 import json
 import re
+import uuid
+from types import SimpleNamespace
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Callable
@@ -15,6 +17,7 @@ from floorwise.llm.tools import Tool, call
 MAX_TOKENS = 16000
 MAX_STEPS = 16
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01"
 
 OnEvent = Callable[[str, dict], None] | None
 
@@ -55,27 +58,29 @@ class Conversation:
             budget.check()
             if on_event:on_event('progress',{'stage':'model','message':'Waiting for Claude'})
             tools = [t.anthropic() for t in self.tools]
+            arguments = dict(model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
+                             output_config={"effort": self.effort}, betas=[FALLBACK_BETA, THINKING_BINDING_BETA],
+                             # Loading specialized tools changes the prefix that old thinking
+                             # signatures bind to. Let the API discard only invalid blocks;
+                             # preserve assistant messages and tool results verbatim.
+                             thinking={"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}},
+                             fallbacks="default", timeout=budget.timeout_s())
             streamed_chunks = []
-            if hasattr(self.client.beta.messages, "stream"):
-                with self.client.beta.messages.stream(
-                    model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
-                    output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default", timeout=budget.timeout_s(),
-                ) as stream:
-                    for text in stream.text_stream:
-                        streamed_chunks.append(text)
-                        if on_event:
-                            on_event("text_delta", {"text": text})
+            if on_event:
+                message_id = uuid.uuid4().hex
+                self.last_message_id = message_id
+                on_event('assistant_start', {'message_id': message_id, 'model': self.model})
+                with self.client.beta.messages.stream(**arguments) as stream:
+                    for event in stream:
+                        on_event('checkpoint', {})
+                        if event.type == 'content_block_delta' and event.delta.type == 'text_delta':
+                            streamed_chunks.append(event.delta.text)
+                            on_event('assistant_delta', {'message_id': message_id, 'text': event.delta.text})
+                            on_event('text_delta', {'text': event.delta.text})
                     response = stream.get_final_message()
+                on_event('assistant_end', {'message_id': message_id, 'stop_reason': response.stop_reason})
             else:
-                response = self.client.beta.messages.create(
-                    model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
-                    output_config={"effort": self.effort}, betas=[FALLBACK_BETA], fallbacks="default", timeout=budget.timeout_s(),
-                )
-                for b in response.content:
-                    if getattr(b, "type", None) == "text" and getattr(b, "text", None):
-                        streamed_chunks.append(b.text)
-                        if on_event:
-                            on_event("text_delta", {"text": b.text})
+                response = self.client.beta.messages.create(**arguments)
             usage = response.usage
             budget.add(usage.input_tokens+(usage.cache_read_input_tokens or 0)+(usage.cache_creation_input_tokens or 0), usage.output_tokens)
             self.usage.update({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
@@ -109,10 +114,36 @@ class Conversation:
             budget.check()
             if on_event:on_event('progress',{'stage':'model','message':'Waiting for the language model'})
             tools = [t.openai() for t in self.tools]
-            response = self.client.chat.completions.create(
-                model=self.model, max_tokens=4096, tools=tools, tool_choice="auto",
-                messages=[{"role": "system", "content": self.system}, *self.messages], timeout=budget.timeout_s(),
-            )
+            arguments = dict(model=self.model, max_tokens=4096, tools=tools, tool_choice="auto",
+                             messages=[{"role": "system", "content": self.system}, *self.messages], timeout=budget.timeout_s())
+            if on_event:
+                message_id = uuid.uuid4().hex
+                self.last_message_id = message_id
+                on_event('assistant_start', {'message_id': message_id, 'model': self.model})
+                fragments = {}; text = ''; usage = None
+                with self.client.chat.completions.create(**arguments, stream=True, stream_options={'include_usage': True}) as stream:
+                    for chunk in stream:
+                        on_event('checkpoint', {})
+                        if chunk.usage: usage = chunk.usage
+                        if not chunk.choices: continue
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            text += delta.content
+                            on_event('assistant_delta', {'message_id': message_id, 'text': delta.content})
+                            on_event('text_delta', {'text': delta.content})
+                        for fragment in delta.tool_calls or []:
+                            item = fragments.setdefault(fragment.index, {'id': '', 'name': '', 'arguments': ''})
+                            if fragment.id: item['id'] = fragment.id
+                            if fragment.function:
+                                item['name'] += fragment.function.name or ''
+                                item['arguments'] += fragment.function.arguments or ''
+                calls = [SimpleNamespace(id=f['id'], function=SimpleNamespace(name=f['name'], arguments=f['arguments'])) for _, f in sorted(fragments.items())]
+                response = SimpleNamespace(usage=usage, choices=[SimpleNamespace(message=SimpleNamespace(content=text, tool_calls=calls))])
+                if calls and text:
+                    on_event('clear_deltas', {})
+                on_event('assistant_end', {'message_id': message_id})
+            else:
+                response = self.client.chat.completions.create(**arguments)
             if response.usage:
                 budget.add(response.usage.prompt_tokens, response.usage.completion_tokens)
                 self.usage.update({"input_tokens": response.usage.prompt_tokens, "output_tokens": response.usage.completion_tokens})
