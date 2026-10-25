@@ -1,3 +1,4 @@
+import { mergeFloorSteps } from "../lib/mergeSteps";
 import { audioStreamQueue } from "../lib/voice";
 import {startAssistantStream,appendAssistantText} from "../lib/chatStream";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -120,7 +121,7 @@ export function useNavigator(buildingId: string) {
     if (!isRoute(r)) {
       setNotice("The route response was incomplete. Please try again."); return;
     }
-    setRoute(r);setVisualResult(null);
+    setRoute(mergeFloorSteps(r));setVisualResult(null);
     const building = geometryRef.current;
     if (building) setRouteMeta({from:labelOf(building,r.stops[0]),to:labelOf(building,r.stops[r.stops.length-1])});
     setPreviewDoor(null);

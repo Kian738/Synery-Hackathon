@@ -114,7 +114,7 @@ test("a lift and two stairs sharing one corridor get separate, non-overlapping s
   expect((slotSpace(ell, 0, 1, "stairs", true).polygon as number[][]).every(inEll)).toBe(true);
 });
 
-test("Guide me glides down between floors instead of jumping", async ({ page }) => {
+test("Guide me changes floors in one short cutout instead of a long stair walk", async ({ page }) => {
   const building = "osm-way27917482";
   await page.goto(`/?building=${building}&at=${building}-F3-S069&to=00.05.058`);
   await page.getByRole("button", { name: "Guide me step by step" }).click();
@@ -132,9 +132,10 @@ test("Guide me glides down between floors instead of jumping", async ({ page }) 
     if (pos) ys.push(pos[1]);
   }
   expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(3);
-  const steps = ys.slice(1).map((y, i) => Math.abs(y - ys[i]));
-  expect(Math.max(...steps)).toBeLessThan(1.6);
-  expect(ys.filter(y => y > Math.min(...ys) + 0.4 && y < Math.max(...ys) - 0.4).length).toBeGreaterThan(2);
+  // A floor change is one short cutout (about 2.4 s of preview, however many floors), never a long stair walk.
+  const between = ys.filter(y => y > Math.min(...ys) + 0.4 && y < Math.max(...ys) - 0.4).length;
+  expect(between).toBeLessThanOrEqual(12);
+  expect(new Set(ys.map(y => y.toFixed(1))).size).toBeGreaterThan(1);
 });
 
 test("each of the first eight floors has its own colour, stable by level", () => {

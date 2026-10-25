@@ -23,7 +23,7 @@ import { Roofs } from "./Ceilings";
 import { PerfProbe } from "./PerfProbe";
 import { DetailWatcher, type Detail } from "./DetailWatcher";
 import { Dock, IconButton, Popover } from "../ui/kit";
-import { LiftShafts, rideState } from "./LiftShafts";
+import { LiftShafts, rideState, setInterlude } from "./LiftShafts";
 import { Connectors3D, inside as insidePolygon, stairWalkFor, type WalkPoint } from "./Connectors3D";
 import { SceneLabels, type SceneLabel, type ProjectedLabel } from "./SceneLabels";
 import { GuidePlayer } from "./GuidePlayer";
@@ -280,9 +280,9 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       const lift=geometry.connectors.some(c=>c.kind==="lift"&&c.space_ids.includes(ride.from.node)&&c.space_ids.includes(ride.to.node));
       rideState.lift=lift?{nodes:[ride.from.node,ride.to.node],y:h0+(h1-h0)*e+.02}:null;
       const label=(id:string)=>geometry.floors.find(f=>f.id===id)?.name??id;
-      rideState.interlude=jump?{kind:lift?"lift":kind,from:label(ride.from.floor_id),to:label(ride.to.floor_id)}:null;
+      setInterlude(jump?{kind:lift?"lift":kind,from:label(ride.chain?.from??ride.from.floor_id),to:label(ride.chain?.to??ride.to.floor_id)}:null);
     }else{
-      rideState.lift=null;rideState.interlude=null;
+      rideState.lift=null;setInterlude(null);
       // The camera path is already centred and clear of walls; nothing is pushed per frame (that made the picture jitter).
       if(vrPose.active){vrPose.x=p.x;vrPose.y=height;vrPose.z=-p.y;}else camera.position.copy(frame(p.x,p.y,height+1.65));
     }

@@ -8,7 +8,7 @@ export function StairInterlude({ kind, from, to, reduced }: { kind: string; from
   const lift = kind === "lift";
   return <div className={`k-interlude${reduced ? " k-interlude-static" : ""}`} role="status" aria-live="polite"
     style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "grid", placeItems: "center", background: "#0e1319",
-      animation: reduced ? undefined : "k-interlude .35s ease-out both" }}>
+      animation: undefined }}>
     <div className="k-interlude-card" style={{ textAlign: "center", color: "#fff" }}>
       <Pictogram name={lift ? "lift" : "stairs"} size={40}/>
       <div className="k-interlude-floors">{from} → {to}</div>
@@ -17,18 +17,14 @@ export function StairInterlude({ kind, from, to, reduced }: { kind: string; from
   </div>;
 }
 
-/** Watches the camera's ride and shows the cutout for the whole duration of a ride the camera cannot walk honestly. */
+/** Shows the cutout the moment the camera enters a floor change and keeps it for the whole chain (1 to 4 is one cutout). */
 export function InterludeHost({ reduced }: { reduced?: boolean }) {
   const [now, setNow] = useState<typeof rideState.interlude>(null);
   useEffect(() => {
-    let id = 0, last = "";
-    const tick = () => {
-      const r = rideState.interlude, key = r ? `${r.kind}|${r.from}|${r.to}` : "";
-      if (key !== last) { last = key; setNow(r ? { ...r } : null); }
-      id = window.setTimeout(tick, 120);
-    };
-    tick();
-    return () => window.clearTimeout(id);
+    const sync = () => setNow(rideState.interlude ? { ...rideState.interlude } : null);
+    window.addEventListener("floorwise:interlude", sync);
+    sync();
+    return () => window.removeEventListener("floorwise:interlude", sync);
   }, []);
   return now ? <StairInterlude kind={now.kind} from={now.from} to={now.to} reduced={reduced} /> : null;
 }

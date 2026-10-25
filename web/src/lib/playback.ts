@@ -2,6 +2,8 @@ import type { Route, RoutePoint } from "./types";
 
 export interface PreviewSection {
   a: RoutePoint; b: RoutePoint; start: number; end: number; transition: boolean;
+  /** Floor changes that follow each other (1 to 2 to 3 to 4) are one chain: one cutout from the first floor to the last. */
+  chain?: { from: string; to: string; start: number; end: number };
 }
 /** Time is simulated preview seconds, never a measured walking ETA. Gaps are chapters,
  * not traversable lines: the viewer changes landing without flying through the building. */
@@ -30,6 +32,7 @@ function speedProfile(points: RoutePoint[], auto: boolean): number[] {
   });
 }
 
+const INTERLUDE_S = 2.4, CHAIN_GAP_M = 3;
 export function presentation(route: Route, auto = true, rideSeconds?: (fromFloor: string, toFloor: string, fromNode: string, toNode: string) => number) {
   const sections: PreviewSection[] = [];
   const points = route.polyline.filter((p, i, all) => !i || p.gap || p.floor_id !== all[i-1].floor_id || Math.hypot(p.x-all[i-1].x,p.y-all[i-1].y)>1e-7);
@@ -39,6 +42,25 @@ export function presentation(route: Route, auto = true, rideSeconds?: (fromFloor
     const a=points[i-1],b=points[i],transition=!!b.gap || a.floor_id!==b.floor_id;
     const seconds=transition ? (rideSeconds&&a.floor_id!==b.floor_id?rideSeconds(a.floor_id,b.floor_id,a.node,b.node):3) : Math.hypot(b.x-a.x,b.y-a.y)/speeds[i-1];
     sections.push({a,b,start:duration,end:duration+seconds,transition}); duration+=seconds;
+  }
+  // The stair walk is never shown (StairInterlude covers it), so a floor change takes INTERLUDE_S in total, however many floors it spans.
+  const isHop=(s:PreviewSection)=>s.transition&&s.a.floor_id!==s.b.floor_id;
+  const chains:number[][]=[];let open:number[]|null=null,gap=0;
+  sections.forEach((s,i)=>{
+    if(isHop(s)){if(open&&gap<=CHAIN_GAP_M)open.push(i);else{open=[i];chains.push(open);}gap=0;}
+    else if(open)gap+=s.transition?Infinity:Math.hypot(s.b.x-s.a.x,s.b.y-s.a.y);
+  });
+  if(chains.length){
+    const span=sections.map(s=>s.end-s.start);
+    for(const c of chains){
+      const hops=c.filter(i=>isHop(sections[i]));
+      for(let i=c[0];i<=c[c.length-1];i++)span[i]=isHop(sections[i])?INTERLUDE_S/hops.length:0;
+    }
+    duration=0;sections.forEach((s,i)=>{s.start=duration;duration+=span[i];s.end=duration;});
+    for(const c of chains){
+      const first=sections[c[0]],last=sections[c[c.length-1]],chain={from:first.a.floor_id,to:last.b.floor_id,start:first.start,end:last.end};
+      for(let i=c[0];i<=c[c.length-1];i++)sections[i].chain=chain;
+    }
   }
   let previous=0;
   const chapters=route.guide.steps.map((step,index)=>{
@@ -62,7 +84,7 @@ export function samplePreview(model: Presentation, seconds: number) {
   const next=model.sections.find(s=>s.start>=section.end && !s.transition && s.a.floor_id===point.floor_id);
   const headingSection=section.transition?(next??section):section;
   let step=0;model.chapters.forEach((c,i)=>{if(c<=time+1e-7)step=i;});
-  return {point,heading:[headingSection.b.x-headingSection.a.x,headingSection.b.y-headingSection.a.y] as const,transition:section.transition&&time<model.duration,step,arrived:time>=model.duration-.011,ride:section.transition?{from:section.a,to:section.b,t}:null};
+  return {point,heading:[headingSection.b.x-headingSection.a.x,headingSection.b.y-headingSection.a.y] as const,transition:section.transition&&time<model.duration,step,arrived:time>=model.duration-.011,ride:section.transition?{from:section.a,to:section.b,t,chain:section.chain}:null};
 }
 export function advancePreview(time:number,dt:number,speed:number,duration:number) {
   return Math.min(duration,Math.max(0,time+Math.max(0,dt)*speed));

@@ -8,6 +8,12 @@ import { orientedRect, slotSpace } from "./Connectors3D";
  *  car is there, and doors that slide open when it arrives. Everything is generated from the lift spaces; no car data is supplied. */
 
 /** While Guide me rides a lift, the camera drives the car so both rise together. Set by RouteCamera, read here every frame. */
+/** Tell the cutout host about a change (by value), so it shows on the same frame instead of waiting for a poll. */
+export function setInterlude(v: null | { kind: string; from: string; to: string }) {
+  const a = rideState.interlude, same = (!a && !v) || (!!a && !!v && a.kind === v.kind && a.from === v.from && a.to === v.to);
+  rideState.interlude = v;
+  if (!same && typeof window !== "undefined") window.dispatchEvent(new Event("floorwise:interlude"));
+}
 export const rideState: { lift: null | { nodes: string[]; y: number }; interlude: null | { kind: string; from: string; to: string } } = { lift: null, interlude: null };
 
 const CAR_SPEED_M_S = 3.2, OPEN_BAND_M = 0.25;
