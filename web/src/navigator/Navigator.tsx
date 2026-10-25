@@ -21,6 +21,7 @@ import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { spokenStep } from "../lib/guide";
+import { Loader } from "../components/Loader";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
@@ -164,7 +165,7 @@ export default function Navigator() {
   const focusRoom=(room:Space)=>{selectSpace(room);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
   const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
   if (!g) {
-    return <div className="recovery" role="status">{nav.notice??"Loading building…"}{nav.notice&&<><button onClick={nav.retryLoad}>Retry loading</button><label>Choose another building<select value={buildingId} onChange={e=>setParams({building:e.target.value})}>{buildings.map(b=><option value={b.building_id} key={b.building_id}>{b.name}</option>)}</select></label></>}</div>;
+    return <div className="recovery" role="status">{nav.notice??<Loader label={buildings.find(b=>b.building_id===buildingId)?.name}/>}{nav.notice&&<><button onClick={nav.retryLoad}>Retry loading</button><label>Choose another building<select value={buildingId} onChange={e=>setParams({building:e.target.value})}>{buildings.map(b=><option value={b.building_id} key={b.building_id}>{b.name}</option>)}</select></label></>}</div>;
   }
 
   return (
@@ -256,7 +257,7 @@ export default function Navigator() {
           <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
             {view==='exterior'?<Suspense fallback={<p role="status">Preparing exterior map…</p>}><ExteriorView buildingId={buildingId} onEnter={enterInterior}/></Suspense>:view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult}
               pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
-              <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
+              <Suspense fallback={<Loader label={g.building.name} phrases={["Raising the floors","Setting the walls","Placing the furniture"]}/>}>
                 <Building3D hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
                   closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>

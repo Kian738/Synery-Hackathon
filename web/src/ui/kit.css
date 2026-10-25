@@ -273,3 +273,14 @@
   .guide-player .speed-options button { min-width:34px; padding:0 6px; }
   .k-guide-now > button { width:36px; height:36px; }
 }
+
+/* Loader: floors rise one after another, then breathe. */
+.k-loader { display:grid; justify-items:center; align-content:center; gap:10px; min-height:100%; padding:40px 16px; color:#cfdde2; text-align:center; }
+.k-loader strong { font-size:18px; color:#f4f8f9; }
+.k-loader span { font-size:14px; color:#9fb3bb; min-height:20px; }
+.k-loader-floor { opacity:0; transform:translateY(18px); animation:k-loader-rise .7s cubic-bezier(.2,.8,.2,1) forwards, k-loader-breathe 2.4s ease-in-out 1.4s infinite; }
+@keyframes k-loader-rise { to { opacity:1; transform:translateY(0); } }
+@keyframes k-loader-breathe { 50% { transform:translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .k-loader-floor { opacity:1; transform:none; animation:none; } }
+.recovery:has(.k-loader) { display:grid; place-items:center; min-height:100vh; width:100%; max-width:none; margin:0; padding:0; background:#0d161a; }
+.k-loader { width:100%; box-sizing:border-box; }
