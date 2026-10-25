@@ -93,7 +93,8 @@ def scenario_router(get_session):
             try:
                 with entry["lock"]:
                     report = scenario_report(entry["session"].building, body.template, body.params, body.audience,
-                                             on_step=lambda step: lines.put({"step": step}))
+                                             on_step=lambda step: lines.put({"step": step}),
+                                             on_partial=lambda evacuation: lines.put({"partial": {"evacuation": evacuation}}))
                 lines.put({"report": report})
             except Exception as error:  # noqa: BLE001  the stream must always end with a result or an error line
                 lines.put({"error": str(error)})

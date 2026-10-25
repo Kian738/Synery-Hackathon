@@ -152,7 +152,10 @@ def test_the_stream_sends_each_checked_step_as_it_finishes_then_the_same_report(
     steps = [item["step"] for item in lines if "step" in item]
     assert [s["id"] for s in steps] == ["spec", "g1", "occ", "exits", "evac", "bn", "resp", "cand", "best"]
     assert all(s["ok"] and s["summary"] for s in steps) and "people" in steps[2]["summary"]
-    assert "report" in lines[-1] and all("step" in item for item in lines[:-1])
+    assert "report" in lines[-1] and all(("step" in item or "partial" in item) for item in lines[:-1])
+    partial = [i for i, item in enumerate(lines) if "partial" in item]
+    assert len(partial) == 1 and lines[partial[0] - 1]["step"]["op"] == "evacuate"      # sent right after the evacuation is solved
+    assert lines[partial[0]]["partial"]["evacuation"]["T_s"] == lines[-1]["report"]["evacuation"]["T_s"]
     plain = client.post(f"/api/sessions/{session}/scenario", json=body).json()
     strip = lambda r: {k: v for k, v in r.items() if k != "steps"}
     assert strip(lines[-1]["report"]) == strip(plain)
