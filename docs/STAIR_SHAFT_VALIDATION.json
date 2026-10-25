@@ -1,0 +1,185 @@
+{
+  "scope": "Conservative display-only stair placement inside shared supplied shaft polygons; concurrent renderer and edit work excluded.",
+  "fingerprint": {
+    "version": 1,
+    "git": "5b73df96762c3d51803ccec21f562e018f31e922",
+    "source": "afefcc2c55892ba5950d",
+    "kit_git": "6a2cdec5bb96b06914429e96d42c5486715f1ebc",
+    "dataset": "fa7b71e429b52786b57a",
+    "frontend": "eba721489137f65cfd29",
+    "provider": "anthropic",
+    "models": {
+      "chat": "claude-opus-5-5",
+      "parser": "claude-haiku-5-5",
+      "judge": "claude-opus-5-5"
+    },
+    "effort": "low"
+  },
+  "fw_check": "passed",
+  "unit_tests_passed": 448,
+  "production_build": "passed",
+  "staged_source_files_match_runtime": 249,
+  "offline_gates": [
+    {
+      "run": "20261025-024639_routes_2a44409d",
+      "suite": "routes",
+      "correct": 2130,
+      "total": 2130,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 2130
+      }
+    },
+    {
+      "run": "20261025-024648_solver_063d83d8",
+      "suite": "solver",
+      "correct": 655,
+      "total": 655,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 655
+      }
+    },
+    {
+      "run": "20261025-024651_parser_rules_88371dd2",
+      "suite": "parser",
+      "correct": 655,
+      "total": 655,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 655
+      }
+    },
+    {
+      "run": "20261025-024653_e2e_bf06789f",
+      "suite": "e2e",
+      "correct": 653,
+      "total": 655,
+      "known_failures": 2,
+      "outcomes": {
+        "passed": 653,
+        "failed": 2
+      }
+    },
+    {
+      "run": "20261025-024653_parser_rules_a15beb36",
+      "suite": "parser",
+      "correct": 145,
+      "total": 145,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 145
+      }
+    },
+    {
+      "run": "20261025-024657_e2e_basic_dc2bcbdc",
+      "suite": "e2e_basic",
+      "correct": 2122,
+      "total": 2130,
+      "known_failures": 8,
+      "outcomes": {
+        "passed": 2122,
+        "failed": 8
+      }
+    },
+    {
+      "run": "20261025-024704_sunday_8b2688dd",
+      "suite": "sunday",
+      "correct": 1329,
+      "total": 1338,
+      "known_failures": 9,
+      "outcomes": {
+        "passed": 1329,
+        "failed": 9
+      }
+    },
+    {
+      "run": "20261025-024849_generated_7b3b29b9",
+      "suite": "generated",
+      "correct": 150,
+      "total": 150,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 150
+      }
+    },
+    {
+      "run": "20261025-024947_rules_bdcd7bdc",
+      "suite": "rules",
+      "correct": 661,
+      "total": 661,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 661
+      }
+    },
+    {
+      "run": "20261025-025203_roundtrip_a4dba7b5",
+      "suite": "roundtrip",
+      "correct": 236,
+      "total": 236,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 236
+      }
+    },
+    {
+      "run": "20261025-025204_walls_097a4749",
+      "suite": "walls",
+      "correct": 160,
+      "total": 160,
+      "known_failures": 0,
+      "outcomes": {
+        "unavailable": 29,
+        "passed": 130,
+        "withheld": 1
+      }
+    },
+    {
+      "run": "20261025-025233_robust_perturb_97dcd4a3",
+      "suite": "robust",
+      "correct": 630,
+      "total": 630,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 630
+      }
+    },
+    {
+      "run": "20261025-025237_metamorphic_9597c42f",
+      "suite": "metamorphic",
+      "correct": 860,
+      "total": 860,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 860
+      }
+    },
+    {
+      "run": "20261025-025552_walkability_668c4a49",
+      "suite": "walkability",
+      "correct": 160,
+      "total": 160,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 159,
+        "withheld": 1
+      }
+    },
+    {
+      "run": "20261025-025626_differential_a6e0b66a",
+      "suite": "differential",
+      "correct": 256,
+      "total": 256,
+      "known_failures": 0,
+      "outcomes": {
+        "passed": 256
+      }
+    }
+  ],
+  "targeted_tests": "7 passed: shaft containment plus frontend stream contracts",
+  "geometry_evidence": "Actual production stair meshes: all projected box corners, including rails and soffits, covered by both source floor shaft polygons. Institutsgebaeude 3: zero overlap with neighboring room polygons, identical shared footprint across both floor connections. CIT regression included. Disjoint shafts withhold flights.",
+  "api_evidence": "Port 8000 supplies two identical fitted shaft footprints for Institutsgebaeude 3; restart_required false.",
+  "browser_visual_qa": "Not performed: saved localhost browser permission gate. No browser bypass.",
+  "raw_known_misses": "e2e 653/655; basic 2122/2130; Sunday 1329/1338. Unchanged diagnosed misses; zero unexplained misses."
+}

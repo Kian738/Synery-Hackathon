@@ -164,7 +164,9 @@ export function Connectors3D({ geometry, elevations, visibleFloors, activeFloor,
           const modelSpace = stop.space!;
           const lower = geometry.openings.filter(o=>o.floor_id===stop.floor.id&&o.space_ids.includes(stop.space!.id)).map(o=>o.position);
           const upper = geometry.openings.filter(o=>o.floor_id===next.floor.id&&o.space_ids.includes(next.space!.id)).map(o=>o.position);
-          const frame = alignStairFrame(orientedRect(modelSpace.polygon),lower,upper);
+          const shaft=geometry.scene?.stair_shafts?.find(s=>s.connector_id===c.id&&s.from_floor===stop.floor.id&&s.to_floor===next.floor.id);
+          if(!shaft?.footprint)return; // Never stretch a bounding rectangle through neighbouring rooms.
+          const frame = alignStairFrame(orientedRect(shaft.footprint),lower,upper);
           out.push(...stairBoxes(modelSpace,base,shownRise,lit,frame));
         } else {
           const opening = geometry.openings.find(o => o.floor_id === stop.floor.id && o.space_ids.includes(stop.space!.id));

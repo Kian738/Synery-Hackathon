@@ -187,10 +187,13 @@ def _compile(content: str) -> dict:
         roofs.append({'floor_id': floor['id'], 'vertices': vertices, 'area_m2': cover.area,
                       'elevation_m': float(floor.get('elevation_m') or 0.0) + float(floor.get('height_m') or 3.0)})
     unmatched = sorted(o['id'] for o in data['openings'] if any(s != 'outside' and (o['id'], s) not in matched for s in o['space_ids']))
-    return {'revision': hashlib.sha256(('scene-v2:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    from floorwise.core.stair_scene import compile_stair_shafts
+    shafts=compile_stair_shafts(data)
+    return {'stair_shafts':shafts, 'revision': hashlib.sha256(('scene-v3:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
                             'Wall thickness and furniture heights are illustrative. Floor coordinates are preserved.',
+                            'Stair meshes stay within shared recorded shaft footprints; unfit flights are withheld. Stair internals remain illustrative.',
                             'Slabs use recorded space footprints. Roofs close indoor footprints with no floor above; no atrium is inferred.',
                             'Lintels close the wall above doors and narrow openings at 2.1 m; their height is illustrative.']}
