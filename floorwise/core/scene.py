@@ -101,7 +101,7 @@ def _compile(content: str) -> dict:
     cleared = []
     for fid in floors:
         floor_walls = [w for w in walls if w['floor_id'] == fid]
-        zones, zone_spaces = [], []
+        zones, zone_spaces, zone_wide = [], [], []
         lines = [LineString([w['a'], w['b']]) for w in floor_walls]
         wall_tree = _Tree(lines) if lines else None
         for o in data['openings']:
@@ -119,13 +119,14 @@ def _compile(content: str) -> dict:
             px, py = o['position']
             zones.append(LineString([(px-ux*half, py-uy*half), (px+ux*half, py+uy*half)]).buffer(0.35, cap_style='flat'))
             zone_spaces.append(set(o['space_ids']))
+            zone_wide.append(float(o.get('width_m') or 0.9) >= 1.5)  # a wide opening is open floor: walls of the joined rooms inside it go too
         if not zones:
             cleared += floor_walls
             continue
         tree = _Tree(zones)
         for wall, line in zip(floor_walls, lines):
             # Only walls of spaces the opening does not join: the joined spaces were cut along their own wall above.
-            hits = [i for i in tree.query(line, predicate='intersects') if wall['space_id'] not in zone_spaces[int(i)]]
+            hits = [i for i in tree.query(line, predicate='intersects') if wall['space_id'] not in zone_spaces[int(i)] or zone_wide[int(i)]]
             if not hits:
                 cleared.append(wall)
                 continue
@@ -155,6 +156,8 @@ def _compile(content: str) -> dict:
                 unique.append({'floor_id':fid,'space_id':owner,'a':list(a),'b':list(b),'height_m':source[0]['height_m']})
     walls=unique
     walls=apply_rails(data, walls)
+    overlap_list=compile_overlaps(data)
+    walls=drop_overlap_walls(data, walls, overlap_list)
     # Actual upper-floor footprints form ceilings below. Missing coverage stays open.
     from shapely import constrained_delaunay_triangles, make_valid
     from shapely.geometry import Polygon
@@ -191,7 +194,7 @@ def _compile(content: str) -> dict:
     from floorwise.core.stair_scene import compile_stair_plates, compile_stair_shafts
     shafts=compile_stair_shafts(data)
     plates=compile_stair_plates(data,shafts)
-    return {'stair_shafts':shafts,'plates':plates,'overlaps':compile_overlaps(data), 'revision': hashlib.sha256(('scene-v5:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    return {'stair_shafts':shafts,'plates':plates,'overlaps':overlap_list, 'revision': hashlib.sha256(('scene-v5:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
@@ -277,3 +280,35 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
         else:
             out.append(wall)
     return out
+
+def drop_overlap_walls(data: dict, walls: list[dict], overlaps: list[dict], inset: float = 0.15, min_area: float = 0.3) -> list[dict]:
+    """Where two rooms overlap only partly (a digitising error, not one room inside another), each one's wall inside the other's floor is an
+    artefact: people would walk "through" it. Those walls are not drawn (display only; the shared floor is drawn as a colour blend).
+
+    Nested rooms (a closet wholly inside a room) are kept: their walls are real."""
+    from shapely import make_valid
+    from shapely.geometry import Point, Polygon
+
+    by_space = {s['id']: make_valid(Polygon(s['polygon'])) for s in data['spaces'] if len(s['polygon']) >= 3}
+    zones: dict[tuple[str, str], list] = {}
+    for o in overlaps:
+        a, b = by_space.get(o['a']), by_space.get(o['b'])
+        if a is None or b is None or o['area_m2'] < min_area:
+            continue
+        shared = o['area_m2']
+        if shared / max(min(a.area, b.area), 1e-9) > 0.8:  # one room is (almost) inside the other: real nesting
+            continue
+        zone = Polygon(o['polygon']).buffer(0).buffer(-inset)
+        if zone.is_empty:
+            continue
+        zones.setdefault((o['floor_id'], o['a']), []).append(zone)
+        zones.setdefault((o['floor_id'], o['b']), []).append(zone)
+    if not zones:
+        return walls
+    kept = []
+    for wall in walls:
+        mid = Point((wall['a'][0] + wall['b'][0]) / 2, (wall['a'][1] + wall['b'][1]) / 2)
+        if any(zone.contains(mid) for zone in zones.get((wall['floor_id'], wall.get('space_id')), [])):
+            continue
+        kept.append(wall)
+    return kept
