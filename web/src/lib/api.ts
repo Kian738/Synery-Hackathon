@@ -26,11 +26,31 @@ export type ScenarioCapacity = { element: string; kind: "total_persons" | "rate_
 
 export const api = {
   /** A capacity of 0 blocks that element (sent as a hazard); `people` overrides the seat estimate for the given spaces. */
-  scenario: (id: string, hazardSpace: string, audience: Audience, capacities: ScenarioCapacity[] = [], people?: Record<string, number>) => {
+  scenario: (id: string, hazardSpace: string, audience: Audience, capacities: ScenarioCapacity[] = [], people?: Record<string, number>, onStep?: (s: { id: string; op: string; ok: boolean; summary: string }) => void) => {
     const blocked = capacities.filter(c => c.value === 0).map(c => c.element), caps = capacities.filter(c => c.value > 0);
-    return post(`/api/sessions/${id}/scenario`, {template: "evacuation", params: {spec: {
+    const body = {template: "evacuation", params: {spec: {
       hazards: [{spaces: [hazardSpace]}, ...(blocked.length ? [{elements: blocked}] : [])], responders: {auto: true},
-      ...(caps.length ? {capacities: caps} : {}), ...(people ? {occupants: {source: "seats", overrides: people}} : {})}}, audience}).then(json<ScenarioReport>);
+      ...(caps.length ? {capacities: caps} : {}), ...(people ? {occupants: {source: "seats", overrides: people}} : {})}}, audience};
+    if (!onStep) return post(`/api/sessions/${id}/scenario`, body).then(json<ScenarioReport>);
+    // Lines of JSON: each checked step as it finishes, then the report. The panel shows the live step.
+    return post(`/api/sessions/${id}/scenario/stream`, body).then(async response => {
+      if (!response.ok || !response.body) return json<ScenarioReport>(response);
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      let buffer = "", report: ScenarioReport | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+        const lines = buffer.split(String.fromCharCode(10)); buffer = done ? "" : lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const item = JSON.parse(line);
+          if (item.step) onStep(item.step); else if (item.report) report = item.report; else if (item.error) throw new ApiError(String(item.error));
+        }
+        if (done) break;
+      }
+      if (!report) throw new ApiError("The scenario ended without a result");
+      return report;
+    });
   },
   scenarioRobust: (id: string, hazardSpace: string) => post(`/api/sessions/${id}/scenario/robust`, {params: {spec: {hazards: [{spaces: [hazardSpace]}]}}}).then(json<RobustReport>),
   resultPage: (session:string,result:string,offset=0,view='default',room='') => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25&view=${view}${room?`&room=${encodeURIComponent(room)}`:""}`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),

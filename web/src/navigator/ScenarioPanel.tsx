@@ -152,15 +152,17 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     const q = query.trim().toLowerCase();
     return q ? geometry.spaces.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6) : [];
   }, [query, geometry.spaces]);
+  const [liveStep, setLiveStep] = useState("");
   const run = async (h = hazard, a = audience, lim = limit) => {
     if (!h) return;
+    setLiveStep("");
     const mine: Numbers = { people: whole(people), rate: positive(rate) };
     setBusy(true); setError(""); setApplied(false); setMore(false); setRobust(null);
     try {
       // An exit limit replaces the passage rate on that one exit (the solver keeps one cap per element).
       const caps: ScenarioCapacity[] = mine.rate ? geometry.openings.filter(o => o.id !== lim?.element).map(o => ({ element: o.id, kind: "rate_persons_per_s", value: mine.rate! / 60 })) : [];
       if (lim) caps.push({ element: lim.element, kind: "total_persons", value: lim.value });
-      const r = await api.scenario(sessionId, h.id, a, caps, mine.people ? { [h.id]: mine.people } : undefined);
+      const r = await api.scenario(sessionId, h.id, a, caps, mine.people ? { [h.id]: mine.people } : undefined, s => setLiveStep(s.summary));
       setUsed(mine); setReport(r);
       onHighlight(new Set([h.id, ...(r.evacuation?.bottleneck ?? [])]));
       onFloor(h.floor_id);
@@ -206,7 +208,7 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     </details>
     <IconButton accent label="Run scenario" text={busy ? "Checking…" : "Run scenario"} disabled={!hazard || busy} onClick={() => run()} />
     {error && <p role="alert" className="k-sheet-alert">Could not run: {error}</p>}
-    <div aria-live="polite">{busy && <p className="k-hint">Checking the evacuation…</p>}</div>
+    <div aria-live="polite">{busy && <p className="k-hint">{liveStep || "Checking the evacuation…"}</p>}</div>
     {report && <>
       <h3 className="scenario-headline" role="status">{headline(report)}</h3>
       {source && <p className="k-hint scenario-source">{source}</p>}
