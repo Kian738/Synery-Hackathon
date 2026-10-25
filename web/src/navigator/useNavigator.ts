@@ -1,18 +1,19 @@
+import {startAssistantStream,appendAssistantText} from "../lib/chatStream";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
 import { ApiError, api, chat, cancelChat, consumePreloadedBuilding } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
 import { audioStreamQueue } from "../lib/voice";
-import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
+import type { Geometry, ScenarioReport, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
   | { id: number; role: "agent"; text: string; model?: string; streaming?: boolean; streamId?: string; status?: 'streaming' | 'complete' | 'interrupted' }
   | { id: number; role: 'result'; text: string; result: VisualResult & { total_rows: number }; query?: string }
   | { id: number; role: "activity"; text: string; tool?: string; input?: Record<string, unknown>; result?: unknown; failed?: boolean }
-  | { id: number; role: "error"; text: string }
-  | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" }
+  | { id: number; role: "error"; text: string; query?: string }
+  | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" | "choice" }
   | { id: number; role: "change"; text: string; first: string; second: string; widenings?: {opening_id:string;to_m:number}[]; kind?: "widen"; openingId?: string; width?: number; start?: string; destination?: string; state: "pending" | "applied" | "discarded" };
 
 type NewMessage = Message extends infer M ? (M extends Message ? Omit<M, "id"> : never) : never;
@@ -48,6 +49,7 @@ export function entrances(g: Geometry): Geometry["spaces"] {
 
 /** All Navigator state: one session per building; map actions and the agent share it. */
 export function useNavigator(buildingId: string) {
+  const [loadRevision,setLoadRevision]=useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [geometry, setGeometry] = useState<Geometry | null>(null);
   const [floorId, setFloorId] = useState("");
@@ -69,11 +71,13 @@ export function useNavigator(buildingId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
   const [busyLabel,setBusyLabel]=useState("Working…");
-  const requestRef=useRef<{id:string;controller:AbortController;session:string}|null>(null);
+  const requestRef=useRef<{id:string;controller:AbortController;session:string;streams:Set<string>}|null>(null);
   const queryRef=useRef('');
-  const stop=useCallback(()=>{const active=requestRef.current;if(!active)return;requestRef.current=null;void cancelChat(active.session,active.id).catch(()=>{});active.controller.abort();setBusy(false);},[]);
+  const stop=useCallback(()=>{const active=requestRef.current;if(!active)return;requestRef.current=null;void cancelChat(active.session,active.id).catch(()=>{});active.controller.abort();setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId&&active.streams.has(m.streamId)&&m.status==='streaming'?{...m,status:'interrupted'}:m));setBusy(false);},[]);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [scenarioIn, setScenarioIn] = useState<{ n: number; report: ScenarioReport; hazard: string } | null>(null);
+  const [replayCmd, setReplayCmd] = useState<{ n: number; action: "play" | "pause" | "restart" | "seek"; seconds?: number } | null>(null);
   const geometryRef = useRef<Geometry | null>(null);
   geometryRef.current = geometry;
 
@@ -83,7 +87,7 @@ export function useNavigator(buildingId: string) {
     let cancelled = false;
     generation.current++;
     setSessionId(null); setBusy(false); setNotice(null); setGeometry(null);
-    setPreviousRoute(null); setWeakPoints([]); setVisualResult(null);setTurnUsage(null);
+    setRoute(null);setRouteMeta(null);setMessages([]);setHighlights(new Set());setClosed(new Set());setPreviewDoor(null);setPreviousRoute(null); setWeakPoints([]); setVisualResult(null);setTurnUsage(null);
     (async () => {
       const preloaded = consumePreloadedBuilding(buildingId);
       const { session_id, geometry: g } = preloaded
@@ -96,6 +100,7 @@ export function useNavigator(buildingId: string) {
       if (cancelled) return;
       setSessionId(session_id);
       setGeometry(g);
+      if(!g.floors.length)throw new Error("This building has no usable floors. Choose another building or import a reviewed plan.");
       const ground = [...g.floors].sort((a, b) => Math.abs(a.level) - Math.abs(b.level))[0];
       setFloorId(ground.id);
       setRoute(null); setRouteMeta(null); setHighlights(new Set()); setClosed(new Set()); setPreviewDoor(null);
@@ -105,9 +110,9 @@ export function useNavigator(buildingId: string) {
       const linkedStart = at && g.spaces.some((s) => s.id === at);
       setHereState(linkedStart ? at : mainEntrance(g));
       setHereSource(linkedStart ? "link" : "default");
-    })().catch((e) => setNotice(String(e.message ?? e)));
+    })().catch((e) => {if(!cancelled)setNotice(String(e.message ?? e));});
     return () => { cancelled = true; };
-  }, [buildingId]);
+  }, [buildingId,loadRevision]);
   useEffect(()=>()=>stop(),[buildingId,stop]);
 
   const showRoute = useCallback((r: Route) => {
@@ -157,7 +162,13 @@ export function useNavigator(buildingId: string) {
         setFloorId(e.door.floor_id);
       } else if (e.type === "edit") {
         setVisualResult(null); setPreviewDoor(null);
-        if (sessionIdRef.current) api.sessionGeometry(sessionIdRef.current).then(setGeometry);
+        if(sessionIdRef.current){const session=sessionIdRef.current;void api.sessionGeometry(session).then(g=>{if(sessionIdRef.current===session)setGeometry(g);}).catch(e=>{if(sessionIdRef.current===session)setNotice(String(e));});}
+      } else if (e.type === "scenario_result") {
+        setScenarioIn({ n: nextId++, report: e.report, hazard: e.hazard });
+      } else if (e.type === "choice") {
+        push({ role: "options", text: e.question, options: e.options.map((label) => ({ id: label, label })), purpose: "choice" });
+      } else if (e.type === "scenario_replay") {
+        setReplayCmd({ n: nextId++, action: e.action, seconds: e.seconds });
       } else if (e.type === "profile") {
         setStepFree(e.profile.step_free);
         if (e.profile.location) {setHereState(e.profile.location);setHereSource(e.profile.location_source??"declared");}
@@ -175,8 +186,8 @@ export function useNavigator(buildingId: string) {
       setNotice("Where are you? Tap your room on the plan, then choose “I'm here”.");
       return;
     }
+    const current = generation.current;
     try {
-      const current = generation.current;
       const { result, events } = await api.route(sessionId, { start, destination, step_free: stepFreeOverride ?? stepFree });
       if (current !== generation.current) return;
       if (result.error) {
@@ -188,6 +199,7 @@ export function useNavigator(buildingId: string) {
       apply(events);
       setNotice(null);
     } catch (e) {
+      if(current!==generation.current)return;
       const err = e as ApiError;
       if (err.candidates?.length) {
         push({ role: "options", text: `Which one do you mean?`, options: err.candidates.map((c) => ({ id: c.id, label: c.label ?? c.id })), purpose: "destination" });
@@ -195,40 +207,54 @@ export function useNavigator(buildingId: string) {
     }
   }, [sessionId, geometry, here, stepFree, apply]);
 
-  const toggleClosed = useCallback(async (id: string) => {
-    if (!sessionId) return;
-    const { result, events } = await api.close(sessionId, id, !closed.has(id));
-    apply(events);
-    const impact = result.impact;
-    setNotice(impactText(impact));
-  }, [sessionId, closed, apply]);
+  const [closeConfirm,setCloseConfirm]=useState<{id:string;name:string;count:number;of:number}|null>(null);
+  const [lastClosure,setLastClosure]=useState<{id:string;name:string}|null>(null);
+  const mutationPending=useRef(new Set<string>());
+  const toggleClosed = useCallback(async (id: string, force = false) => {
+    if (!sessionId||busy||mutationPending.current.has(id)) return;
+    const current=generation.current;mutationPending.current.add(id);
+    try {
+      // Closing something that strands rooms asks first: one tap on a bridge corridor used to make most routes impossible.
+      if(!closed.has(id)&&!force){
+        const preview=(await api.closePreview(sessionId,id)).result;
+        if(current!==generation.current)return;
+        if(preview.impact.cut_off_count>0){setCloseConfirm({id,name:preview.element,count:preview.impact.cut_off_count,of:preview.impact.of_rooms??0});return;}
+      }
+      const { result, events } = await api.close(sessionId, id, !closed.has(id));
+      if(current!==generation.current)return;apply(events);setNotice(impactText(result.impact));
+      if(result.closed){setLastClosure({id,name:result.element});setTimeout(()=>setLastClosure(l=>l?.id===id?null:l),9000);}else setLastClosure(null);
+    } catch(error){if(current===generation.current)setNotice(String(error));}
+    finally{mutationPending.current.delete(id);}
+  }, [sessionId, closed, apply,busy]);
 
   const decideChange = useCallback(async (message: Extract<Message, { role: "change" }>, accept: boolean) => {
     if (!accept) {
       setMessages(all => all.map(m => m.id === message.id ? {...m, state: "discarded"} as Message : m));
       setPreviewDoor(null); return;
     }
-    if (!sessionId) return;
+    if (!sessionId||busy||mutationPending.current.has(String(message.id))) return;
+    const current=generation.current;mutationPending.current.add(String(message.id));
     try {
       if (message.kind === "widen" && message.openingId && message.width) {
         for(const widening of message.widenings ?? [{opening_id:message.openingId,to_m:message.width}]) {
-          const {events} = await api.widen(sessionId, widening.opening_id, widening.to_m); apply(events);
+          const {events} = await api.widen(sessionId, widening.opening_id, widening.to_m);if(current!==generation.current)return;apply(events);
         }
         if (message.start && message.destination) {
           const next = await api.route(sessionId, {start:message.start, destination:message.destination, step_free:true, min_door_width_m:message.width});
           apply(next.events); if (next.result.error) setNotice(next.result.error);
         }
       } else { const {events} = await api.door(sessionId, message.first, message.second, true); apply(events); }
+      if(current!==generation.current)return;
       setMessages(all => all.map(m => m.id === message.id ? {...m, state: "applied"} as Message : m));
-    } catch (error) { setNotice(String(error)); }
+    } catch (error) {if(current===generation.current)setNotice(String(error));}finally{mutationPending.current.delete(String(message.id));}
 
-  }, [sessionId, apply]);
+  }, [sessionId, apply,busy]);
 
   const ask = useCallback(async (text: string,selectedSpace?:string|null) => {
     if (!sessionId) return;
     if(requestRef.current)return;
     queryRef.current=text;
-    const active={id:crypto.randomUUID(),controller:new AbortController(),session:sessionId};requestRef.current=active;
+    const active={id:crypto.randomUUID(),controller:new AbortController(),session:sessionId,streams:new Set<string>()};requestRef.current=active;
     push({ role: "user", text });
     setBusy(true);
     setBusyLabel("Starting your request…");
@@ -241,8 +267,8 @@ export function useNavigator(buildingId: string) {
         if (current !== generation.current || !event || typeof event !== "object") return;
         if(active.controller.signal.aborted)return;
         if(event.type==='progress'){setBusyLabel(event.data.message+'…');return;}
-        if(event.type==='assistant_start'){setMessages(all=>[...all,{id:nextId++,role:'agent',text:'',model:event.data.model,streamId:event.data.message_id,status:'streaming'}]);return;}
-        if(event.type==='assistant_delta'){setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,text:m.text+event.data.text}:m));return;}
+        if(event.type==='assistant_start'){active.streams.add(event.data.message_id);setMessages(all=>startAssistantStream(all,event.data.message_id,event.data.model,()=>nextId++));return;}
+        if(event.type==='assistant_delta'){setMessages(all=>appendAssistantText(all,event.data.message_id,event.data.text,()=>nextId++));return;}
         if(event.type==='assistant_end'){setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,status:'complete'}:m));return;}
         if (event.type === "tool") push({ role: "activity",tool:event.data.name,input:event.data.input, text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
         else if(event.type==="tool_result"){
@@ -322,30 +348,35 @@ export function useNavigator(buildingId: string) {
         } else if (event.type === "done") {
           audioStreamQueue.markDone();
         } else if (event.type === "error") {
-          push({ role: "error", text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
+          push({ role: "error", query: text, text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
         }
       }, selectedSpace, active.id, active.controller.signal);
     } catch (e) {
-      if (current === generation.current&&!active.controller.signal.aborted) push({ role: "error", text: String(e) });
+      if (current === generation.current&&!active.controller.signal.aborted) push({ role: "error",query:text, text: String(e) });
     } finally {
-      if (current === generation.current) {setMessages(all=>all.map(m=>m.role==='agent'&&m.status==='streaming'?{...m,status:'interrupted'}:m));setBusy(false);}
-      if(requestRef.current===active)requestRef.current=null;
+      if (current === generation.current&&requestRef.current===active) {setMessages(all=>all.map(m=>m.role==='agent'&&m.status==='streaming'?{...m,status:'interrupted'}:m));setBusy(false);}
+      if(requestRef.current===active){requestRef.current=null;queryRef.current='';}
     }
   }, [sessionId, here, stepFree, apply]);
 
   useEffect(() => {
-    if (sessionId && geometry) api.profile(sessionId, {step_free:stepFree, location:here, location_source:hereSource}).then(response => {apply(response.events);if(response.route_update?.error){setPreviousRoute(routeRef.current);setRoute(null);setNotice(response.route_update.error);}}).catch(e => setNotice(e.message));
+    let cancelled=false;
+    if (sessionId && geometry) api.profile(sessionId, {step_free:stepFree, location:here, location_source:hereSource}).then(response => {if(cancelled)return;apply(response.events);if(response.route_update?.error){setPreviousRoute(routeRef.current);setRoute(null);setNotice(response.route_update.error);}}).catch(e=>{if(!cancelled)setNotice(e.message);});
+    return()=>{cancelled=true;};
   }, [sessionId, geometry?.building.id, here, hereSource, stepFree]);
   const inspectWeakPoints = async () => {
-    if (!sessionId) return; setBusy(true);
-    try { const response = await api.weakPoints(sessionId); apply(response.events); }
-    catch(e) { setNotice(String(e)); } finally { setBusy(false); }
+    if (!sessionId||busy) return;const current=generation.current;setBusy(true);
+    try {const response=await api.weakPoints(sessionId);if(current===generation.current)apply(response.events);}
+    catch(e){if(current===generation.current)setNotice(String(e));}finally{if(current===generation.current)setBusy(false);}
   };
+  const compareItems=async(floor?:string)=>{if(!sessionId||busy)return;const current=generation.current;queryRef.current='';push({role:'user',text:floor?'Compare all item types: whole building vs start floor':'Compare all recorded item types'});try{const response=await fetch(`/api/sessions/${sessionId}/analysis`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'comparison',floor})});const data=await response.json();if(current!==generation.current)return;if(!response.ok)throw Error(data.detail??'Comparison unavailable');apply(data.events);}catch(e){if(current===generation.current)setNotice(String(e));}};
+  const planStops=async(stops:string[])=>{if(!sessionId||busy)throw Error('Finish or stop the current question first.');if(stops.length<2||stops.length>14||stops.some(id=>!geometryRef.current?.spaces.some(s=>s.id===id)))throw Error('Choose valid itinerary stops.');const current=generation.current;const r=await api.route(sessionId,{start:stops[0],destination:stops.at(-1),via:stops.slice(1,-1),step_free:stepFree});if(current!==generation.current)return;if(r.result.error)throw Error(r.result.error);apply(r.events);};
   const clearRoute = () => { setRoute(null); setRouteMeta(null); setActiveStep(0); };
 
   return {
-    visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
+    retryLoad:()=>setLoadRevision(n=>n+1),compareItems,planStops,visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, hereSource, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
-    goTo, ask, toggleClosed, decideChange,busyLabel,apply,applyEvents:apply,
+    closeConfirm, setCloseConfirm, lastClosure, goTo, ask, toggleClosed, decideChange,busyLabel,apply,applyEvents:apply,
+    scenarioIn, replayCmd, clearScenarioEvents: () => { setScenarioIn(null); setReplayCmd(null); },
   };
 }

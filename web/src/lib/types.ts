@@ -50,8 +50,8 @@ export interface Asset {
 }
 
 export interface Geometry {
-  building: { id: string; name: string; source: string };
-  scene?: { revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
+  building: { id: string; name: string; source: string; source_ref?:{osm?:string}; attribution?:string; license?:string };
+  scene?: { plates?: Record<string, { exterior: XY[]; holes: XY[][] }[]>; stair_shafts?: {connector_id:string;from_floor:string;to_floor:string;footprint:XY[]|null;basis:string;warning:string|null}[]; revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];
@@ -125,7 +125,10 @@ export type UiEvent =
   | { type: "closure"; id: string; closed: boolean; impact: Impact }
   | { type: "preview_door"; door: Opening; impact: Impact }
   | { type: "edit"; op: string; [key: string]: unknown }
-  | { type: "profile"; profile: Profile };
+  | { type: "profile"; profile: Profile }
+  | { type: "scenario_result"; report: ScenarioReport; hazard: string }
+  | { type: "scenario_replay"; action: "play" | "pause" | "restart" | "seek"; seconds?: number }
+  | { type: "choice"; question: string; options: string[] };
 
 export interface BuildingRow {
   building_id: string;
@@ -133,11 +136,12 @@ export interface BuildingRow {
   source: string;
   name: string;
   floors: string;
+  rooms?: string | number | null;
 }
 
 export interface VisualResult {
   id:string;
-  kind:"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
+  kind:"comparison"|"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
   title:string;
   entities:{id:string;floor_id:string;kind:string}[];
   floor_ids:string[];
@@ -151,11 +155,16 @@ export type Audience = "safety_officer" | "occupant" | "builder" | "regulator";
 export interface ScenarioStep { id: string; op: string; ok: boolean; summary: string; reason: string | null; ms: number }
 export interface ScenarioFinding { severity: "blocker" | "risk" | "improve" | "info"; title: string; detail: string; evidence: string[]; tier: string; suggestion: string | null }
 export interface ScenarioFix { element: string; width_m: number; previous_width_m: number; between: string[]; T_before_s: number; T_after_s: number }
+export interface ScenarioMove { depart_s: number; element: string; from_space: string; to_space: string; persons: number; arrive_s: number }
+export interface ScenarioResponder { entrance: string; spaces: string[]; elements: string[]; arrival_s: number; delay_s: number }
+/** What the plan and 3D view draw for a scenario: hazard, slow doors, responder route, and replay crowd level per room (1 some, 2 many). */
+export interface ScenarioMark { hazard: string; doors: string[]; responder?: ScenarioResponder | null; crowd?: Record<string, 1 | 2> }
 export interface ScenarioReport {
   steps: ScenarioStep[];
   abstained: { step?: string; reason?: string } | string | null;
   answer: { fixes?: ScenarioFix[] } | null;
-  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null } | null;
+  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null; schedule?: ScenarioMove[] } | null;
+  responder?: ScenarioResponder | null;
   findings: ScenarioFinding[];
 }
 

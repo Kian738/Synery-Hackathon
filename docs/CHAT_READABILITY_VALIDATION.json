@@ -1,0 +1,168 @@
+{
+  "scope": "Chat links/readability. Ongoing Claude core/renderer work excluded.",
+  "core_check": {
+    "command": "uv run --no-sync python -u -m floorwise.fw check",
+    "unit_tests": 441,
+    "exit_code": 0,
+    "fingerprint": {
+      "version": 1,
+      "git": "3dcc8e8cb5387e47aeabd62f71627924d47917ae",
+      "source": "5f60dad6d02da0cdee79",
+      "kit_git": "6a2cdec5bb96b06914429e96d42c5486715f1ebc",
+      "dataset": "fa7b71e429b52786b57a",
+      "frontend": "8c1d581861c80c79aaa4",
+      "provider": "anthropic",
+      "models": {
+        "chat": "claude-opus-5-5",
+        "parser": "claude-haiku-5-5",
+        "judge": "claude-opus-5-5"
+      },
+      "effort": "low"
+    },
+    "suites": [
+      {
+        "suite": "routes",
+        "correct": 2130,
+        "total": 2130,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "solver",
+        "correct": 655,
+        "total": 655,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "parser",
+        "correct": 655,
+        "total": 655,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "parser",
+        "correct": 145,
+        "total": 145,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "e2e",
+        "correct": 653,
+        "total": 655,
+        "known_failures": 2,
+        "run": null
+      },
+      {
+        "suite": "e2e_basic",
+        "correct": 2122,
+        "total": 2130,
+        "known_failures": 8,
+        "run": null
+      },
+      {
+        "suite": "sunday",
+        "correct": 1329,
+        "total": 1338,
+        "known_failures": 9,
+        "run": null
+      },
+      {
+        "suite": "generated",
+        "correct": 150,
+        "total": 150,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "rules",
+        "correct": 661,
+        "total": 661,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "roundtrip",
+        "correct": 236,
+        "total": 236,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "walls",
+        "correct": 160,
+        "total": 160,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "robust",
+        "correct": 630,
+        "total": 630,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "metamorphic",
+        "correct": 860,
+        "total": 860,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "walkability",
+        "correct": 160,
+        "total": 160,
+        "known_failures": 0,
+        "run": null
+      },
+      {
+        "suite": "differential",
+        "correct": 256,
+        "total": 256,
+        "known_failures": 0,
+        "run": null
+      }
+    ]
+  },
+  "final_presentation_refinements": "After the frozen core check: Unicode bullet recognition, large-text sizing, bounded room inspector, history label grammar and grouped result-card links. Final rendering contracts and build checked separately; core/backend bytes remain identical.",
+  "live_response": {
+    "reply": "Here's the room with the most chairs on each floor. Office chairs are counted as chairs.\n\n- **Ground floor:** **Canteen 0.28** has **13**. The floor has **46** in total.\n- **Floor 1:** **Meeting room 1.12** and **Meeting room 1.22** tie with **10** each. The floor has **55** in total.\n- **Floor 2:** **Seminar room 2.11** has **12**. The floor has **67** in total.\n- **Floor 3:** **Seminar room 3.12** and **Seminar room 3.26** tie with **11** each. The floor has **71** in total.\n- **Floor 4:** **Seminar room 4.12** has **11**. The floor has **48** in total.\n\nThe whole building has **287** chairs. Canteen 0.28 has more than any other room. These are counts of chairs in the room, not how many people the room can seat.",
+    "words": 127,
+    "first_text_ms": 1062,
+    "elapsed_ms": 7892,
+    "errors": [],
+    "done": true
+  },
+  "browser": "Prepared interaction regression not run: saved localhost restriction prevents visual browser testing.",
+  "final_ui_checks": {
+    "fingerprint": {
+      "version": 1,
+      "git": "3dcc8e8cb5387e47aeabd62f71627924d47917ae",
+      "source": "bdee06da6f3dc4fe54e1",
+      "kit_git": "6a2cdec5bb96b06914429e96d42c5486715f1ebc",
+      "dataset": "fa7b71e429b52786b57a",
+      "frontend": "f0c4d54826bf1ac889bb",
+      "provider": "anthropic",
+      "models": {
+        "chat": "claude-opus-5-5",
+        "parser": "claude-haiku-5-5",
+        "judge": "claude-opus-5-5"
+      },
+      "effort": "low"
+    },
+    "targeted_tests_passed": 12,
+    "production_build": "passed",
+    "actual_building_tied_refs": [
+      "1.12",
+      "1.22",
+      "3.12",
+      "3.26"
+    ],
+    "staged_source_files_match_served_snapshot": 241,
+    "backend_identical_to_core_check": true,
+    "notes": "Post-gate UI-only refinements include grouped result links, Unicode bullets, large-text/inspector bounds and history grammar; their final rendering contracts and build passed separately."
+  }
+}

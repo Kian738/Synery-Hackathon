@@ -135,9 +135,12 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
             if index + 2 < len(nodes) and nodes[index + 1].startswith(DOOR_PREFIX):
                 after = nodes[index + 2]
                 if after in building.spaces:
-                    exit_hint = f" At the landing, look for the door to {building.spaces[after]['name']}."
+                    exit_hint = f" Leave toward {building.spaces[after]['name']}."
             verb = f"Take the {connector['name']} {direction}"
-            text = f"{lead}{verb} to {building.floor_name(floor)}.{exit_hint}"
+            if lead:  # the connector was just named in the lead: do not repeat it
+                text = f"{lead}Take it {direction} to {building.floor_name(floor)}.{exit_hint}"
+            else:
+                text = f"{verb} to {building.floor_name(floor)}.{exit_hint}"
             steps.append(Step("floor", "lift" if is_lift else "stairs", text,
                               f"{connector['name']} {direction} to {building.floor_name(floor)}",
                               round(walked, 1), floor, list(points[current][1:]), space_id=current))
@@ -190,7 +193,7 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                 ref = f" ({space['ref']})" if space.get("ref") and space["ref"] not in space["name"] else ""
                 inside = segments.get(index, [])
                 interior = _length(inside)
-                finish = f" Continue about {interior:.0f} m inside to the marked destination." if interior >= 1 else ""
+                finish = f" Then {interior:.0f} m more to the marked spot." if interior >= 1 else ""
                 text = f"{lead}Go through {target} into {space['name']}{ref}.{finish} You have arrived."
                 steps.append(Step("arrive", "arrive", text, f"arrive at {space['name']}", round(walked + interior, 1),
                                   space["floor_id"], list(inside[-1]) if inside else list(points[current][1:]), landmark, current))
@@ -226,8 +229,9 @@ def _length(points) -> float:
 def _lead(building: Building, metres: float, passed: list[str], to: str | None = None) -> str:
     if metres < 4 and not passed:
         return ""
-    through = f" straight through {_names(building, passed)}" if passed else ""
-    return f"Walk about {metres:.0f} m{through}" + (f" to {to}" if to else "") + ". "
+    through = f" along {_names(building, passed)}" if passed else ""
+    far = f"about {5 * round(metres / 5):.0f}" if metres >= 20 else f"{metres:.0f}"  # long distances in 5 m steps: nobody paces out 33 m exactly
+    return f"Walk {far} m{through}" + (f" to {to}" if to else "") + ". "
 
 
 def spoken(steps: list[Step]) -> str:

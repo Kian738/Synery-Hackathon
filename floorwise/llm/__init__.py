@@ -76,8 +76,17 @@ def client(provider: str | None = None):
         token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
         if not key and not token:
             raise KeyError("no API key for anthropic in .env (set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN)")
-        return anthropic.Anthropic(api_key=key, auth_token=token, timeout=timeout_s(), max_retries=retries())
+        return anthropic.Anthropic(api_key=key, auth_token=None if key else token, timeout=timeout_s(), max_retries=retries())
     import openai
 
     config = PROVIDERS[provider]
     return openai.OpenAI(base_url=config["base_url"], api_key=os.environ[config["key_env"]], timeout=timeout_s(), max_retries=retries())
+
+
+def warm_provider():
+    """Import the provider runtime before serving questions; performs no model request."""
+    if os.environ.get('FLOORWISE_OFFLINE')=='1' or not info().available:return
+    instance=client()
+    instance.close()
+    # These tools have numerical-library imports, but importing them computes no scenario.
+    from floorwise.agent import scenarios,insight_tools  # noqa: F401

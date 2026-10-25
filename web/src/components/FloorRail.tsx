@@ -1,6 +1,10 @@
 import type { Floor, Route } from "../lib/types";
+import { floorColor } from "../lib/floorColors";
 
-/** Floors as stops on a vertical transit line; the route's floors are joined by the marking colour. */
+const levelLabel = (level: number) => (level === 0 ? "G" : level > 0 ? String(level) : `B${-level}`);
+
+/** Floors as a compact strip of coloured dots. Hover or focus expands it to names; floors on the route keep their names
+ *  (the route is "focused") and wear an amber ring. Floor colour comes from lib/floorColors. */
 export function FloorRail({ floors, active, route, onPick, here }: {
   floors: Floor[];
   active: string;
@@ -10,28 +14,17 @@ export function FloorRail({ floors, active, route, onPick, here }: {
 }) {
   const ordered = [...floors].sort((a, b) => b.level - a.level);
   const onRoute = new Set(route?.floors ?? []);
-  const levels = ordered.filter((f) => onRoute.has(f.id)).map((f) => ordered.indexOf(f));
-  const top = levels.length ? Math.min(...levels) : -1;
-  const bottom = levels.length ? Math.max(...levels) : -1;
   return (
-    <nav aria-label="Floors" className="relative flex flex-col bg-white">
-      {ordered.map((f, i) => {
-        const inSpan = i >= top && i <= bottom && top !== bottom;
-        return (
-          <button key={f.id} type="button" onClick={() => onPick(f.id)} aria-current={f.id === active ? "true" : undefined}
-            className={`group relative flex h-11 items-center gap-3 pl-3 pr-4 text-left font-sign text-[15px] leading-none
-              ${f.id === active ? "bg-ink text-white" : "hover:bg-concrete"}`}>
-            <span className="relative grid w-4 place-items-center self-stretch">
-              <span className={`absolute inset-y-0 w-[3px] ${i === 0 ? "top-1/2" : ""} ${i === ordered.length - 1 ? "bottom-1/2" : ""}
-                ${inSpan ? "bg-mark" : f.id === active ? "bg-ink-3" : "bg-concrete-3"}`} />
-              <span className={`relative h-3 w-3 rounded-full border-2 ${onRoute.has(f.id) ? "border-ink bg-mark" : f.id === active ? "border-white bg-ink" : "border-ink bg-white"}`} />
-            </span>
-            <span className="font-semibold">{f.level === 0 ? "G" : f.level > 0 ? f.level : `B${-f.level}`}</span>
-            <span className={`hidden sm:inline text-[13px] ${f.id === active ? "text-concrete" : "text-ink-3"}`}>{f.name}</span>
-            {here === f.id && <span className="ml-auto text-[11px] font-semibold text-escape">Start</span>}
-          </button>
-        );
-      })}
+    <nav aria-label="Floors" className="k-rail" data-route={onRoute.size > 0 ? "true" : "false"}>
+      {ordered.map(f => (
+        <button key={f.id} type="button" className="k-floor" onClick={() => onPick(f.id)} aria-current={f.id === active ? "true" : undefined}
+          data-current={f.id === active} data-route={onRoute.has(f.id)} style={{ ["--fc" as string]: floorColor(f.level) }} title={f.name}>
+          <i />
+          <b>{levelLabel(f.level)}</b>
+          <span className="name">{f.name}</span>
+          {here === f.id && <em>Start</em>}
+        </button>
+      ))}
     </nav>
   );
 }

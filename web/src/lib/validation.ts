@@ -19,7 +19,7 @@ export function isVisualResult(value:unknown):value is VisualResult {
   const primary=r?.measurements?.primary_ids;
   const validProposal=proposed===undefined||(!!proposed&&typeof proposed.floor_id==="string"&&Array.isArray(proposed.space_ids)&&proposed.space_ids.every(id=>typeof id==="string")&&Array.isArray(proposed.position)&&proposed.position.length===2&&proposed.position.every(Number.isFinite)&&typeof proposed.width_m==="number"&&Number.isFinite(proposed.width_m)&&proposed.width_m>0);
   return validProposal&&(primary===undefined||(Array.isArray(primary)&&primary.every(id=>typeof id==="string")))&&!!r&&typeof r.id==="string"&&typeof r.title==="string"&&typeof r.provenance==="string"
-    &&["matches","count","ranking","area","shared_walls","stacking","distance","reachability","intervention"].includes(r.kind)
+    &&["comparison","matches","count","ranking","area","shared_walls","stacking","distance","reachability","intervention"].includes(r.kind)
     &&Array.isArray(r.entities)&&r.entities.every(e=>!!e&&typeof e.id==="string"&&typeof e.floor_id==="string"&&typeof e.kind==="string")
     &&Array.isArray(r.floor_ids)&&r.floor_ids.every(f=>typeof f==="string")
     &&!!r.measurements&&typeof r.measurements==="object"&&!Array.isArray(r.measurements)

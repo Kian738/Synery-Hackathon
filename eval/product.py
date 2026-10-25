@@ -87,10 +87,13 @@ def live(ledger, selected, selected_cases=None):
         server = subprocess.Popen([sys.executable,'-m','uvicorn','server.app:app','--port',str(port)], cwd=ROOT, env=env, stdout=log, stderr=log)
         try:
             url=f'http://127.0.0.1:{port}'
-            for _ in range(80):
+            ready_until=time.monotonic()+120
+            print(f"PHASE provider runtime warmup, batch {batch_index//10+1}",flush=True)
+            while time.monotonic()<ready_until:
                 try:
                     urllib.request.urlopen(url+'/api/version', timeout=2);break
                 except OSError:time.sleep(.25)
+            else:raise RuntimeError('Server runtime did not become ready; no browser conversations launched')
             manifest=ledger.directory/f'batch-{batch_index//10+1}.json'
             manifest.write_text(json.dumps({'cases':batch,'url':url,'tokenBudget':token_budget,'artifacts':str(ledger.directory.resolve())}),encoding='utf8')
             process=subprocess.Popen([node,str(ROOT/'web/tests/live-runner.cjs'),str(manifest.resolve())],cwd=ROOT/'web',env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf8',errors='replace')

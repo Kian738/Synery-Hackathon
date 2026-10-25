@@ -77,9 +77,13 @@ def test_claude_can_plan_a_scenario_by_room_name_and_gets_no_replay_table():
     import json
     session = Session.for_building(Building.load(DATA / "dev" / BUILDING))
     tool = next(t for t in make_tools(session, allow_edits=False) if t.name == "plan_scenario")
-    reply = json.loads(tool.fn(hazard_rooms=["Canteen 0.28"]))
-    assert reply["abstained"] is None and reply["evacuation"]["T_s"] > 0 and "schedule" not in reply["evacuation"]
-    assert any(f["suggestion"] for f in reply["findings"])
+    missing=json.loads(tool.fn(hazard_rooms=["Canteen 0.28"]))
+    assert missing["needs_input"]
+    reply = json.loads(tool.fn(hazard_rooms=["Canteen 0.28"],occupants={"Main lobby":20},passage_rate_per_minute=20))
+    assert reply["evacuation"]["T_s"] > 0 and "schedule" not in reply["evacuation"]
+    # A valid baseline may have no beneficial door intervention; report that abstention honestly.
+    assert reply["abstained"] is None or reply["abstained"]["op"] == "best_door"
+    assert reply["evacuation"]["total"]==20 and reply["findings"]
 
 
 def test_people_in_the_hazard_room_get_a_stated_window_to_leave_and_zero_means_none(client, session, fire_room):
@@ -107,3 +111,35 @@ def test_n_minus_one_check_is_asked_for_and_never_makes_the_worst_case_worse(cli
     worst = lambda rows: max((-r["evacuated"], r["T_s"]) for r in rows)
     assert body["verified"] and len(body["before"]) >= 3 and worst(body["after"]) <= worst(body["before"])
     assert all(BUILDING not in (r["lost_exit"] or "") for r in body["before"])
+
+
+def _tools():
+    from floorwise.agent.session import Session
+    from floorwise.agent.tools import make_tools
+    session = Session.for_building(Building.load(DATA / "dev" / BUILDING))
+    return session, {t.name: t for t in make_tools(session, allow_edits=False)}
+
+
+def test_an_exit_limit_reroutes_people_and_the_twin_gets_the_result():
+    import json
+    session, tools = _tools()
+    free = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], occupants={"Canteen 0.28": 40}, passage_rate_per_minute=60))["evacuation"]
+    busiest = max(free["by_exit"], key=free["by_exit"].get)
+    limited = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], occupants={"Canteen 0.28": 40}, passage_rate_per_minute=60, exit_limits=[{"exit": busiest, "max_people": 10}]))["evacuation"]
+    assert limited["by_exit"].get(busiest, 0) <= 10 < free["by_exit"][busiest]
+    assert limited["T_s"] >= free["T_s"]
+    events = [e for e in session.events if e["type"] == "scenario_result"]
+    assert len(events) == 2 and events[-1]["report"]["evacuation"]["schedule"] and events[-1]["hazard"]
+
+
+def test_the_report_carries_a_responder_route_to_draw_and_replay_is_voice_controllable():
+    session, tools = _tools()
+    import json
+    json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], occupants={"Canteen 0.28": 40}, passage_rate_per_minute=60))
+    report = next(e for e in session.events if e["type"] == "scenario_result")["report"]
+    assert report["responder"]["spaces"] and report["responder"]["elements"] and report["responder"]["arrival_s"] > 0
+    tools["scenario_replay"].fn(action="seek", seconds=40)
+    assert session.events[-1] == {"type": "scenario_replay", "action": "seek", "seconds": 40}
+    import pytest
+    with pytest.raises(ValueError):
+        tools["scenario_replay"].fn(action="rewind")

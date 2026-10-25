@@ -86,9 +86,14 @@ def resolve_spec(building: Building, spec: QuerySpec) -> dict:
         inputs["item"] = _need(spec.item or spec.asset_type, "item")
         try:
             inputs["asset_type"] = R.resolve_asset_type(b, inputs["item"])
-        except R.ResolveError:
+        except R.ResolveError as error:
             if spec.kind == "count":
-                raise
+                # A literal inventory count can be zero even when that type is
+                # absent from this building's vocabulary. Preserve genuinely
+                # ambiguous close matches rather than silently choosing one.
+                if any(candidate.get("score", 0) >= 78 for candidate in error.candidates):
+                    raise
+                inputs["asset_type"] = R.normalise(inputs["item"]).replace(" ", "_")
     if spec.kind == "route":
         inputs["start"] = R.resolve_space(b, _need(spec.start, "start")).id
         inputs["destination"] = R.resolve_space(b, _need(spec.destination, "destination")).id

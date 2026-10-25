@@ -1,4 +1,5 @@
 """Session-scoped insight endpoints; helpers are injected to avoid importing app twice."""
+from server.locks import session_write
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -22,19 +23,19 @@ def insight_router(get_session, call):
     @router.post('/{session_id}/widen')
     def widen(session_id: str, body: WidenBody):
         entry = get_session(session_id)
-        with entry['lock']:
+        with session_write(entry):
             return call(entry['session'], 'widen_door', body.opening_id, body.width_m)
 
     @router.get('/{session_id}/weak-points')
     def weak_points(session_id: str, step_free: bool = True):
         entry = get_session(session_id)
-        with entry['lock']:
+        with session_write(entry):
             return call(entry['session'], 'weak_points', step_free)
 
     @router.post('/{session_id}/profile')
     def profile(session_id: str, body: ProfileBody):
         entry = get_session(session_id)
-        with entry['lock']:
+        with session_write(entry):
             session = entry['session']
             changed = (body.step_free is not None and body.step_free != session.profile.step_free) or (
                 'min_door_width_m' in body.model_fields_set and body.min_door_width_m != session.profile.min_door_width_m)

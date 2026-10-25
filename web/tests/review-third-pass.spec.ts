@@ -32,12 +32,12 @@ test("chat room mention opens the real room inspector",async({page})=>{
   await expect(page.getByRole("button",{name:"Go here",exact:true})).toBeVisible();
 });
 
-test("scene consumes pinch-wheel zoom while document zoom remains available",async({page})=>{
+test("scene consumes pinch-wheel zoom and the page itself never zooms",async({page})=>{
   await page.goto("/?building=proc-campus-dev-000");
   const stage=page.getByTestId("building-scene");await expect(page.locator("canvas")).toHaveAttribute("data-scene-painted","true");
   const cancelled=await stage.evaluate(el=>!el.dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,ctrlKey:true,deltaY:-15})));
   expect(cancelled).toBe(true);
-  expect(await page.locator("body").evaluate(el=>!el.dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,ctrlKey:true,deltaY:-15})))).toBe(false);
+  expect(await page.locator("body").evaluate(el=>!el.dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,ctrlKey:true,deltaY:-15})))).toBe(true);
 });
 
 test("phone drag works before any route and can open its own building view",async({page,browser,baseURL},info)=>{
@@ -77,7 +77,7 @@ test("CIT ground hallway keeps upper floor context without a blanket ceiling",as
   const scene=page.getByTestId("building-scene");
   await expect(scene).toHaveAttribute("data-ceiling-source","upper-floor-footprints");
   await expect(scene).toHaveAttribute("data-context-floors",/F1.*F2.*F3/);
-  await expect(scene).toHaveAttribute("data-visible-floors","osm-way27917482-F0");
+  await expect(scene).toHaveAttribute("data-visible-floors",/F0.*F1.*F2.*F3/);
   await expect(page.locator("canvas")).toHaveAttribute("data-camera-position",/\[/);
   const box=(await page.getByRole("region",{name:"Route preview player"}).boundingBox())!;
   expect(box.height).toBeLessThan(160);

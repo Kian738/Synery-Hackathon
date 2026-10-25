@@ -181,114 +181,42 @@ def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = F
             """
             return guarded(session.move_asset)(item, to_room)
 
-        tools += [set_closed, add_door, move_item]
-    if not exact_items:
-
         @beta_tool
-        def outdoor_route(from_building: str, to_building: str) -> str:
-            """Get a pedestrian walking route between two campus buildings.
-            Use this when the user asks to walk from one building to another (not
-            rooms within the current building). Returns total distance, duration in
-            minutes, and turn-by-turn steps.
+        def remove_door(first_room: str, second_room: str = "") -> str:
+            """Wall up an existing door or opening between two rooms (or by its id). Entrances cannot be removed.
 
             Args:
-                from_building: Name or building ID of the starting building (e.g. "TUM CIT", "osm-way27917482").
-                to_building: Name or building ID of the destination building (e.g. "Mensa Arcisstraße").
+                first_room: Room name/number (or the opening id).
+                second_room: The room on the other side.
             """
-            import csv
-            import os
-
-            import httpx
-
-            from floorwise.paths import DATA
-            from server.georef import GEOREF
-
-            def resolve(query: str) -> tuple[float, float, str]:
-                q = query.strip().lower()
-                if query in GEOREF:
-                    return GEOREF[query][0], GEOREF[query][1], query
-                with (DATA / "manifest.csv").open(encoding="utf-8") as handle:
-                    rows = [r for r in csv.DictReader(handle) if r["building_id"] in GEOREF]
-                matches = [r for r in rows if q in r["building_id"].lower() or q in r["name"].lower()]
-                if len(matches) > 1:
-                    raise ToolError(as_json({"error": f"'{query}' matches several buildings",
-                                             "candidates": [{"id": r["building_id"], "name": r["name"]} for r in matches[:8]]}))
-                if not matches:
-                    raise ToolError(f"No geo-referenced location found matching '{query}'. Only OSM-sourced buildings have real-world coordinates.")
-                lat, lon = GEOREF[matches[0]["building_id"]][:2]
-                return lat, lon, matches[0]["building_id"]
-
-            from_lat, from_lon, from_id = resolve(from_building)
-            to_lat, to_lon, to_id = resolve(to_building)
-            ors_key = os.environ.get("ORS_API_KEY", "")
-            if not ors_key:
-                raise ToolError("Outdoor campus routing is not available (ORS_API_KEY not configured).")
-            try:
-                resp = httpx.post(
-                    f"{os.environ.get('ORS_API_URL', 'https://api.heigit.org/openrouteservice').rstrip('/')}/v2/directions/foot-walking/geojson",
-                    headers={"Authorization": ors_key, "Content-Type": "application/json"},
-                    json={
-                        "coordinates": [[from_lon, from_lat], [to_lon, to_lat]],
-                        "instructions": True, "language": "en", "units": "m",
-                    },
-                    timeout=10,
-                )
-            except httpx.RequestError as error:
-                raise ToolError(f"Outdoor routing unreachable: {error}") from error
-            if not resp.is_success:
-                raise ToolError(f"Outdoor routing failed ({resp.status_code}): {resp.text[:200]}")
-            feat = resp.json()["features"][0]["properties"]
-            steps = feat["segments"][0]["steps"]
-            return as_json({
-                "from": from_id,
-                "to": to_id,
-                "distance_m": round(feat["summary"]["distance"]),
-                "duration_min": round(feat["summary"]["duration"] / 60, 1),
-                "steps": [{"instruction": s["instruction"], "distance_m": round(s["distance"])} for s in steps],
-            })
-
-        tools.append(outdoor_route)
+            return guarded(session.remove_door)(first_room, second_room)
 
         @beta_tool
-        def campus_route(from_building: str, to_building: str, from_room: str | None = None,
-                         to_room: str | None = None, mode: str = "foot") -> str:
-            """Route between two different buildings, door to door: out of the first building, across campus,
-            into the second. Tries every entrance of both buildings and picks the best combination. Give a room
-            on either side to include the indoor walk there; leave it out to route to or from the building's doors.
-            If it returns candidates, ask the person which one they mean.
+        def add_item(name: str, kind: str, room: str) -> str:
+            """Record a new machine or piece of equipment standing in a room ("put a new 3D printer in 0.21").
 
             Args:
-                from_building: Name or id of the building the person is in or leaves from.
-                to_building: Name or id of the destination building.
-                from_room: Optional room or place to start from inside the first building.
-                to_room: Optional room, machine or place to reach inside the second building.
-                mode: How they travel: "foot", "wheelchair" (also keeps to step-free doors and lifts inside the buildings), "bike" or "car". Indoors is always on foot.
+                name: Display name, e.g. "3D printer Mk2".
+                kind: Equipment type, e.g. "3d printer", "desk", "cnc mill".
+                room: Room it stands in.
             """
-            from server.campus import CampusError, CampusRouteRequest, resolve_building, route_between
+            return guarded(session.add_asset)(name, kind, room)
 
-            try:
-                result = route_between(CampusRouteRequest(
-                    from_building=resolve_building(from_building), to_building=resolve_building(to_building),
-                    from_room=from_room, to_room=to_room, mode=mode))
-            except CampusError as error:
-                raise ToolError(as_json(error.detail) if isinstance(error.detail, dict) else str(error.detail)) from error
-            except ValueError as error:  # an unknown mode
-                raise ToolError('mode must be "foot", "wheelchair", "bike" or "car"') from error
-            legs = []
-            for leg in result["legs"]:
-                if leg["kind"] == "indoor":
-                    legs.append({"inside": leg["building_name"], "from": leg["from"], "to": leg["to"],
-                                 "via_door": leg["door"]["label"], "distance_m": leg["distance_m"],
-                                 "steps": leg["route"]["steps"]})
-                else:
-                    legs.append({"outside": True, "distance_m": leg["distance_m"], "duration_min": leg["duration_min"],
-                                 "estimated": leg["estimated"], "leave_by": leg["from"]["label"],
-                                 "arrive_at": leg["to"]["label"], "steps": [x["instruction"] for x in leg["steps"]]})
-            return as_json({"total_m": result["total_m"], "duration_min": result["duration_min"], "legs": legs,
-                            "notes": result["warnings"]})
+        @beta_tool
+        def remove_item(item: str) -> str:
+            """Remove an item that is no longer there.
 
-        tools.append(campus_route)
+            Args:
+                item: Item name or id.
+            """
+            return guarded(session.remove_asset)(item)
 
+        @beta_tool
+        def undo_edit() -> str:
+            """Undo the most recent building edit (door added/removed/widened, item moved/added/removed)."""
+            return guarded(session.undo)()
+
+        tools += [set_closed, add_door, move_item, remove_door, add_item, remove_item, undo_edit]
     from floorwise.agent.insight_tools import make_insight_tools
     from floorwise.agent.scenarios import tools as scenario_tools
     return tools + make_insight_tools(session, allow_edits, exact_items=exact_items) + ([] if exact_items else scenario_tools(session))
