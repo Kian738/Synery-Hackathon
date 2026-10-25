@@ -2,6 +2,7 @@
 // Pure data: no three.js, no textures, no network. See docs/parallel/assets-handoff.md for the integration contract.
 import type { Asset } from "../lib/types";
 import * as F from "./families";
+import { separateCoplanar } from "./zfight";
 import { PALETTE as P, PartBuilder, type AssetPart, type AssetVisual, type Lod } from "./parts";
 
 export type { AssetPart, AssetVisual, Lod } from "./parts";
@@ -165,7 +166,7 @@ export function getAssetVisual(asset: AssetInput, lod: Lod): AssetVisual {
   const b = new PartBuilder(w, d, lod === "interior");
   entry.build(b);
   if (!b.parts.length) b.box(0, 0, 0, w, 0.5, d, P.generic);
-  const visual = freeze({ family: entry.family, illustrative: true, fallback: !known, parts: b.parts });
+  const visual = freeze({ family: entry.family, illustrative: true, fallback: !known, parts: separateCoplanar(b.parts, w, d) });
   if (cache.size >= CACHE_LIMIT) cache.clear();
   cache.set(key, visual);
   return visual;
