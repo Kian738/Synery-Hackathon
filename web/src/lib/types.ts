@@ -53,7 +53,7 @@ export interface Geometry {
   /** Space behind the entrance that reaches the most rooms (server-computed; the default start). */
   main_entrance?: string | null;
   building: { id: string; name: string; source: string; source_ref?:{osm?:string}; attribution?:string; license?:string };
-  scene?: { plates?: Record<string, { exterior: XY[]; holes: XY[][] }[]>; stair_shafts?: {connector_id:string;from_floor:string;to_floor:string;footprint:XY[]|null;basis:string;warning:string|null}[]; revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
+  scene?: { plates?: Record<string, { exterior: XY[]; holes: XY[][] }[]>; overlaps?: { floor_id: string; a: string; b: string; polygon: XY[]; area_m2: number }[]; stair_shafts?: {connector_id:string;from_floor:string;to_floor:string;footprint:XY[]|null;basis:string;warning:string|null}[]; revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];
@@ -71,6 +71,10 @@ export interface GuideStep {
   point: XY | null;
   landmark: string | null;
   space_id: string | null;
+  /** Glanceable form: what to do, where it leads, how far until then ("in 10 m" or "now"). */
+  headline?: string;
+  target?: string;
+  cue?: string;
 }
 
 export interface RoutePoint {

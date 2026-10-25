@@ -155,10 +155,10 @@ const freeze = (v: AssetVisual): AssetVisual => {
  * Parts for one asset. Output depends only on the normalized type, the footprint width/depth and the LOD, so equal
  * inputs return the same frozen object (safe to share across thousands of instances). Never mutate the result.
  */
-export function getAssetVisual(asset: AssetInput, lod: Lod): AssetVisual {
+export function getAssetVisual(asset: AssetInput, lod: Lod, guard = true): AssetVisual {
   const type = normalize(asset.type);
   const w = dimension(asset.footprint?.width_m), d = dimension(asset.footprint?.depth_m);
-  const key = `${type}|${w}|${d}|${lod}`;
+  const key = `${type}|${w}|${d}|${lod}|${guard}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const known = isKnown(type);
@@ -166,7 +166,7 @@ export function getAssetVisual(asset: AssetInput, lod: Lod): AssetVisual {
   const b = new PartBuilder(w, d, lod === "interior");
   entry.build(b);
   if (!b.parts.length) b.box(0, 0, 0, w, 0.5, d, P.generic);
-  const visual = freeze({ family: entry.family, illustrative: true, fallback: !known, parts: separateCoplanar(b.parts, w, d) });
+  const visual = freeze({ family: entry.family, illustrative: true, fallback: !known, parts: guard ? separateCoplanar(b.parts, w, d) : b.parts });
   if (cache.size >= CACHE_LIMIT) cache.clear();
   cache.set(key, visual);
   return visual;

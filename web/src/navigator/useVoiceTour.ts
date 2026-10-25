@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Space, VisualResult, Route } from "../lib/types";
 import { audioStreamQueue, speak, stopSpeaking } from "../lib/voice";
+import { spokenStep } from "../lib/guide";
+import type { GuideStep } from "../lib/types";
 import type { Message } from "./useNavigator";
 
 function escapeRegExp(str: string): string {
@@ -117,7 +119,7 @@ export function findSpacesMentionedInText(
 
 const ROUTE_WORDS = /\b(?:route|directions|way to|head to|walk to|take the|path|exit)\b/i;
 
-type Step = { short?: string; text?: string };
+type Step = GuideStep;
 
 export function useVoiceTour(o: {
   spaces: Space[] | undefined;
@@ -240,7 +242,7 @@ export function useVoiceTour(o: {
   }, [route, on, following, busy]);
 
   useEffect(() => {
-    if (on && following && steps[activeStep]) speak(steps[activeStep].short ?? steps[activeStep].text ?? "");
+    if (on && following && steps[activeStep]) speak(spokenStep(steps[activeStep]));
     return () => { stopSpeaking(); };
   }, [on, following, activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
 

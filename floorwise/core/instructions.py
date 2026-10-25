@@ -35,6 +35,18 @@ class Step:
     point: list[float] | None
     landmark: str | None = None
     space_id: str | None = None
+    # Glanceable form for the Guide me card and the step list: what to do (<= 5 words), where it leads, and how far until you do it.
+    headline: str = ""
+    target: str = ""
+    cue: str = ""
+
+
+def cue_for(metres: float) -> str:
+    """How far until the action, in words a walker can use: nothing under 3 m, 5 m steps up to 20 m, then 10 m steps."""
+    if metres < 3:
+        return "now"
+    step = 5 if metres < 20 else 10
+    return f"in {int(round(metres / step) * step)} m"
 
 
 def point_of(building: Building, graph: RouteGraph, node: str) -> tuple[str, float, float] | None:
@@ -104,7 +116,8 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
     if segments.get(0):
         points[start] = (points[start][0], *segments[0][0])
     steps.append(Step("start", "start", f"Start in {building.label(start)}.", f"From {building.spaces[start]['name']}.",
-                      0.0, building.spaces[start]["floor_id"], list(points[start][1:]), space_id=start))
+                      0.0, building.spaces[start]["floor_id"], list(points[start][1:]), space_id=start,
+                      headline="You are here", target=building.spaces[start]["name"], cue="now"))
     # Distances run door to door (room anchors are graph artefacts, not where people walk).
     walked, passed = 0.0, []
     last = points[start]
@@ -143,12 +156,13 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                 text = f"{verb} to {building.floor_name(floor)}.{exit_hint}"
             steps.append(Step("floor", "lift" if is_lift else "stairs", text,
                               f"{connector['name']} {direction} to {building.floor_name(floor)}",
-                              round(walked, 1), floor, list(points[current][1:]), space_id=current))
+                              round(walked, 1), floor, list(points[current][1:]), space_id=current,
+                              headline=f"Take the {'lift' if is_lift else 'stairs'} {direction}", target=f"to {building.floor_name(floor)}", cue=cue_for(walked)))
             walked, passed = 0.0, []
             last = points[current]
         elif current == OUTSIDE:
             steps.append(Step("outside", "outside", f"{_lead(building, walked, passed, to='the entrance')}Go outside.",
-                              "go outside", round(walked, 1), None, None))
+                              "go outside", round(walked, 1), None, None, headline="Go outside", target="to the other entrance", cue=cue_for(walked)))
             walked, passed = 0.0, []
             last = None
         elif not current.startswith(DOOR_PREFIX):
@@ -196,21 +210,25 @@ def guide(building: Building, graph: RouteGraph, nodes: list[str], segments: dic
                 finish = f" Then {interior:.0f} m more to the marked spot." if interior >= 1 else ""
                 text = f"{lead}Go through {target} into {space['name']}{ref}.{finish} You have arrived."
                 steps.append(Step("arrive", "arrive", text, f"arrive at {space['name']}", round(walked + interior, 1),
-                                  space["floor_id"], list(inside[-1]) if inside else list(points[current][1:]), landmark, current))
+                                  space["floor_id"], list(inside[-1]) if inside else list(points[current][1:]), landmark, current,
+                                  headline="You have arrived", target=space["name"], cue=cue_for(walked)))
             else:
                 then = {"left": ", then turn left", "right": ", then turn right", "back": ", then turn around"}.get(turn, "")
                 text = f"{lead}Go through {target} into {space['name']}{then}."
                 short = (f"{turn} into {space['name']}" if turn in ("left", "right") else f"into {space['name']}") + \
                     (f" at the {landmark}" if landmark else "")
+                headline = {"left": "Turn left", "right": "Turn right", "back": "Turn around"}.get(turn, "Go straight")
                 steps.append(Step("walk", turn if turn != "straight" else "straight", text, short, round(walked, 1),
-                                  space["floor_id"], list(door[1:]) if door else None, landmark, current))
+                                  space["floor_id"], list(door[1:]) if door else None, landmark, current,
+                                  headline=f"{headline} at the door" if turn != "straight" else "Go through the door",
+                                  target=f"into {space['name']}" + (f", by the {landmark}" if landmark else ""), cue=cue_for(walked)))
             walked, passed = 0.0, []
         index += 1
     if steps[-1].kind != "arrive":
         end = nodes[-1]
         steps.append(Step("arrive", "arrive", f"You have arrived at {building.label(end)}.",
                           f"arrive at {building.spaces[end]['name']}", 0.0, building.spaces[end]["floor_id"],
-                          list(points[end][1:]), space_id=end))
+                          list(points[end][1:]), space_id=end, headline="You have arrived", target=building.spaces[end]["name"], cue="now"))
     return {"steps": [asdict(s) for s in steps], "spoken": spoken(steps)}
 
 

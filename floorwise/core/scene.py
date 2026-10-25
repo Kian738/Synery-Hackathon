@@ -190,7 +190,7 @@ def _compile(content: str) -> dict:
     from floorwise.core.stair_scene import compile_stair_plates, compile_stair_shafts
     shafts=compile_stair_shafts(data)
     plates=compile_stair_plates(data,shafts)
-    return {'stair_shafts':shafts,'plates':plates, 'revision': hashlib.sha256(('scene-v3:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    return {'stair_shafts':shafts,'plates':plates,'overlaps':compile_overlaps(data), 'revision': hashlib.sha256(('scene-v4:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
@@ -198,3 +198,29 @@ def _compile(content: str) -> dict:
                             'Stair meshes stay within shared recorded shaft footprints; unfit flights are withheld. Stair internals remain illustrative.',
                             'Slabs use recorded space footprints. Roofs close indoor footprints with no floor above; no atrium is inferred.',
                             'Lintels close the wall above doors and narrow openings at 2.1 m; their height is illustrative.']}
+
+
+def compile_overlaps(data: dict, min_area: float = 0.05) -> list[dict]:
+    """Display only: where two rooms of one floor overlap in the data, the part they share, so the 3D view can draw it as a blend of both
+    floor colours instead of two floors fighting for the same pixels (`eval.overlaps` counts them). Analytical polygons are never touched."""
+    from shapely import make_valid
+    from shapely.geometry import Polygon
+    from shapely.strtree import STRtree
+
+    out: list[dict] = []
+    by_floor: dict[str, list[tuple[str, Polygon]]] = {}
+    for space in data['spaces']:
+        if len(space['polygon']) >= 3:
+            by_floor.setdefault(space['floor_id'], []).append((space['id'], make_valid(Polygon(space['polygon']))))
+    for floor_id, items in by_floor.items():
+        tree = STRtree([poly for _, poly in items])
+        for i, (first, poly) in enumerate(items):
+            for j in sorted(tree.query(poly)):
+                if j <= i:
+                    continue
+                second, other = items[j]
+                shared = poly.intersection(other)
+                for part in getattr(shared, 'geoms', [shared]):
+                    if part.geom_type == 'Polygon' and part.area >= min_area:
+                        out.append({'floor_id': floor_id, 'a': first, 'b': second, 'polygon': [list(p) for p in part.exterior.coords][:-1], 'area_m2': round(part.area, 3)})
+    return out

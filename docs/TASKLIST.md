@@ -17,6 +17,19 @@ Status: `done` (verified), `open`, `partial` (works, a part is not verified by e
 | 4 | Voice with ElevenLabs | partial | `server/voice.py` proxy (TTS cached + char budget, STT), `lib/voice.ts` falls back to browser voice; tests `test_voice.py`, `voice.spec.ts` with stubbed server. Needs `ELEVENLABS_API_KEY` in `.env`; real audio and latency NOT verified (no key here) |
 | 5 | Testing | open | one `scripts/verify_all` run, visual baselines, flaky-test hunt, coverage |
 
+## Status 2026-10-25 (after the hotfix round)
+| Task | Status | Evidence |
+|---|---|---|
+| Model z-fight guard, reworked (details keep faces, bodies step back 2.2 mm together, capped at 15 mm) | done | `zfight.spec.ts` 0 offenders + reshape cap; contact sheet read |
+| Wall-backed items turn square to their wall when the measured back is off it; chairs snap to a desk axis within 0.7 m; lecture rows keep measured rotation | done | `lib/facing.ts`, `facing.spec.ts`, 3 types excluded by measurement |
+| Floor overlap stripes: shared part drawn as a blend of both room colours | done | `scene.overlaps`, `eval.overlaps` (41 buildings), `test_scene_overlaps.py`, CIT screenshot |
+| C: map opens whole building, route focuses itself, Find/Share/Save removed, icons told apart | done | `flow-c.spec.ts`, icon test in `test_instruction_style.py` |
+| D: Guide me card (headline, target, distance cue, next preview), spoken form distance-first | done | step fields in `core/instructions.py`, tests, desktop + phone screenshots |
+| B: loader, small model details | done | screenshot of loader; catalogue tests |
+| Lift car back z-fight | partial | car now clear of walls by construction; not looked at from behind in the app |
+| Testing phase (gold bank, journeys, audit, rigour) | in progress | `eval.gold` (phrasing robustness), `eval.audit_all`, `normalize.py` |
+| E phone HTTPS, F phone/VR, G scenarios | open | see plan |
+
 ## Older open items
 - TUM 4107 missing floor (`data-floor-coverage` test), loading animation, whole building as default view, left panel declutter.
 - Lab and phone companion on the control kit; entity chips with "Show all N on map"; per-call tool timeline.
