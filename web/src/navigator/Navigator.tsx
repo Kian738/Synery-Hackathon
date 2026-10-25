@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { AgentReply } from "../components/AgentReply";
 import {TurnResultLinks} from "../components/TurnResultLinks";
 import {ComparisonCard} from "../components/ComparisonCard";
