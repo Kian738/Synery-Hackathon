@@ -230,7 +230,7 @@ export default function Navigator() {
             {following&&<IconButton label="Ask" icon="send" text="Ask" pressed={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}/>}
             {following&&<IconButton label="Focus on route" icon="focus" pressed={guideFocus} onClick={()=>setGuideFocus(v=>!v)}/>}
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}/>}
-            <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
+            {view!=="2d"&&<IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>}
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
               <Segmented ariaLabel="Visible floors" value={scope} onChange={(v:string)=>setScope(v==="current"?"current":"building")} options={[

@@ -5,7 +5,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-KIT = Path(os.environ.get("FLOORWISE_KIT", ROOT / "docs" / "industrial-agents-hackathon-2026"))
+_KIT_NAME = "industrial-agents-hackathon-2026"
+_DEFAULT_KIT = next(
+    (p for p in (ROOT / "docs" / _KIT_NAME, ROOT.parent / _KIT_NAME) if (p / "benchmark").is_dir()),
+    ROOT / "docs" / _KIT_NAME,
+)
+KIT = Path(os.environ.get("FLOORWISE_KIT", _DEFAULT_KIT))
 DATA = KIT / "data"
 
 
