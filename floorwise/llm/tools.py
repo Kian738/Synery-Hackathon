@@ -9,7 +9,7 @@ import typing
 from dataclasses import dataclass
 from typing import Callable
 
-from pydantic import create_model
+from pydantic import create_model, BaseModel, ConfigDict
 
 
 @dataclass
@@ -18,6 +18,7 @@ class Tool:
     description: str
     schema: dict
     fn: Callable[..., str]
+    args_model: type[BaseModel] | None = None
 
     def anthropic(self) -> dict:
         return {"name": self.name, "description": self.description, "input_schema": self.schema}
@@ -43,12 +44,12 @@ def tool(fn: Callable[..., str]) -> Tool:
         from pydantic import Field
 
         fields[name] = (hints.get(name, str), Field(default, description=arg_docs.get(name)))
-    model = create_model(f"{fn.__name__}_args", **fields)
+    model = create_model(f"{fn.__name__}_args", __config__=ConfigDict(extra='forbid'), **fields)
     schema = model.model_json_schema()
     schema.pop("title", None)
     for prop in schema.get("properties", {}).values():
         prop.pop("title", None)
-    return Tool(fn.__name__, " ".join(summary.split()), schema, fn)
+    return Tool(fn.__name__, " ".join(summary.split()), schema, fn, model)
 
 
 def call(tools: dict[str, Tool], name: str, raw_input) -> tuple[str, bool]:
@@ -57,6 +58,8 @@ def call(tools: dict[str, Tool], name: str, raw_input) -> tuple[str, bool]:
         return f"unknown tool {name}", True
     try:
         arguments = json.loads(raw_input) if isinstance(raw_input, str) else dict(raw_input or {})
+        if tools[name].args_model is not None:
+            arguments = tools[name].args_model.model_validate(arguments).model_dump()
         return tools[name].fn(**arguments), False
     except ToolFailure as error:
         return str(error), True

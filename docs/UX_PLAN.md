@@ -10,7 +10,7 @@ Sources: `reports/Indoor wayfinding agent UX.md` (research), the official fronte
   - a wheelchair user;
   - a technician with full hands;
   - a facility manager;
-  - plus the jury, who run scripted tricky conversations and watch a 3-minute demo.
+  - plus the jury, who run scripted tricky conversations and watch a strictly 2-minute demo.
 - **Primary job:** get a person to the right place with directions they can follow, and show them it understood.
 - **Second surface:** the Benchmark Lab, for us. It is dense and data-first.
 
@@ -129,3 +129,14 @@ The linked plan focuses on the current decision or preview avatar instead of fit
 ### Third-pass corrections
 
 Ceilings now come from actual recorded upper-floor footprints, rather than every current-floor room. Upper slabs and walls remain visible in guidance to provide atrium context; no top roof is inferred. The media rail is smaller, and secondary mobile tools live in a menu. Gesture zoom is scoped to the scene while deliberate document zoom remains available. Unique room names/references in assistant replies link to room inspection and explicit model focus. Phone drag controls the overview without requiring a route; motion/connection settings are collapsed and a link opens the current building in the phone's own expanded 3D workspace. See `research_notes/PHONE_XR_POSITIONING_REVIEW.md` for technical sources and the VR/AR positioning roadmap.
+
+### Cognitive-load audit (25 October 2026)
+
+Secondary actions, including scenarios, now share the labelled Tools disclosure on
+desktop and phone. Examples are one optional group. The entrance default, a start
+supplied by a link and a user-declared start are explicitly distinguished; markers
+say Start. Room search includes floors and reveals omitted matches. On phones the
+first-use stage uses 34vh and compact labelled shortcuts, keeping all six destinations
+above the composer at 390 × 844; established route/guidance layouts are retained.
+See `docs/UX_COGNITIVE_LOAD_AUDIT.md` and `docs/RELEASE_AUDIT_2026-10-25.md` for
+the inspection, screenshots, tests and remaining submission risks.

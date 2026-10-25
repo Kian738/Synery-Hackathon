@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { SceneAssets } from "./SceneAssets";
+import { Connectors3D } from "./Connectors3D";
 import { SceneLabels, type SceneLabel, type ProjectedLabel } from "./SceneLabels";
 import { GuidePlayer } from "./GuidePlayer";
 import { ExploreCamera } from "./ExploreCamera";
@@ -56,6 +57,11 @@ function Walls({geometry,floorId,elevation,follow}:{geometry:Geometry;floorId:st
       const h=follow?w.height_m:Math.min(w.height_m,1.35);
       pos.push(x,0,z,u,0,v,u,h,v,x,0,z,u,h,v,x,h,z);
     }
+    // Lintels: the wall above doors and narrow openings, so doorways are holes in a wall and not gaps to the sky.
+    if(follow)for(const w of geometry.scene?.headers?.filter(h=>h.floor_id===floorId)??[]){
+      const [x,z]=[w.a[0],-w.a[1]], [u,v]=[w.b[0],-w.b[1]],b=w.base_m,h=w.height_m;
+      pos.push(x,b,z,u,b,v,u,h,v,x,b,z,u,h,v,x,h,z);
+    }
     const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));g.computeVertexNormals();return g;
   },[geometry.scene?.revision,floorId,follow]);
   const edges=useMemo(()=>new THREE.EdgesGeometry(mesh,30),[mesh]);
@@ -103,10 +109,6 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening}/>
 
-        {geometry.connectors.flatMap(c=>c.space_ids.map(id=>({c,s:spaces.find(s=>s.id===id)}))).filter(pair=>pair.s).map(({c,s})=>{const b=bounds(s!.polygon);return <group key={s!.id} position={[(b.minX+b.maxX)/2,elevation+.08,-(b.minY+b.maxY)/2]}>
-          <mesh rotation={[-Math.PI/2,0,0]}><planeGeometry args={[Math.min(1,b.maxX-b.minX),Math.min(1,b.maxY-b.minY)]}/><meshStandardMaterial color={c.kind==="lift"?"#5e92a4":"#b4a378"}/></mesh>
-          {c.kind==="stairs"&&[-.3,0,.3].map(z=><mesh key={z} position={[0,.01,z]}><boxGeometry args={[.8,.015,.04]}/><meshBasicMaterial color="#e6e8e6"/></mesh>)}
-        </group>;})}
         <SceneAssets interior={follow} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false} muted={highlights.size>0}/>
         <SceneAssets interior={follow} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
   </group>;
@@ -205,15 +207,25 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
     const rooms=geometry.spaces.filter(s=>(scope!=="current"||visualResult?.kind==="stacking"||visualResult?.kind==="distance"||s.floor_id===floorId)&&(emphasis?s.id===emphasis:highlights.has(s.id)));
     const points=[...rooms.flatMap(s=>s.polygon),...geometry.assets.filter(a=>!emphasis&&(scope!=="current"||a.floor_id===floorId)&&highlights.has(a.id)).map(a=>a.position)];
     if(!points.length)return box;
-    const b=bounds(points),pad=3;return {minX:b.minX-pad,maxX:b.maxX+pad,minY:b.minY-pad,maxY:b.maxY+pad};
+    const b=bounds(points);
+    const roomW=b.maxX-b.minX,roomH=b.maxY-b.minY;
+    const pad=emphasis?Math.max(3,Math.max(roomW,roomH)*0.35):3;
+    return {minX:b.minX-pad,maxX:b.maxX+pad,minY:b.minY-pad,maxY:b.maxY+pad};
   },[geometry,floorId,emphasis,highlights,box,scope,visualResult?.kind]);
   const cx=(box.minX+box.maxX)/2,cz=-(box.minY+box.maxY)/2,span=Math.max(box.maxX-box.minX,box.maxY-box.minY,10);
-  const multi=((visualResult?.kind==="stacking"||visualResult?.kind==="distance")||showAll||scope==="building"||(scope==="route"&&!!route))&&!follow;
+  const multi=!emphasis&&((visualResult?.kind==="stacking"||visualResult?.kind==="distance")||showAll||scope==="building"||(scope==="route"&&!!route))&&!follow;
   const explode=multi&&exploded&&visualResult?.kind!=="distance"?2:0;
   const elevation=(id:string)=>{const f=geometry.floors.find(f=>f.id===id);return (f?.elevation_m??0)+(f?.level??0)*explode;};
   const activeFloor=follow?(sample?.point?.floor_id??floorId):floorId;
   const floors=geometry.floors.filter(f=>(visualResult?.kind==="stacking"||visualResult?.kind==="distance")&&!follow?visualResult.floor_ids.includes(f.id):multi?(scope==="route"?route?.floors.includes(f.id):true):f.id===activeFloor);
   const visibleFloors=useMemo(()=>new Set(floors.map(f=>f.id)),[floors.map(f=>f.id).join()]);
+  const elevations=useMemo(()=>Object.fromEntries(geometry.floors.map(f=>[f.id,(f.elevation_m??0)+(f.level??0)*explode])),[geometry,explode]);
+  const usedConnectors=useMemo(()=>{
+    const used=new Set<string>(),nodes=route?.polyline.map(p=>p.node)??[];
+    nodes.forEach((node,i)=>{const next=nodes[i+1];if(!next||next===node)return;
+      for(const c of geometry.connectors)if(c.space_ids.includes(node)&&c.space_ids.includes(next))used.add(c.id);});
+    return used;
+  },[geometry,route]);
   const roomHighlights=useMemo(()=>new Set([...highlights,...(selected?[selected]:[])]),[highlights,selected]);
   const [projectedLabels,setProjectedLabels]=useState<ProjectedLabel[]>([]);
   const sceneLabels=useMemo<SceneLabel[]>(()=>follow?[]:[
@@ -229,6 +241,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       <directionalLight position={[cx+30,80,cz+40]} intensity={1.7}/><directionalLight position={[cx-30,20,cz-25]} intensity={.6} color="#c6dfef"/>
       {follow&&<UpperContext geometry={geometry} above={elevation(activeFloor)}/>}
       {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} hazard={hazard} zones={zones} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening}/>)}
+      <Connectors3D geometry={geometry} elevations={elevations} visibleFloors={visibleFloors} activeFloor={activeFloor} used={usedConnectors}/>
       {geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{
         const anchor=s.anchor??s.polygon[0];return <group key={`focus-${s.id}`}>
           <Line points={[...s.polygon,s.polygon[0]].map(p=>frame(p[0],p[1],elevation(s.floor_id)+.12))} color="#74c9ef" lineWidth={3} depthTest={false} depthWrite={false} renderOrder={109}/>

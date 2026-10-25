@@ -44,6 +44,27 @@ class QuerySpec(BaseModel):
     stops: list[str] | None = Field(None, description="Tour: every stop in order, the start first")
     step_free: bool | None = Field(None, description="True if the route must be step-free (wheelchair, no stairs)")
     item: str | None = Field(None, description="locate/count: the item asked about, e.g. 'coffee machine'")
+    forklift: bool | None = Field(None, description="route/tour/errand: a forklift drives it (aisles and openings of 3 m or wider only)")
+    bays_destinations: bool | None = Field(None, description="production bays may be entered to deliver but never crossed as a shortcut")
+    avoid: list[str] | None = Field(None, description="rooms or room types the route must not pass through")
+    closed_more: list[str] | None = Field(None, description="further closed or blocked lifts, stairs, rooms or doors")
+
+
+def _rules(b: Building, spec: QuerySpec, inputs: dict) -> None:
+    """Route rules beyond step-free and one closed lift (the judges' rule list): without stairs, forklift,
+    production bays as destinations, several closed or blocked places, places to avoid. Only present when asked."""
+    if spec.stairs_allowed is False:
+        inputs["step_free"] = True  # "without stairs: lifts, ramps and doors only"
+    if spec.forklift:
+        inputs["forklift"] = True
+    if spec.bays_destinations:
+        inputs["bays_are_destinations"] = True
+    if spec.closed_more:
+        inputs["closed_ids"] = [R.resolve_element(b, item) for item in spec.closed_more]
+    if spec.avoid:
+        targets = [R.resolve_avoid(b, item) for item in spec.avoid]
+        inputs["avoid_spaces"] = [v for k, v in targets if k == "space"]
+        inputs["avoid_types"] = [v for k, v in targets if k == "type"]
 
 
 def resolve_spec(building: Building, spec: QuerySpec) -> dict:
@@ -58,6 +79,7 @@ def resolve_spec(building: Building, spec: QuerySpec) -> dict:
         inputs["start"] = R.resolve_space(b, _need(spec.start, "start room")).id
     if spec.kind == "errand":
         inputs["asset_type"] = R.resolve_asset_type(b, _need(spec.asset_type or spec.item, "item"))
+        _rules(b, spec, inputs)
     if spec.kind == "wide_delivery_count":
         inputs["min_width"] = float(_need(spec.min_width, "width"))
     if spec.kind in ("locate", "count"):
@@ -72,11 +94,15 @@ def resolve_spec(building: Building, spec: QuerySpec) -> dict:
         inputs["destination"] = R.resolve_space(b, _need(spec.destination, "destination")).id
         inputs["step_free"] = bool(spec.step_free)
         if spec.closed:
-            inputs["closed"] = R.resolve_connector(b, spec.closed)
+            inputs["closed"] = R.resolve_element(b, spec.closed)
+        _rules(b, spec, inputs)
     if spec.kind == "tour":
         stops = _need(spec.stops, "stops")
         inputs["stops"] = [R.resolve_space(b, stop).id for stop in stops]
         inputs["step_free"] = bool(spec.step_free)
+        if spec.closed:
+            inputs["closed"] = R.resolve_element(b, spec.closed)
+        _rules(b, spec, inputs)
     if spec.kind == "step_free_reachable_count":
         inputs["closed"] = R.resolve_connector(b, _need(spec.closed, "closed lift or staircase"))
     if spec.kind == "room_stacked":

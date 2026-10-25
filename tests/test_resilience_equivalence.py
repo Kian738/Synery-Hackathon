@@ -14,21 +14,15 @@ MAX_SPACES_FOR_REFERENCE = 120
 LARGEST_BUILDING_BUDGET_S = 20
 
 
-def reached_from_exits(building: Building, constraints: Constraints) -> set[str]:
-    route_graph = RouteGraph(building, constraints)
-    for door in route_graph.entrance_doors():
-        route_graph.graph.add_edge(OUTSIDE, door, weight=0.0)
-    return route_graph.reachable(OUTSIDE)
-
-
 def reference_chaos(building: Building, constraints: Constraints) -> dict:
+    constraints = replace(constraints, outside='exits')
     rooms = {s for s, r in building.spaces.items() if r['type'] == 'room'}
-    baseline = reached_from_exits(building, constraints) & rooms
+    baseline = RouteGraph(building, constraints).reachable(OUTSIDE) & rooms
     groups = {}
     for element in list(building.connectors.values()) + list(building.openings.values()):
         if element['id'] in constraints.closed:
             continue
-        after = reached_from_exits(building, replace(constraints, closed=constraints.closed | {element['id']}))
+        after = RouteGraph(building, replace(constraints, closed=constraints.closed | {element['id']})).reachable(OUTSIDE)
         lost = tuple(sorted(baseline - after))
         if lost:
             groups.setdefault(lost, []).append(element)

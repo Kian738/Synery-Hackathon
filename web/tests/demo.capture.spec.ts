@@ -16,7 +16,7 @@ test("capture a deterministic fallback of the real route and widening workflow",
       await route.fulfill({contentType:"text/event-stream",body:await response.text()});return;
     }
     const response=text.includes("closed")
-      ?await page.request.post(`/api/sessions/${sid}/close`,{data:{element:"Lift 2",closed:true}})
+      ?await page.request.post(`/api/sessions/${sid}/close`,{data:{element:"Lift 3",closed:true}})
       :await page.request.post(`/api/sessions/${sid}/route`,{data:{start:"Main lobby",destination:"Print room 0.16",step_free:true,min_door_width_m:1.1}});
     const result=await response.json();
     const events=result.events.map((data:unknown)=>`data: ${JSON.stringify({type:"ui",data})}\n\n`).join("");
@@ -25,6 +25,7 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await page.goto("/?building=proc-campus-dev-000&at=proc-campus-dev-000-F2-S017&to=Lab%204.26&step_free=1");
   await expect(page.getByRole("region",{name:"Route"})).toContainText("Lab 4.26");
   await expect(page.locator("canvas")).toBeVisible();
+  await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("combobox",{name:"Visible floors"}).selectOption("building");
   await page.waitForTimeout(2000);
   await page.screenshot({path:path.join(out,"building-route.png")});
@@ -38,11 +39,12 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await page.getByRole("button",{name:"Next instruction",exact:true}).click();
   await page.waitForTimeout(3000);
   await page.getByRole("button",{name:"3D",exact:true}).click();
-  await page.getByRole("textbox",{name:"Message"}).fill("Lift 2 is closed for maintenance. What changes?");
+  await page.getByRole("textbox",{name:"Message"}).fill("Lift 3 is closed for maintenance. What changes?");
   await page.getByRole("button",{name:"Send",exact:true}).click();
   await expect(page.getByRole("status")).toBeVisible();
   await page.waitForTimeout(4000);
   await page.screenshot({path:path.join(out,"closure-reroute.png")});
+  await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("button",{name:"Stress test",exact:true}).click();
   await expect(page.getByRole("region",{name:"Building stress test"})).toBeVisible();
   await page.waitForTimeout(4000);

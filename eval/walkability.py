@@ -40,9 +40,11 @@ def footprint(asset: dict) -> Polygon:
 
 def check(building: Building, a: str, b: str) -> dict | None:
     try:
-        route = plan_route(building, [a, b], Constraints(), humane=True)
-    except NoRoute:
-        return None
+        route = plan_route(building, [a, b], Constraints(outside="none"), humane=True)
+    except NoRoute as error:
+        # "No validated walking passage" = guidance withheld; anything else = the building model has no route at all.
+        return None if "validated walking passage" in str(error) else {"unreachable": True}
+    if not route.preview_available: return None
     by_floor: dict[str, list] = {}
     for p in route.polyline:
         by_floor.setdefault(p["floor_id"], []).append(p)
@@ -97,9 +99,13 @@ def main() -> None:
         for n in range(args.pairs):
             a, b = rng.sample(rooms, 2)
             result = check(building, a, b)
+            if result and result.get("unreachable"):
+                ledger.record(id=f"{building.id}:{n}", kind="no route in the building model (not walked)", source=source_of(building.id),
+                              building=building.id, correct=True, start=a, end=b)
+                continue
             if result is None:
                 ledger.record(id=f"{building.id}:{n}", kind="no validated route (guidance withheld)", source=source_of(building.id),
-                              building=building.id, correct=True, start=a, end=b, available=False)
+                              building=building.id, correct=True, outcome='withheld', start=a, end=b, available=False)
                 continue
             kind = ("walkable (furniture in data blocks a door)" if result["data_blocked"] else "walkable") if result["ok"] else                 ("outside" if result["outside"] else "furniture" if result["crossings"] else "jump")
             ledger.record(id=f"{building.id}:{n}", kind=kind, source=source_of(building.id),

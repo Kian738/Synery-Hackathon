@@ -49,18 +49,17 @@ def evaluate_floor(building: Building, floor: dict, image: Path) -> dict:
         return (min(xs) + (x - min(px)) * scale, max(ys) - (y - min(py)) * scale)
 
     rebuilt = {r.index: poly([to_m(x, y) for x, y in r.polygon_px]) for r in floor_scan.regions}
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+    true_ids, rebuilt_ids = list(truth), list(rebuilt)
+    overlaps=np.array([[truth[t].intersection(rebuilt[r]).area / max(1e-9,truth[t].union(rebuilt[r]).area)
+                        for r in rebuilt_ids] for t in true_ids])
     match, ious = {}, []
-    for space_id, true_polygon in truth.items():
-        best, best_iou = None, 0.0
-        for index, polygon in rebuilt.items():
-            if not polygon.intersects(true_polygon):
-                continue
-            iou = polygon.intersection(true_polygon).area / max(1e-9, polygon.union(true_polygon).area)
-            if iou > best_iou:
-                best, best_iou = index, iou
-        if best is not None and best_iou >= IOU_MATCH:
-            match[space_id] = best
-            ious.append(best_iou)
+    if overlaps.size:
+        left,right=linear_sum_assignment(-overlaps)
+        for i,j in zip(left,right):
+            if overlaps[i,j]>=IOU_MATCH:
+                match[true_ids[i]]=rebuilt_ids[j];ious.append(float(overlaps[i,j]))
     matched_regions = set(match.values())
     true_doors = [o for o in building.openings.values() if o["floor_id"] == floor["id"] and "outside" not in o["space_ids"]]
     found = 0
@@ -81,9 +80,11 @@ def evaluate_floor(building: Building, floor: dict, image: Path) -> dict:
             graph.add_edge(*marker.regions)
         else:
             graph.add_edge("outside", marker.regions[0])
-    reach = max(nx.connected_components(graph), key=len)
+    reach = nx.node_connected_component(graph,'outside') if 'outside' in graph else set()
     return {
         "room_recall": round(len(match) / len(truth), 3),
+        'room_precision': round(len(match) / max(1,len(rebuilt)),3),
+        'calibration': 'assisted: supplied true outline bounds, not autonomous scale recovery',
         "mean_iou": round(sum(ious) / len(ious), 3) if ious else 0.0,
         "false_spaces": len(rebuilt) - len(matched_regions),
         "door_recall": round(found / len(true_doors), 3) if true_doors else None,
@@ -108,13 +109,16 @@ def main() -> None:
             if not image.exists():
                 continue
             metrics = evaluate_floor(building, floor, image)
-            ok = metrics.get("room_recall", 0) >= args.recall_gate and (metrics.get("door_recall") or 1) >= args.recall_gate
+            doors = metrics.get('door_recall')
+            ok = metrics.get("room_recall", 0) >= args.recall_gate and (doors is None or doors >= args.recall_gate) and metrics.get('connected_share',0)>=args.recall_gate
             ledger.record(id=floor["id"], kind="floor", source=source_of(building.id), correct=ok, **metrics)
     rows = ledger.rows
     summary = ledger.finish()
     for key in ("room_recall", "mean_iou", "door_recall", "connected_share"):
         values = [r[key] for r in rows if r.get(key) is not None]
         print(f"  mean {key:16s} {sum(values) / max(1, len(values)):.3f}")
+    if not summary['total'] or summary['correct'] != summary['total']:
+        raise SystemExit('Image reconstruction did not meet the configured per-floor checks; see the raw metrics.')
 
 
 if __name__ == "__main__":

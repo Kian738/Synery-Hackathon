@@ -6,7 +6,7 @@
   fw dev                    backend + frontend with hot reload (http://localhost:5173)
   fw check                  every offline test and eval gate (free, ~3 min)
   fw ui-test                build the web app, start a server, run Playwright on desktop + phone
-  fw submit                 answer the public test set -> submissions/team_floorwise_test.csv
+  fw submit                 validated SUBMISSION/{BENCHMARK.md,answers.json} + legacy CSV
   fw bench B Q OUT          Sunday run: building dir B, questions file Q, answers file OUT (.json/.csv)
   fw chat [B]               talk to a building in the terminal
   fw eval SUITE [args]      one eval suite (routes solver parser e2e e2e_basic robust metamorphic build interaction report)
@@ -27,14 +27,25 @@ DEFAULT_BUILDING = DATA / "dev" / "proc-factory-dev-003"
 
 def load_env() -> None:
     path = ROOT / ".env"
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            if value.strip() and key.strip() not in os.environ:
-                os.environ[key.strip()] = value.strip()
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                if value.strip() and key.strip() not in os.environ:
+                    os.environ[key.strip()] = value.strip()
+
+    if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        cred_path = Path.home() / ".config" / "anthropic" / "credentials" / "default.json"
+        if cred_path.is_file():
+            try:
+                import json
+                cred = json.loads(cred_path.read_text(encoding="utf-8"))
+                tok = cred.get("access_token")
+                if tok:
+                    os.environ["ANTHROPIC_AUTH_TOKEN"] = tok
+            except Exception:
+                pass
 
 
 def run(command: list[str], cwd: Path = ROOT) -> int:
@@ -123,8 +134,14 @@ def ui_test(extra: list[str] | None = None) -> int:
 
 
 def submit() -> int:
-    out = ROOT / "submissions" / "team_floorwise_test.csv"
-    return run([sys.executable, "-m", "floorwise.cli", str(DATA / "test"), str(out)])
+    from floorwise.submission import package_submission
+
+    candidate = ROOT / "runs" / "submission-candidate" / "answers.json"
+    code = run([sys.executable, "-m", "floorwise.cli", str(DATA / "test"), str(candidate)])
+    if code:
+        return code
+    package_submission(ROOT, DATA / "test", candidate)
+    return 0
 
 
 def main() -> None:
@@ -147,6 +164,8 @@ def main() -> None:
         sys.exit(dev())
     if command == "check":
         sys.exit(check())
+    if command == 'test':
+        sys.exit(run([sys.executable, '-u', '-m', 'eval.product', *rest]))
     if command == "ui-test":
         sys.exit(ui_test(rest))
     if command == "submit":

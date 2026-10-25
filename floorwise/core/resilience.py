@@ -1,5 +1,5 @@
 """Single-element closure analysis rooted at the exits, independent of navigation mode."""
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 from floorwise.core.graph import DOOR_PREFIX, Constraints, RouteGraph
 from floorwise.core.model import Building, OUTSIDE
@@ -15,23 +15,20 @@ class WeakPoint:
     room_ids: tuple[str, ...]
 
 
-SINK = OUTSIDE  # analysis-only node: every usable entrance door leads to it, so "reaches an exit" is "reaches the sink"
-
-
 def chaos_test(building: Building, constraints: Constraints = Constraints()) -> dict:
+    constraints = replace(constraints, outside='exits')
     rooms = {s for s, r in building.spaces.items() if r['type'] == 'room'}
     route_graph = RouteGraph(building, constraints)
     graph = route_graph.graph
-    for door in route_graph.entrance_doors():
-        graph.add_edge(SINK, door, weight=0.0)
-    baseline = route_graph.reachable(SINK) & rooms
+    baseline = route_graph.reachable(OUTSIDE) & rooms
     edges_by_element = {}
     for u, v, key, attributes in graph.edges(keys=True, data=True):
-        if 'via' in attributes:  # a stair flight or lift ride
+        if attributes.get('via') in building.connectors:
             edges_by_element.setdefault(attributes['via'], []).append((u, v, key, dict(attributes)))
-        for node in (u, v):  # closing an opening removes its door node, with every edge that crosses it
-            if node.startswith(DOOR_PREFIX):
-                edges_by_element.setdefault(node[len(DOOR_PREFIX):], []).append((u, v, key, dict(attributes)))
+    for opening_id in building.openings:
+        node = DOOR_PREFIX + opening_id
+        if node in graph:  # closing an opening removes its door node and every walk through it
+            edges_by_element[opening_id] = [(u, v, key, dict(a)) for u, v, key, a in graph.edges(node, keys=True, data=True)]
     groups = {}
     elements = list(building.connectors.values()) + list(building.openings.values())
     for element in elements:
@@ -42,14 +39,12 @@ def chaos_test(building: Building, constraints: Constraints = Constraints()) -> 
             continue
         try:
             for u, v, key, attributes in removed:
-                if graph.has_edge(u, v, key):
-                    graph.remove_edge(u, v, key)
-            after = route_graph.reachable(SINK)
+                graph.remove_edge(u, v, key)
+            after = route_graph.reachable(OUTSIDE)
             lost = tuple(sorted(baseline - after))
         finally:
             for u, v, key, attributes in removed:
-                if not graph.has_edge(u, v, key):
-                    graph.add_edge(u, v, key=key, **attributes)
+                graph.add_edge(u, v, key=key, **attributes)
         if lost:
             groups.setdefault(lost, []).append(element)
     result = []

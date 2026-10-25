@@ -37,9 +37,10 @@ function History({ values, target }: { values: (number | null)[]; target: number
 
 export default function Checks() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [error,setError]=useState('');
   const [running, setRunning] = useState<Record<string, string[]>>({});
   const [provider, setProvider] = useState<Awaited<ReturnType<typeof lab.suites>>["provider"] | null>(null);
-  const reload = () => lab.checks().then(setSheet);
+  const reload = () => {setError('');return lab.checks().then(setSheet).catch(e=>setError(String(e)));};
   useEffect(() => { reload(); lab.suites().then((s) => setProvider(s.provider)); }, []);
 
   const run = async (key: string, suite: string, args: string[]) => {
@@ -55,7 +56,7 @@ export default function Checks() {
     }
   };
 
-  if (!sheet) return <p className="p-8 font-sign text-xl text-ink-3">Loading checks…</p>;
+  if (!sheet) return <div className="p-8"><p role={error?'alert':'status'}>{error||'Loading checks…'}</p>{error&&<button onClick={reload}>Retry</button>}</div>;
   const failing = sheet.checks.filter((c) => c.status === "fail");
   const notRun = sheet.checks.filter((c) => c.status === "not run");
 

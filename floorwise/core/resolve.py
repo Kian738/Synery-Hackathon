@@ -201,3 +201,28 @@ def resolve_connector(building: Building, text: str) -> str:
         f"Which stair or lift is '{text}'?",
         [{"id": r[2], "label": building.connectors[r[2]]["name"], "score": round(r[1])} for r in ranked],
     )
+
+
+def resolve_element(building: Building, text: str) -> str:
+    """Anything that can be closed: a lift or staircase, a room or corridor, or an opening id."""
+    if text in building.connectors or text in building.spaces or text in building.openings:
+        return text
+    key = normalise(re.sub(r"^the\s+", "", normalise(text)))
+    named = [c["id"] for c in building.connectors.values() if normalise(c["name"]) == key]
+    if len(named) == 1:
+        return named[0]
+    try:
+        return resolve_space(building, text).id
+    except ResolveError as space_error:
+        try:
+            return resolve_connector(building, text)
+        except ResolveError:
+            raise space_error from None
+
+
+def resolve_avoid(building: Building, text: str) -> tuple[str, str]:
+    """('space', id) for one named room, ('type', value) for a kind of room ("production bays", "corridors")."""
+    try:
+        return "space", resolve_space(building, text).id
+    except ResolveError:
+        return "type", resolve_room_type(building, text)

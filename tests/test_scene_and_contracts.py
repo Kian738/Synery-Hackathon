@@ -52,4 +52,8 @@ def test_benchmark_output_includes_exact_ordered_route_nodes():
 def test_closure_router_matches_independent_official_implementation():
     b=Building.load(DATA/'dev'/'proc-campus-dev-000')
     rows=compare_building(b,pairs=2,closures=2)
-    assert len(rows)==12 and all(row['correct'] for row in rows)
+    # The evaluator now includes two complete-graph comparisons in addition to
+    # the twelve sampled closure routes. Keep both obligations explicit.
+    assert len([row for row in rows if row.get('kind') == 'graph equality']) == 2
+    assert len([row for row in rows if row.get('kind') != 'graph equality']) == 12
+    assert all(row['correct'] for row in rows)

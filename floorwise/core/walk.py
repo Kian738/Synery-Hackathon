@@ -266,12 +266,103 @@ def corridor_spine(building: Building, space_id: str, a: tuple[float,float], b: 
     return points if polygon.buffer(.02).covers(LineString(points)) else None
 
 
+
+def _footprint_polygon(asset: dict, margin: float) -> Polygon:
+    f = asset.get("footprint") or {}
+    w, d = f.get("width_m", 0.5) + 2 * margin, f.get("depth_m", 0.5) + 2 * margin
+    a = math.radians(f.get("rotation_deg", 0.0))
+    cx, cy = asset["position"]
+    return Polygon([(cx + dx * math.cos(a) - dy * math.sin(a), cy + dx * math.sin(a) + dy * math.cos(a))
+                    for dx, dy in ((-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2))])
+
+
+def taut_path(building: Building, space_id: str, a: tuple[float, float], b: tuple[float, float],
+              a_door: bool, b_door: bool) -> list[tuple[float, float]] | None:
+    """Shortest walk from a to b inside one room that stays 15 cm off the walls (the judges' rule) and 20 cm clear
+    of furniture and machines: straight lines and a corner only where something is in the way, never a staircase of
+    grid cells. It is the taut string through a visibility graph of the free area's corners. None when furniture walls
+    the two points off from each other."""
+    import shapely
+    from shapely.geometry import Point
+    from shapely.ops import nearest_points, unary_union
+
+    from floorwise.core import spacewalk
+
+    polygon = spacewalk.outline(building.spaces[space_id]["polygon"])
+    walkable = polygon.buffer(-spacewalk.WALL_CLEARANCE_M)
+    if walkable.is_empty:
+        walkable = polygon
+    blockers = [_footprint_polygon(x, OBSTACLE_MARGIN_M) for x in building.assets.values()
+                if x["space_id"] == space_id and x.get("category") in BLOCKING_CATEGORIES]
+    free = walkable
+    if blockers:
+        free = walkable.difference(unary_union(blockers))
+    if free.is_empty:
+        return None
+
+    def snap(p: tuple[float, float], is_door: bool) -> tuple[float, float]:
+        if is_door:
+            land = spacewalk.door_landing(polygon, p)
+            return land if free.buffer(0.02).contains(Point(land)) else _nearest(free, land)
+        return p if free.buffer(0.02).contains(Point(p)) else _nearest(free, p)
+
+    def _nearest(shape, p):
+        q = nearest_points(shape, Point(p))[0]
+        return (q.x, q.y)
+
+    qa, qb = snap(a, a_door), snap(b, b_door)
+    parts = [p for p in getattr(free, "geoms", [free]) if p.geom_type == 'Polygon']
+    # A room-level location is not a surveyed point on a table. Choose the
+    # walkable component connected to the actual doorway, never a boxed pocket.
+    if not a_door and b_door:
+        connected = next((p for p in parts if p.buffer(.002).covers(Point(qb))), None)
+        if connected is not None:
+            free = connected; qa = _nearest(free, a); parts = [free]
+    elif a_door and not b_door:
+        connected = next((p for p in parts if p.buffer(.002).covers(Point(qa))), None)
+        if connected is not None:
+            free = connected; qb = _nearest(free, b); parts = [free]
+    corners = [c for part in parts if part.geom_type == "Polygon" for ring in [part.exterior, *part.interiors] for c in list(ring.coords)[:-1]]
+    nodes = [qa, qb] + corners
+    allowed = free.buffer(spacewalk.COVER_TOLERANCE_M)
+    matrix = spacewalk._visibility(allowed, nodes)
+    n = len(nodes)
+    dist = np.full(n, np.inf)
+    dist[0] = 0.0
+    prev = np.full(n, -1)
+    done = np.zeros(n, bool)
+    for _ in range(n):
+        masked = np.where(done, np.inf, dist)
+        u = int(np.argmin(masked))
+        if not np.isfinite(masked[u]) or u == 1:
+            break
+        done[u] = True
+        cand = dist[u] + matrix[u]
+        better = (cand < dist) & ~done
+        dist[better] = cand[better]
+        prev[better] = u
+    if not np.isfinite(dist[1]):
+        return None
+    chain, k = [], 1
+    while k != -1:
+        chain.append(nodes[k])
+        k = int(prev[k])
+    chain.reverse()
+    return ([a] if a_door and a != qa else []) + chain + ([b] if b_door and b != qb else [])
+
+
 @lru_cache(maxsize=20000)
 def _walk(_key: int, building: Building, space_id: str, a: tuple[float, float], b: tuple[float, float],
           a_door: bool = True, b_door: bool = True) -> tuple:
     central=corridor_spine(building,space_id,a,b)
     if central is not None:
         return tuple(central)
+    try:
+        taut = taut_path(building, space_id, a, b, a_door, b_door)
+    except Exception:  # noqa: BLE001 - degenerate geometry: use the raster walker below
+        taut = None
+    if taut is not None:
+        return tuple(_dedupe(taut))
     try:
         g = grid(building, space_id)
     except Exception:  # noqa: BLE001 - degenerate polygons: fall back to a straight line
