@@ -111,3 +111,35 @@ def test_n_minus_one_check_is_asked_for_and_never_makes_the_worst_case_worse(cli
     worst = lambda rows: max((-r["evacuated"], r["T_s"]) for r in rows)
     assert body["verified"] and len(body["before"]) >= 3 and worst(body["after"]) <= worst(body["before"])
     assert all(BUILDING not in (r["lost_exit"] or "") for r in body["before"])
+
+
+def _tools():
+    from floorwise.agent.session import Session
+    from floorwise.agent.tools import make_tools
+    session = Session.for_building(Building.load(DATA / "dev" / BUILDING))
+    return session, {t.name: t for t in make_tools(session, allow_edits=False)}
+
+
+def test_an_exit_limit_reroutes_people_and_the_twin_gets_the_result():
+    import json
+    session, tools = _tools()
+    free = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"]))["evacuation"]
+    busiest = max(free["by_exit"], key=free["by_exit"].get)
+    limited = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], exit_limits=[{"exit": busiest, "max_people": 10}]))["evacuation"]
+    assert limited["by_exit"].get(busiest, 0) <= 10 < free["by_exit"][busiest]
+    assert limited["T_s"] >= free["T_s"]
+    events = [e for e in session.events if e["type"] == "scenario_result"]
+    assert len(events) == 2 and events[-1]["report"]["evacuation"]["schedule"] and events[-1]["hazard"]
+
+
+def test_the_report_carries_a_responder_route_to_draw_and_replay_is_voice_controllable():
+    session, tools = _tools()
+    import json
+    json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"]))
+    report = next(e for e in session.events if e["type"] == "scenario_result")["report"]
+    assert report["responder"]["spaces"] and report["responder"]["elements"] and report["responder"]["arrival_s"] > 0
+    tools["scenario_replay"].fn(action="seek", seconds=40)
+    assert session.events[-1] == {"type": "scenario_replay", "action": "seek", "seconds": 40}
+    import pytest
+    with pytest.raises(ValueError):
+        tools["scenario_replay"].fn(action="rewind")

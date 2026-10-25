@@ -4,7 +4,7 @@ from dataclasses import replace
 from floorwise.core import ops, resolve
 from floorwise.core.analytics import shared_wall_lines
 from floorwise.llm.tools import tool
-from floorwise.reason.report import scenario_report
+from floorwise.reason.report import resolve_exit, scenario_report
 
 
 def make_insight_tools(session, allow_edits=True, exact_items=False):
@@ -159,7 +159,8 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         return guarded(session.widen_door)(opening_id, width_m)
 
     @tool
-    def plan_scenario(hazard_rooms: list[str], occupants: dict[str,int] | None = None, passage_rate_per_minute: float | None = None, audience: str = "safety_officer", responders: bool = True) -> str:
+    def plan_scenario(hazard_rooms: list[str], occupants: dict[str,int] | None = None, passage_rate_per_minute: float | None = None, audience: str = "safety_officer", responders: bool = True,
+                      exit_limits: list[dict] | None = None) -> str:
         """Requires explicit occupants by room and assumed passage_rate_per_minute (people/minute per opening); ask for missing inputs. Evacuation with a hazard in the named rooms: exact evacuation time, exits used, the bottleneck, a responder route that does not clash with evacuees, and verified door fixes. Every number is re-solved by checked steps; if a step cannot be answered the reply names it. Audience: occupant, safety_officer, builder or regulator."""
         if not occupants or passage_rate_per_minute is None:
             return '{"needs_input":["explicit occupants by room","assumed passage rate in people/minute per opening"],"note":"Do not infer occupancy or capacity from chairs."}'
@@ -169,11 +170,21 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
             spaces = [resolve.resolve_space(session.building, room).id for room in hazard_rooms]
             spec = {"hazards": [{"spaces": spaces}], "responders": {"auto": True} if responders else None,
                     "occupants":{"source":"user","overrides":{session.space(room):n for room,n in occupants.items()}},
-                    "capacities":[{"element":o,"kind":"rate_persons_per_s","value":passage_rate_per_minute/60} for o in session.building.openings]}
+                    "capacities":[{"element":o,"kind":"rate_persons_per_s","value":passage_rate_per_minute/60} for o in session.building.openings]
+                    + [{"element": resolve_exit(session.building, str(limit["exit"])), "kind": "total_persons", "value": int(limit["max_people"])} for limit in exit_limits or []]}
             report = scenario_report(session.building, "evacuation", {"spec": spec}, audience)
+            session.emit("scenario_result", report=report, hazard=spaces[0])
             if report["evacuation"]:  # the per-step movement table is for the 3D replay, not for the model's context
-                report["evacuation"] = {k: v for k, v in report["evacuation"].items() if k != "schedule"}
+                return {**report, "evacuation": {k: v for k, v in report["evacuation"].items() if k != "schedule"}}
             return report
         return guarded(run)()
 
-    return [find_places, inspect_connectors, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, compare_item_leaders, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario] + ([apply_fix] if allow_edits else [])
+    @tool
+    def scenario_replay(action: str, seconds: int | None = None) -> str:
+        """Control the evacuation replay in the twin after plan_scenario: action is play, pause, restart or seek (with seconds)."""
+        if action not in ("play", "pause", "restart", "seek"):
+            raise ValueError("action must be play, pause, restart or seek")
+        session.emit("scenario_replay", action=action, seconds=seconds)
+        return "ok"
+
+    return [find_places, inspect_connectors, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, compare_item_leaders, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario, scenario_replay] + ([apply_fix] if allow_edits else [])

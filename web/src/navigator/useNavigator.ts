@@ -4,7 +4,7 @@ import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
 import { ApiError, api, chat, cancelChat } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
-import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
+import type { Geometry, ScenarioReport, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
@@ -75,6 +75,8 @@ export function useNavigator(buildingId: string) {
   const stop=useCallback(()=>{const active=requestRef.current;if(!active)return;requestRef.current=null;void cancelChat(active.session,active.id).catch(()=>{});active.controller.abort();setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId&&active.streams.has(m.streamId)&&m.status==='streaming'?{...m,status:'interrupted'}:m));setBusy(false);},[]);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [scenarioIn, setScenarioIn] = useState<{ n: number; report: ScenarioReport; hazard: string } | null>(null);
+  const [replayCmd, setReplayCmd] = useState<{ n: number; action: "play" | "pause" | "restart" | "seek"; seconds?: number } | null>(null);
   const geometryRef = useRef<Geometry | null>(null);
   geometryRef.current = geometry;
 
@@ -154,6 +156,10 @@ export function useNavigator(buildingId: string) {
       } else if (e.type === "edit") {
         setVisualResult(null); setPreviewDoor(null);
         if(sessionIdRef.current){const session=sessionIdRef.current;void api.sessionGeometry(session).then(g=>{if(sessionIdRef.current===session)setGeometry(g);}).catch(e=>{if(sessionIdRef.current===session)setNotice(String(e));});}
+      } else if (e.type === "scenario_result") {
+        setScenarioIn({ n: nextId++, report: e.report, hazard: e.hazard });
+      } else if (e.type === "scenario_replay") {
+        setReplayCmd({ n: nextId++, action: e.action, seconds: e.seconds });
       } else if (e.type === "profile") {
         setStepFree(e.profile.step_free);
         if (e.profile.location) {setHereState(e.profile.location);setHereSource(e.profile.location_source??"declared");}
@@ -288,5 +294,6 @@ export function useNavigator(buildingId: string) {
     retryLoad:()=>setLoadRevision(n=>n+1),compareItems,planStops,visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, hereSource, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
     goTo, ask, toggleClosed, decideChange,busyLabel,apply,
+    scenarioIn, replayCmd, clearScenarioEvents: () => { setScenarioIn(null); setReplayCmd(null); },
   };
 }
