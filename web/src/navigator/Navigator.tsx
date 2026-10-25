@@ -6,6 +6,7 @@ import {ComparisonCard} from "../components/ComparisonCard";
 import {readLocal} from "../lib/share";
 import {ScenarioPanel} from '../components/ScenarioPanel';
 import {StressPanel} from '../components/StressPanel';
+import {vrSupported,xrStore} from '../lib/xr';
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -41,6 +42,8 @@ export default function Navigator() {
   const [weakOpen,setWeakOpen]=useState(false);
   const [scenarioOpen,setScenarioOpen]=useState(false);
   const [stressOpen,setStressOpen]=useState(false);
+  const [vrOk,setVrOk]=useState(false);
+  useEffect(()=>{void vrSupported().then(setVrOk);},[]);
   const [heat,setHeat]=useState<Record<string,string>|null>(null);
   const [stressPins,setStressPins]=useState<{id:string;floor_id:string;x:number;y:number}[]>([]);
   const [ideaDoor,setIdeaDoor]=useState<import('../lib/types').Opening|null>(null);
@@ -234,6 +237,7 @@ export default function Navigator() {
           <Dock>
             {following&&<IconButton label="Ask" icon="send" text="Ask" pressed={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}/>}
             {following&&<IconButton label="Focus on route" icon="focus" pressed={guideFocus} onClick={()=>setGuideFocus(v=>!v)}/>}
+            {following&&vrOk&&<IconButton label="Enter VR" icon="cube" text="VR" onClick={()=>void xrStore.enterVR()}/>}
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut)stopSpeaking();}}/>}
             <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>

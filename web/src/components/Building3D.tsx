@@ -4,6 +4,10 @@ import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffec
 import * as THREE from "three";
 import { SceneAssets } from "./SceneAssets";
 import { Beacons, type BeaconPoint } from "./Beacons";
+import { XR } from "@react-three/xr";
+import { VrRig } from "./VrRig";
+import { vrPose, xrStore } from "../lib/xr";
+import { guideCard } from "../lib/guideCard";
 import { orientedRect } from "./Connectors3D";
 import { floorColor } from "../lib/floorColors";
 import { relevantSpaces, shaftVoids, ease } from "../lib/focus";
@@ -249,13 +253,13 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
         const home=shaft.find(q=>insidePolygon(q,rx,ry))??shaft[e<.5?0:shaft.length-1];
         [rx,ry]=pullInside(home,rx,ry,.47);
       }
-      camera.position.copy(frame(rx,ry,rh+1.65));
+      if(vrPose.active){vrPose.x=rx;vrPose.y=rh;vrPose.z=-ry;}else camera.position.copy(frame(rx,ry,rh+1.65));
       const lift=geometry.connectors.some(c=>c.kind==="lift"&&c.space_ids.includes(ride.from.node)&&c.space_ids.includes(ride.to.node));
       rideState.lift=lift?{nodes:[ride.from.node,ride.to.node],y:h0+(h1-h0)*e+.02}:null;
     }else{
       rideState.lift=null;
       // The camera path is already centred and clear of walls; nothing is pushed per frame (that made the picture jitter).
-      camera.position.copy(frame(p.x,p.y,height+1.65));
+      if(vrPose.active){vrPose.x=p.x;vrPose.y=height;vrPose.z=-p.y;}else camera.position.copy(frame(p.x,p.y,height+1.65));
     }
     // Look along the camera path: the average direction to where we will be 1 to 2.6 s from now, low-passed, so corners turn smoothly.
     const target=new THREE.Vector3();
@@ -274,6 +278,12 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       const cross=heading.current.x*target.z-heading.current.z*target.x,dot=heading.current.dot(target),angle=Math.atan2(cross,dot);
       const step=Math.sign(angle)*Math.min(Math.abs(angle)*(1-Math.exp(-dt/0.45)),THREE.MathUtils.degToRad(80)*dt);
       heading.current.applyAxisAngle(new THREE.Vector3(0,-1,0),step).normalize();
+    }
+    if(vrPose.active){ // a headset owns the camera: move the VR rig along the path and keep reporting progress
+      vrPose.yaw=Math.atan2(-heading.current.x,-heading.current.z);first.current=false;
+      if(Math.abs(clock.current-lastReport.current)>.08||sample.arrived||!playing){lastReport.current=clock.current;onSample(clock.current);}
+      if(playing)invalidate();
+      return;
     }
     const direction=heading.current.clone();
     direction.y=-(rideDelta<0?.5:rideDelta>0?-.2:.14);
@@ -386,6 +396,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
+      <XR store={xrStore}>
       <SceneLighting cx={cx} cz={cz} span={span} interior={follow}/>
       <PerfProbe/>
       <PerformanceMonitor onDecline={()=>setDpr(1)} onIncline={()=>setDpr(maxDpr)} flipflops={3} onFallback={()=>setDpr(1)}/>
@@ -427,6 +438,8 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
         :<><OrbitControls mouseButtons={{LEFT:orbiting?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.ROTATE}} touches={{ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_ROTATE}} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><ExploreCamera remoteLook={lookOffset} cacheKey={`${focusBox?"focus-":""}${geometry.building.id}-${multi?scope:floorId}-${exploded}-${focusRequest?`${focusRequest.id}-${focusRequest.revision}`:visualResult?.id??"explore"}`} fitVersion={fitVersion} box={focusBox??fitBox} height={multi?Math.max(...floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...floors.map(f=>elevation(f.id))):3.8} elevation={multi?Math.min(...floors.map(f=>elevation(f.id))):elevation(floorId)} action={action}/></>}
 
       <SceneLabels labels={sceneLabels} onProject={setProjectedLabels}/>
+      {follow&&route&&model&&<VrRig card={guideCard(route,model,time,sample?.step??0)} onToggle={()=>setPlaying(v=>!v)}/>}
+      </XR>
     </Canvas>
     {!follow&&<div className="scene-label-layer">{projectedLabels.map(l=><div key={l.id} style={{position:"absolute",left:l.x,top:l.y,transform:"translate(-50%,-50%)"}}>{l.icon?<span className="connector-icon" title={l.text}><Pictogram name={l.icon} size={17}/></span>:<span className="world-label selected-label">{l.text}</span>}</div>)}</div>}
     {follow&&sample?.transition&&<div className="landing-transition"><span>⇅</span><b>Changing floors</b><p>{geometry.floors.find(f=>f.id===sample.point?.floor_id)?.name}</p><small>Landing preview · interior geometry not surveyed</small></div>}

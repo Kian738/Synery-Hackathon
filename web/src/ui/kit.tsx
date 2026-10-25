@@ -45,7 +45,7 @@ export function Popover({ label, icon, open, onOpenChange, badge, children, left
     <div className={`k-pop ${className}`} ref={root}>
       {trigger ?? <IconButton label={label} icon={icon} pressed={open} badge={badge} onClick={() => onOpenChange(!open)} />}
       {/* kept mounted so panels owned by menu items (the phone pairing card) survive closing the menu */}
-      <div className={`k-pop-panel${left ? " left" : ""}${up ? " up" : ""}`} role="group" aria-label={label} hidden={!open}>{children}</div>
+      <div className={`k-pop-panel${left ? " left" : ""}${up ? " up" : ""}`} role="group" aria-label={`${label} options`} hidden={!open}>{children}</div>
     </div>
   );
 }
