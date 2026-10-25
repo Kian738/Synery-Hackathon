@@ -241,7 +241,6 @@ export function isSpeaking(): boolean {
   }
   return false;
 }
-
 export function stopSpeaking() {
   const wasSpeaking = isSpeaking();
   audioStreamQueue.stop();

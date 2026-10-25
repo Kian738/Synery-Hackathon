@@ -2,7 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
 
-export interface BeaconPoint { id: string; x: number; y: number; z: number }
+export interface BeaconPoint { id: string; x: number; y: number; z: number; color?: string }
 
 /** Answers that point at things ("where is the printer", "these rooms") mark them in the 3D view: a pulsing ring on the floor, a slim beam of
  *  light and a small arrow above, so the eye finds them without reading a list. Limited by the caller to a handful of points. */
@@ -25,9 +25,9 @@ export function Beacons({ points, color = "#ffd45c" }: { points: BeaconPoint[]; 
     <group ref={group}>
       {points.map(p => (
         <group key={p.id} position={[p.x, p.y, p.z]}>
-          <mesh name="ring" rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}><ringGeometry args={[0.42, 0.52, 40]} /><meshBasicMaterial color={color} transparent depthWrite={false} /></mesh>
-          <mesh position={[0, 1.7, 0]} renderOrder={4}><cylinderGeometry args={[0.04, 0.04, 3.4, 8]} /><meshBasicMaterial color={color} transparent opacity={0.3} depthWrite={false} /></mesh>
-          <mesh name="arrow" position={[0, 3.55, 0]} rotation={[Math.PI, 0, 0]} renderOrder={6}><coneGeometry args={[0.2, 0.38, 4]} /><meshBasicMaterial color={color} /></mesh>
+          <mesh name="ring" rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}><ringGeometry args={[0.42, 0.52, 40]} /><meshBasicMaterial color={p.color ?? color} transparent depthWrite={false} /></mesh>
+          <mesh position={[0, 1.7, 0]} renderOrder={4}><cylinderGeometry args={[0.04, 0.04, 3.4, 8]} /><meshBasicMaterial color={p.color ?? color} transparent opacity={0.3} depthWrite={false} /></mesh>
+          <mesh name="arrow" position={[0, 3.55, 0]} rotation={[Math.PI, 0, 0]} renderOrder={6}><coneGeometry args={[0.2, 0.38, 4]} /><meshBasicMaterial color={p.color ?? color} /></mesh>
         </group>
       ))}
     </group>

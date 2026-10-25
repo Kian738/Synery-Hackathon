@@ -2,7 +2,14 @@ import { test, expect, type Page } from "@playwright/test";
 
 /** UX journeys with a budget: how many actions, how long, and no horizontal scroll or console error on the way. */
 const BUILDING = "swiss-1785";
-const errors = (page: Page) => { const list: string[] = []; page.on("pageerror", e => list.push(String(e))); page.on("console", m => { if (m.type() === "error") list.push(m.text()); }); return list; };
+const errors = (page: Page) => {
+  const list: string[] = [];
+  page.on("pageerror", e => list.push(String(e)));
+  // a failed request is named by its URL (the console line only says "404"); the browser's favicon probe is not ours
+  page.on("response", r => { if (r.status() >= 400 && !/favicon/.test(r.url())) list.push(`${r.status()} ${r.url()}`); });
+  page.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) list.push(m.text()); });
+  return list;
+};
 const noSideScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 test("first route in one action: a Welcome chip", async ({ page }) => {

@@ -11,7 +11,7 @@ export function SceneLabels({labels,onProject}:{labels:SceneLabel[];onProject:(l
   const ray=useMemo(()=>new THREE.Raycaster(),[]),last=useRef("");
   useFrame(()=>{
     if(!labels.length){if(last.current!=="[]"){last.current="[]";onProject([]);}return;}
-    const walls:THREE.Object3D[]=[];scene.traverse(o=>{if(o.userData.labelOccluder)walls.push(o);});
+    const walls:any[]=[];scene.traverse(o=>{if(o.userData.labelOccluder)walls.push(o);}); // any: @react-three/xr's pointer typings split THREE.Object3D in two
     const projected:ProjectedLabel[]=[];
     for(const label of labels){
       const world=new THREE.Vector3(...label.position),p=world.clone().project(camera);

@@ -501,10 +501,18 @@ class Session:
         a, c = self.space(first), self.space(second)
         if b.spaces[a]["floor_id"] != b.spaces[c]["floor_id"]:
             return {"error": "A door can only join two spaces on the same floor."}
-        position = geometry.wall_midpoint(b, a, c)
+        existing = [o['id'] for o in b.openings.values() if o['kind'] in ('door', 'opening') and set(o['space_ids']) == {a, c}]
+        if existing:
+            return {"error": f"There is already a door between {b.spaces[a]['name']} and {b.spaces[c]['name']}.", "existing": existing[0]}
+        from floorwise.core.walk import BLOCKING_CATEGORIES, _footprint_polygon
+        furniture = [_footprint_polygon(x, 0) for x in b.assets.values() if x['space_id'] in (a, c) and x.get('category') in BLOCKING_CATEGORIES]
+        position = geometry.wall_midpoint(b, a, c, avoid=furniture)
         if position is None:
             return {"error": f"{b.spaces[a]['name']} and {b.spaces[c]['name']} do not share a wall."}
-        door = {"id": f"{b.spaces[a]['floor_id']}-O-new{len(self.edits) + 1}", "floor_id": b.spaces[a]["floor_id"],
+        serial = len(self.edits) + 1
+        while f"{b.spaces[a]['floor_id']}-O-new{serial}" in b.openings:  # ids stay unique after an undo
+            serial += 1
+        door = {"id": f"{b.spaces[a]['floor_id']}-O-new{serial}", "floor_id": b.spaces[a]["floor_id"],
                 "space_ids": [a, c], "kind": "door", "position": [round(position[0], 3), round(position[1], 3)],
                 "width_m": NEW_DOOR_WIDTH_M, "step_free": True, "synthetic": True}
         before = self.impact_snapshot()

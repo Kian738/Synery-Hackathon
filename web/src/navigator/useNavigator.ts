@@ -157,6 +157,10 @@ export function useNavigator(buildingId: string) {
         setFloorId(e.door.floor_id);
       } else if (e.type === "edit") {
         setVisualResult(null); setPreviewDoor(null);
+        // Show what changed: the rooms of the new or removed door, or the item, pulse with a beacon for a few seconds.
+        const changed=e as unknown as {door?:{space_ids?:string[];floor_id?:string};asset?:{id?:string}};
+        const touched=[...(changed.door?.space_ids??[]).filter(id=>id!=="outside"),...(changed.asset?.id?[changed.asset.id]:[])];
+        if(touched.length){const ids=new Set<string>(touched);setHighlights(ids);if(changed.door?.floor_id)setFloorId(changed.door.floor_id);setTimeout(()=>setHighlights(h=>h===ids?new Set():h),6000);}
         if(sessionIdRef.current){const session=sessionIdRef.current;void api.sessionGeometry(session).then(g=>{if(sessionIdRef.current===session)setGeometry(g);}).catch(e=>{if(sessionIdRef.current===session)setNotice(String(e));});}
       } else if (e.type === "scenario_result") {
         setScenarioIn({ n: nextId++, report: e.report, hazard: e.hazard });

@@ -24,7 +24,7 @@ test("shafts are open above their lowest stop and nowhere else", () => {
   expect([...shaftVoids(geometry)].sort()).toEqual(["s1", "s2"]);
 });
 
-test("focus keeps only the route's rooms and drops rooms merely beside it", () => {
+test("focus keeps only the rooms the route enters, its stops and connector ends", () => {
   const geometry = {
     openings: [
       { floor_id: "f0", position: [1, 0], space_ids: ["corridor", "near"] },
@@ -37,7 +37,8 @@ test("focus keeps only the route's rooms and drops rooms merely beside it", () =
     polyline: [{ node: "lobby", floor_id: "f0", x: 0, y: 0 }, { node: "corridor", floor_id: "f0", x: 2, y: 0 }, { node: "lift0", floor_id: "f0", x: 4, y: 0 }],
   } as never;
   const keep = relevantSpaces(geometry, route)!;
-  expect(keep.has("near")).toBe(false);
+  expect(keep.has("near")).toBe(false);   // beside the corridor, not entered
+  expect(keep.has("corridor")).toBe(true);
   expect(keep.has("far")).toBe(false);
   expect(keep.has("lift1")).toBe(true);
   expect(relevantSpaces(geometry, null)).toBeNull();
