@@ -17,15 +17,22 @@ function shade<T extends THREE.BufferGeometry>(g:T):T{
   for(let i=0;i<pos.count;i++){const k=0.58+0.42*Math.min(1,Math.max(0,pos.getY(i)+0.5));colors.set([k,k,k],i*3);}
   g.setAttribute("color",new THREE.BufferAttribute(colors,3));return g;
 }
-const GEOMETRY={
-  box:()=>shade(new RoundedBoxGeometry(1,1,1,2,0.09)),
-  cylinder:()=>shade(new THREE.CylinderGeometry(.5,.5,1,24,1)),
-  sphere:()=>shade(new THREE.SphereGeometry(.5,20,14)),
-};
-function Instances({parts,shape,elevation,highlighted,muted}:{parts:Part[];shape:AssetPart['shape'];elevation:number;highlighted:boolean;muted:boolean}){
+/** Geometry is shared by every floor (one copy per shape and detail level, never disposed). Far detail is a plain box, a 10-sided
+ *  cylinder and a coarse sphere: at overview distance the rounded edges are sub-pixel, and the triangle count drops by an order of magnitude. */
+const GEOMETRY_CACHE=new Map<string,THREE.BufferGeometry>();
+function geometryFor(shape:AssetPart['shape'],near:boolean):THREE.BufferGeometry{
+  const key=`${shape}|${near}`;let g=GEOMETRY_CACHE.get(key);
+  if(!g){
+    g=shape==="box"?(near?new RoundedBoxGeometry(1,1,1,2,0.09):new THREE.BoxGeometry(1,1,1))
+      :shape==="cylinder"?new THREE.CylinderGeometry(.5,.5,1,near?24:10,1)
+      :new THREE.SphereGeometry(.5,near?20:8,near?14:6);
+    shade(g);GEOMETRY_CACHE.set(key,g);
+  }
+  return g;
+}
+function Instances({parts,shape,elevation,highlighted,muted,near}:{parts:Part[];shape:AssetPart['shape'];elevation:number;highlighted:boolean;muted:boolean;near:boolean}){
   const ref=useRef<THREE.InstancedMesh>(null);
-  const geometry=useMemo(()=>GEOMETRY[shape](),[shape]);
-  useEffect(()=>()=>geometry.dispose(),[geometry]);
+  const geometry=useMemo(()=>geometryFor(shape,near),[shape,near]);
   useEffect(()=>{
     const mesh=ref.current;if(!mesh)return;
     const parent=new THREE.Object3D(),local=new THREE.Object3D();
@@ -42,17 +49,17 @@ function Instances({parts,shape,elevation,highlighted,muted}:{parts:Part[];shape
     mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;mesh.computeBoundingSphere();
   },[parts,highlighted,muted]);
   if(!parts.length)return null;
-  return <group position={[0,elevation,0]}><instancedMesh ref={ref} args={[undefined,undefined,parts.length]} castShadow receiveShadow>
+  return <group position={[0,elevation,0]}><instancedMesh ref={ref} args={[undefined,undefined,parts.length]} castShadow={near} receiveShadow={near}>
     <primitive object={geometry} attach="geometry"/>
     <meshStandardMaterial vertexColors roughness={.62} metalness={.1}/>
   </instancedMesh></group>;
 }
-export function SceneAssets({assets,elevation,highlighted=false,muted=false,interior=false}:{assets:Asset[];elevation:number;highlighted?:boolean;muted?:boolean;interior?:boolean}){
+export function SceneAssets({assets,elevation,highlighted=false,muted=false,interior=false,near=true}:{assets:Asset[];elevation:number;highlighted?:boolean;muted?:boolean;interior?:boolean;near?:boolean}){
   const groups=useMemo(()=>{
     const groups:{box:Part[];cylinder:Part[];sphere:Part[]}={box:[],cylinder:[],sphere:[]};
-    const lod=interior||assets.length<=2500?"interior":"overview";
+    const lod=interior||near?"interior":"overview";
     assets.forEach(asset=>getAssetVisual(asset,lod).parts.forEach(p=>groups[p.shape].push({...p,asset})));
     return groups;
-  },[assets,interior]);
-  return <>{(["box","cylinder","sphere"] as const).map(shape=><Instances key={shape} shape={shape} parts={groups[shape]} elevation={elevation} highlighted={highlighted} muted={muted}/>)}</>;
+  },[assets,interior,near]);
+  return <>{(["box","cylinder","sphere"] as const).map(shape=><Instances key={shape} shape={shape} parts={groups[shape]} elevation={elevation} highlighted={highlighted} muted={muted} near={interior||near}/>)}</>;
 }

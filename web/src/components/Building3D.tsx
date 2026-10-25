@@ -1,4 +1,4 @@
-import { Line, OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
@@ -8,6 +8,8 @@ import { relevantSpaces, shaftVoids, ease } from "../lib/focus";
 import { cameraPath, type Door } from "../lib/cameraPath";
 import { SceneLighting } from "./SceneLighting";
 import { Roofs } from "./Ceilings";
+import { PerfProbe } from "./PerfProbe";
+import { DetailWatcher, type Detail } from "./DetailWatcher";
 import { Dock, IconButton } from "../ui/kit";
 import { LiftShafts, rideState } from "./LiftShafts";
 import { Connectors3D, inside as insidePolygon, stairWalkFor, type WalkPoint } from "./Connectors3D";
@@ -129,7 +131,7 @@ function UpperContext({geometry,above}:{geometry:Geometry;above:number}) {
   return <>{surfaces.map(({floor,mesh})=><group key={floor.id}><mesh geometry={mesh}><meshStandardMaterial color="#b2bcb9" roughness={1} side={THREE.DoubleSide}/></mesh><Walls geometry={geometry} floorId={floor.id} elevation={floor.elevation_m} follow/></group>)}</>;
 }
 
-const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,hazard,zones,connectorSpaces,labelFloor,activeOpening,relevant,voids,bare}:{hazard?:string;zones?:Record<string,string>;bare?:boolean;relevant?:Set<string>|null;voids:Set<string>;geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
+const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,hazard,zones,connectorSpaces,labelFloor,activeOpening,relevant,voids,bare,near}:{near:boolean;hazard?:string;zones?:Record<string,string>;bare?:boolean;relevant?:Set<string>|null;voids:Set<string>;geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
   const spaces=useMemo(()=>geometry.spaces.filter(s=>s.floor_id===floorId&&!voids.has(s.id)&&(!relevant||relevant.has(s.id))),[geometry,floorId,relevant,voids]);
   const assets=useMemo(()=>bare?[]:geometry.assets.filter(a=>a.floor_id===floorId&&(!relevant||relevant.has(a.space_id))),[geometry,floorId,relevant,bare]);
   const hidden=useMemo(()=>relevant?geometry.spaces.filter(s=>s.floor_id===floorId&&!voids.has(s.id)&&!relevant.has(s.id)):[],[geometry,floorId,relevant,voids]);
@@ -141,8 +143,8 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} relevant={relevant}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening} relevant={relevant}/>
 
-        <SceneAssets interior={follow} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false} muted={highlights.size>0}/>
-        <SceneAssets interior={follow} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
+        <SceneAssets interior={follow} near={near} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false} muted={highlights.size>0}/>
+        <SceneAssets interior={follow} near={near} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
   </group>;
 });
 
@@ -250,7 +252,11 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
  geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;closed?:Set<string>;previewDoor?:Opening|null;
  lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string;heading?:number})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
-  const [autoSpeed,setAutoSpeed]=useState(true);
+  const autoSpeed=true; // Guide me always skips the uneventful stretches and slows at doors, turns and stairs: no switch to maintain
+  const [detail,setDetail]=useState<Detail>({near:true,y:0});
+  // Touch devices: no antialiasing and a lower pixel ratio ceiling; every device drops to 1x while frames are slow and recovers at rest.
+  const coarse=typeof matchMedia!=="undefined"&&matchMedia("(pointer: coarse)").matches,maxDpr=coarse?1.25:1.5;
+  const [dpr,setDpr]=useState(maxDpr);
   const [focusInner,setFocusInner]=useState(focusProp);
   const focus=onFocus?focusProp:focusInner;
   const setFocus=(f:(v:boolean)=>boolean)=>{const next=f(focus);if(onFocus)onFocus(next);else setFocusInner(next);};
@@ -322,11 +328,14 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode]);
 
   return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
-    <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,1.5]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:true,logarithmicDepthBuffer:true}}
+    <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
       <SceneLighting cx={cx} cz={cz} span={span} interior={follow}/>
+      <PerfProbe/>
+      <PerformanceMonitor onDecline={()=>setDpr(1)} onIncline={()=>setDpr(maxDpr)} flipflops={3} onFallback={()=>setDpr(1)}/>
+      {!follow&&<DetailWatcher span={span} onChange={setDetail}/>}
       {follow&&<Roofs geometry={geometry}/>}
-      {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} hazard={hazard} zones={zones} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening} relevant={relevant} voids={voids} bare={follow&&f.id!==activeFloor}/>)}
+      {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} hazard={hazard} zones={zones} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening} relevant={relevant} voids={voids} bare={follow&&f.id!==activeFloor} near={detail.near&&(Math.abs(elevation(f.id)-detail.y)<=4.5||span<60)}/>)}
       <Connectors3D geometry={connectorGeometry} elevations={elevations} visibleFloors={visibleFloors} activeFloor={activeFloor} used={usedConnectors}/>
       <LiftShafts geometry={connectorGeometry} elevations={elevations} visibleFloors={visibleFloors} activeFloor={activeFloor} used={usedConnectors}/>
       {geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{
@@ -367,7 +376,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
     {follow&&route&&model&&<GuidePlayer route={route} model={model} time={time} speed={speed} playing={playing} step={activeStep} reduced={reduced} transition={sample?.transition?"Floor transition":null}
       onSeek={seek} onPlay={()=>{if(!previewMode)onPreview?.();if(sample?.arrived)seek(0);setPlaying(v=>sample?.arrived?true:!v);}}
       onPrevious={()=>{setPlaying(false);seek(model.chapters[activeStep-1]??0);}} onNext={()=>{setPlaying(false);seek(model.chapters[Math.min(activeStep+1,model.chapters.length-1)]??model.duration);}}
-      onSpeed={setSpeed} auto={autoSpeed} onAuto={setAutoSpeed} onRepeat={onRepeat} onExit={()=>{setPlaying(false);onFinish?.();}}/>}
+      onSpeed={setSpeed} onRepeat={onRepeat} onExit={()=>{setPlaying(false);onFinish?.();}}/>}
     {!follow&&route&&!visualResult&&scope!=="building"&&<div className="k-status"><button type="button" className="k-pill" data-testid="focus-toggle" aria-pressed={focus} onClick={()=>setFocus(v=>!v)}>{focus?<><b>Route area</b><span>{hiddenCount} other rooms dimmed</span><u>Show all rooms</u></>:<><b>All rooms</b><span>Everything shown</span><u>Focus on route</u></>}</button></div>}
     {!follow&&<div className="k-cam" aria-label="3D camera controls"><Dock col>
       <IconButton label={orbiting?"Move building":"Rotate building"} icon={orbiting?"orbit":"hand"} pressed={orbiting} onClick={()=>setOrbiting(!orbiting)}/>

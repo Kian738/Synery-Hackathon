@@ -3,7 +3,7 @@ import type { Presentation } from "../lib/playback";
 import { Pictogram } from "./Pictogram";
 
 const clock=(s:number)=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;
-export function GuidePlayer({route,model,time,playing,speed,step,reduced,transition,onSeek,onPlay,onPrevious,onNext,onSpeed,auto=true,onAuto,onRepeat,onExit}:{auto?:boolean;onAuto?:(v:boolean)=>void;
+export function GuidePlayer({route,model,time,playing,speed,step,reduced,transition,onSeek,onPlay,onPrevious,onNext,onSpeed,onRepeat,onExit}:{
   route:Route;model:Presentation;time:number;playing:boolean;speed:number;step:number;reduced:boolean;transition:string|null;
   onSeek:(v:number)=>void;onPlay:()=>void;onPrevious:()=>void;onNext:()=>void;onSpeed:(v:number)=>void;onRepeat?:()=>void;onExit?:()=>void;
 }) {
@@ -22,7 +22,7 @@ export function GuidePlayer({route,model,time,playing,speed,step,reduced,transit
       <div className="player-main-controls"><button aria-label="Previous instruction" title="Previous instruction" disabled={step<=0} onClick={onPrevious}><Pictogram name="skip-back"/></button>
         {!reduced&&<button className="play-toggle" aria-label={arrived?"Replay preview":playing?"Pause preview":"Play preview"} title={arrived?"Replay":"Play / pause (Space)"} onClick={onPlay}><Pictogram name={arrived?"replay":playing?"pause":"play"} size={25}/></button>}
         <button aria-label="Next instruction" title="Next instruction" disabled={arrived} onClick={onNext}><Pictogram name="skip-next"/></button></div>
-      <div className="player-options">{onAuto&&<button type="button" className="auto-speed" aria-pressed={auto} title="Skips ahead on long, uneventful stretches; slows at doors, turns and stairs" onClick={()=>onAuto(!auto)}>Auto</button>}<div role="group" aria-label="Playback speed" className="speed-options">{[.5,1,2,4].map(v=><button key={v} aria-label={`Playback speed ${v}×`} aria-pressed={speed===v} onClick={()=>onSpeed(v)}>{v}×</button>)}</div>{arrived&&<button aria-label="Finish preview" onClick={onExit}>Finish</button>}</div>
+      <div className="player-options"><div role="group" aria-label="Playback speed" className="speed-options">{[.5,1,2,4].map(v=><button key={v} aria-label={`Playback speed ${v}×`} aria-pressed={speed===v} onClick={()=>onSpeed(v)}>{v}×</button>)}</div>{arrived&&<button aria-label="Finish preview" onClick={onExit}>Finish</button>}</div>
     </div>
   </section>;
 }

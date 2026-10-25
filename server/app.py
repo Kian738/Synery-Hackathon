@@ -18,6 +18,7 @@ import tempfile
 from server.locks import session_write
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -28,6 +29,7 @@ from floorwise.core.resolve import ResolveError
 from floorwise.paths import DATA, ROOT
 
 app = FastAPI(title="floorwise")
+app.add_middleware(GZipMiddleware, minimum_size=1024)  # building geometry is large JSON: compresses about 10x
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SESSIONS: dict[str, dict] = {}
