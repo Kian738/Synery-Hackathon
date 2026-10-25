@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from floorwise.agent.session import Session
+from floorwise.agent.session import Session, main_entrance
 from floorwise.core.model import Building
 from floorwise.core.resolve import ResolveError
 from floorwise.paths import DATA, ROOT
@@ -137,6 +137,7 @@ def geometry_payload(b: Building) -> dict:
     anchors={sid: list(poly.representative_point().coords)[0] for sid,poly in b.polygons.items()}
     return {
         "building": b.info,
+        "main_entrance": main_entrance(b),
         "floors": sorted(b.data["floors"], key=lambda f: f["level"]),
         "spaces": [
             {**{k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")}, "anchor": anchors[s["id"]]} for s in b.spaces.values()
