@@ -230,7 +230,9 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
     """Open-air walkways (a bridge across an atrium, a stair standing in a void) get a fence, not a room's wall.
 
     A corridor or stair on an upper floor whose walls mostly face empty air (nothing of that floor within 0.3 m outside) is open to the sky or
-    the atrium: its open edges become railings of ail_height and carry ail: True. Walls toward neighbouring rooms stay full height. Display
+    the atrium: its open edges become railings of 
+ail_height and carry 
+ail: True. Walls toward neighbouring rooms stay full height. Display
     only; the analytical model is untouched."""
     from shapely import make_valid
     from shapely.geometry import Point, Polygon
@@ -249,7 +251,7 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
     for wall in walls:
         owner = by_space.get(wall.get('space_id') or '')
         is_open = False
-        if owner and owner['type'] in ('corridor', 'stair') and owner['floor_id'] != lowest and owner['id'] in polygons:
+        if owner and owner.get('type') in ('corridor', 'stair') and owner['floor_id'] != lowest and owner['id'] in polygons:
             (ax, ay), (bx, by) = wall['a'], wall['b']
             length = math.hypot(bx - ax, by - ay)
             if length > 1e-6:
@@ -269,7 +271,7 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
 
     # A stair standing in the air, or a long narrow walkway open on both sides (a bridge, a gallery): not a hall on the facade.
     railed = {sid for sid, length in total.items() if length and exposed.get(sid, 0.0) / length >= min_open
-              and (by_space[sid]['type'] == 'stair' or (elongated(sid) and exposed.get(sid, 0.0) / length >= 0.7))}
+              and (by_space[sid].get('type') == 'stair' or (elongated(sid) and exposed.get(sid, 0.0) / length >= 0.7))}
     out = []
     for wall, is_open in zip(walls, open_edge):
         if is_open and wall.get('space_id') in railed:
