@@ -16,3 +16,4 @@ web/tsconfig.tsbuildinfo
 web/test-results/
 
 .agent-*/
+.agent-*
