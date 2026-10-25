@@ -29,6 +29,19 @@ Status: `done` (verified), `open`, `partial` (works, a part is not verified by e
 | Lift car back z-fight | partial | car now clear of walls by construction; not looked at from behind in the app |
 | Testing phase (gold bank, journeys, audit, rigour) | in progress | `eval.gold` (phrasing robustness), `eval.audit_all`, `normalize.py` |
 | E phone HTTPS, F phone/VR, G scenarios | open | see plan |
+| Scope: This floor / Whole building + "Route only" modifier; route turns it on, map opens whole building | done | `flow-c.spec.ts`, `focus-guide.spec.ts` |
+| Guide me: ahead-card with live metre countdown, stair ride joins real entry/exit and keeps 0.47 m off walls, look-around by drag, thicker line | done | `focus-guide.spec.ts` (walls clearance test), screenshots |
+| Open-air bridges/stairs: 1.1 m fences, no roof; overlap walls and wide-opening walls dropped; fewer withheld walking previews (92 to 35 of 1681) | done | `test_scene_rails.py`, `withheld` audit script numbers in commit message |
+| Route planning speed: A* inside a room, rails once per space | done | CIT cold 10.5 s to 3.5 s; gates unchanged |
+| Editing: add a door between X and Y by name, once per pair, placed clear of furniture and corners, undo exact, edit flashes the rooms | done | `tests/test_door_e2e.py` (5 buildings), `test_edit_capabilities.py` |
+| Request activity bar (named status + stopwatch) | done | `lib/activity.ts`, `ActivityBar.tsx`; no skeleton cards yet |
+| Journeys, axe a11y, properties on 280 buildings, gold bank in gates | done | `journeys.spec.ts`, `a11y.spec.ts`, `test_properties.py`, `eval.gold` |
+| E phone HTTPS | partial | `scripts/phone_https.ps1` + PHONE_DEMO.md; no physical phone tried |
+| Scenario research | done | `docs/SCENARIO_RESEARCH.md` (existing `floorwise/evacuation` min-cost-flow found; gap = per-person queue simulator on RouteGraph, door ranking, heat maps) |
+| G Evacuation stress test: per-person queue simulation on the navigation graph (SFPE door flow, pre-movement, speeds), bottleneck + crowding KPIs, door and new-exit ideas proved by a second run, panel with time scrubber, density heat map on the floors, queue pins | done | `floorwise/stress/`, `server/stress.py`, `tests/test_stress_sim.py` (door flow ~0.92 p/s per metre, doubling), `test_stress_api.py`, `web/tests/stress.spec.ts`; 2D plan heat map and 6 more scenario presets not done |
+| F VR in Guide me (WebXR rig, gaze panel, trigger plays), installable app (manifest, icons), safe areas | partial | builds and non-VR specs pass; **not tried on a headset or a phone**; bottom-sheet snap points not built |
+| Gates 2026-10-25 | done | all 16 offline gates + 2 gold gates green (routes 2130/2130, e2e_basic 2122/2130 known, gold 3755/3755 + holdout 1530/1530) |
+| Videogame mode on PC (WASD + mouse look on the VR scene) | open | later, as agreed |
 
 ## Older open items
 - TUM 4107 missing floor (`data-floor-coverage` test), loading animation, whole building as default view, left panel declutter.
@@ -41,3 +54,8 @@ Status: `done` (verified), `open`, `partial` (works, a part is not verified by e
 - `cameraPolyline` in `web/src/lib/focus.ts` is only used by one test (the camera uses `lib/cameraPath.ts`).
 - `docs/parallel/*` are code-referenced contracts (phone, assets, benchmark): keep. `scenario-handoff.md` and `codex-third-pass-handoff.md` can be archived once their links are fixed.
 - `SUBMISSION/BENCHMARK.md` duplicates `BENCHMARK.md`: keep both, add an equality test.
+
+## Stairs analysis 2026-10-25
+- 464 flights had no safe footprint in 87 buildings; a relaxed second fit (4 cm clearance, 0.8 x 1.1 m) brings it to 350 in 79. The rest (139 storey pairs: 114 with no overlap at all, 25 under 0.8 m2) are stair spaces on consecutive floors that do not stand above each other in the data (centroids up to 15 m apart), so no honest flight exists; they keep the stair icon and a glide. val.audit_all lists them.
+- Ride measured by web/tests/stair-ride.spec.ts in 6 buildings: eye inside the stair space, 0.28 m off walls, feet within the stair's height range, no jumps.
+

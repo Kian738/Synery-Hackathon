@@ -43,8 +43,10 @@ def resolve_exit(building: Building, text: str) -> str:
     return exits[0]
 
 
-def scenario_report(building: Building, template: str, params: dict, audience: str) -> dict:
-    trace = run_plan(building, instantiate(template, **params))
+def scenario_report(building: Building, template: str, params: dict, audience: str, on_step=None) -> dict:
+    """on_step receives {id, op, ok, summary} for each step the moment it finishes (the live reasoning line)."""
+    trace = run_plan(building, instantiate(template, **params),
+                     (lambda r: on_step({"id": r.id, "op": r.op, "ok": r.ok, "summary": _summary(r)})) if on_step else None)
     evacuation = next((r.value for r in trace.results if r.op == "evacuate" and r.ok), None)
     return {
         "template": template,

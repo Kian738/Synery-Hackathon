@@ -158,9 +158,9 @@ export function stairWalkLine(space: Space, base: number, rise: number, alignmen
     for (let k = 0; k <= n; k++) out.push(at(startS + dir * k * ts, t, lowY + Math.min(k + 0.5, n) * rs));
     if (f === 0 && flights === 2) out.push(at(-L / 2 + run + landing / 2, 0, base + perFlight));
   }
-  const last = out[out.length - 1], prev = out[out.length - 2];
-  const d = Math.hypot(last.x - prev.x, last.y - prev.y) || 1;
-  out.push({ x: last.x + ((last.x - prev.x) / d) * 0.5, y: last.y + ((last.y - prev.y) / d) * 0.5, h: base + rise });
+  // The line ends on the top tread. It is not extended past it: the top of a flight can stand a hand's breadth from the hall's wall, and the ride
+  // itself continues from here to the door of the arrival room.
+  out[out.length - 1] = { ...out[out.length - 1], h: base + rise };
   return out;
 }
 

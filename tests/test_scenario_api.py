@@ -143,3 +143,20 @@ def test_the_report_carries_a_responder_route_to_draw_and_replay_is_voice_contro
     import pytest
     with pytest.raises(ValueError):
         tools["scenario_replay"].fn(action="rewind")
+
+
+def test_the_stream_sends_each_checked_step_as_it_finishes_then_the_same_report(client, session, fire_room):
+    import json
+    body = {"template": "evacuation", "params": {"spec": {"hazards": [{"spaces": [fire_room]}], "responders": {"auto": True}}}, "audience": "safety_officer"}
+    lines = [json.loads(line) for line in client.post(f"/api/sessions/{session}/scenario/stream", json=body).text.splitlines() if line]
+    steps = [item["step"] for item in lines if "step" in item]
+    assert [s["id"] for s in steps] == ["spec", "g1", "occ", "exits", "evac", "bn", "resp", "cand", "best"]
+    assert all(s["ok"] and s["summary"] for s in steps) and "people" in steps[2]["summary"]
+    assert "report" in lines[-1] and all("step" in item for item in lines[:-1])
+    plain = client.post(f"/api/sessions/{session}/scenario", json=body).json()
+    strip = lambda r: {k: v for k, v in r.items() if k != "steps"}
+    assert strip(lines[-1]["report"]) == strip(plain)
+
+
+def test_a_bad_stream_request_is_refused_before_streaming(client, session):
+    assert client.post(f"/api/sessions/{session}/scenario/stream", json={"template": "nope"}).status_code == 422

@@ -145,6 +145,10 @@ app.include_router(campus_router)
 app.include_router(create_companion_router())
 from server.voice import router as voice_router
 app.include_router(voice_router)
+from server.stress import create_stress_router
+app.include_router(create_stress_router(lambda sid: session_or_404(sid)))
+from server.scenarios import router as scenario_router
+app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 
 @lru_cache(maxsize=1)
@@ -415,8 +419,8 @@ def search(session_id: str, q: str, floor: str | None = None) -> dict:
 
 from server.insight import insight_router
 app.include_router(insight_router(session_or_404, call))
-from server.scenario import scenario_router  # noqa: E402
-app.include_router(scenario_router(session_or_404))
+from server.scenarios import router as scenario_router  # noqa: E402  (explicit inputs or a template body; wraps server.scenario)
+app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 @app.get("/api/sessions/{session_id}/results/{result_id}")
 def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: int = 25, view: str = 'default', room: str | None = None) -> dict:
@@ -624,11 +628,8 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
     entry.setdefault('requests', {})[request_id] = cancelled
 
     def push(kind: str, payload) -> None:
-        try:
-            if not loop.is_closed():
-                loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
-        except Exception:
-            pass
+        if not loop.is_closed():
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
 
     def work() -> None:
         if not entry['lock'].acquire(timeout=5):
@@ -842,3 +843,13 @@ if WEB_DIST.exists():
     @app.get("/lab/{rest:path}")
     def index(rest: str = "") -> FileResponse:
         return FileResponse(WEB_DIST / "index.html")
+
+    # Files of web/public that must sit at the root: the install manifest and the app icons (a phone installs "Floorwise" to its home screen).
+    _ROOT_FILES = {"manifest.webmanifest": "application/manifest+json", "icon-192.png": "image/png", "icon-512.png": "image/png",
+                   "icon-maskable-512.png": "image/png", "apple-touch-icon.png": "image/png"}
+
+    @app.get("/{name}")
+    def root_file(name: str) -> FileResponse:
+        if name not in _ROOT_FILES or not (WEB_DIST / name).exists():
+            raise HTTPException(404, "Not found")
+        return FileResponse(WEB_DIST / name, media_type=_ROOT_FILES[name], headers={"Cache-Control": "public, max-age=86400"})

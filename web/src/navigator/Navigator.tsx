@@ -4,6 +4,11 @@ import { AgentReply } from "../components/AgentReply";
 import {TurnResultLinks} from "../components/TurnResultLinks";
 import {ComparisonCard} from "../components/ComparisonCard";
 import {readLocal} from "../lib/share";
+import {ScenarioPanel} from './ScenarioPanel';
+import { JourneyBanner } from "../journey/JourneyBanner";
+import { currentIndoorLeg, nextLeg, setJourneyIndex } from "../journey/journey";
+import {StressPanel} from '../components/StressPanel';
+import {vrSupported,xrStore} from '../lib/xr';
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -24,125 +29,15 @@ import { spokenStep } from "../lib/guide";
 import { Loader } from "../components/Loader";
 import { JourneyBanner } from "../journey/JourneyBanner";
 import { currentIndoorLeg, nextLeg, setJourneyIndex } from "../journey/journey";
+import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
+import { useVoiceTour } from "./useVoiceTour";
+import { spokenStep } from "../lib/guide";
+import { Loader } from "../components/Loader";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
 const ExteriorView=lazy(()=>import("../components/ExteriorView"));
 const Building3D = lazy(() => import("../components/Building3D"));
-
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-const isStairSpace = (s: Space) => /stair|escalier|stairwell|cage/i.test(`${s.type} ${s.room_type} ${s.name}`);
-
-function findSpacesMentionedInText(
-  text: string,
-  spaces: Space[],
-  visualResult?: VisualResult | null,
-  highlights?: Set<string>
-): Space[] {
-  const found: Space[] = [];
-  const addedIds = new Set<string>();
-
-  const add = (s: Space) => {
-    if (isStairSpace(s)) return;
-    if (!addedIds.has(s.id)) {
-      addedIds.add(s.id);
-      found.push(s);
-    }
-  };
-
-  const candidateIds = new Set<string>();
-  if (visualResult?.entities) {
-    for (const ent of visualResult.entities) {
-      if (ent.kind === "room") candidateIds.add(ent.id);
-    }
-  }
-  if (highlights) {
-    for (const id of highlights) candidateIds.add(id);
-  }
-
-  // 1. Check candidate spaces first (from visual results or active highlights)
-  for (const candId of candidateIds) {
-    const s = spaces.find((sp) => sp.id === candId);
-    if (!s) continue;
-    const baseName = s.name.replace(/\s+\d+(\.\d+)?$/, "").trim();
-    const pattern = new RegExp(
-      `\\b(?:${escapeRegExp(s.name)}|${escapeRegExp(baseName)}${s.ref ? `|${escapeRegExp(s.ref)}` : ""})\\b`,
-      "i"
-    );
-    if (pattern.test(text)) {
-      add(s);
-    }
-  }
-
-  // 2. Match room numbers, e.g. 0.08, 2.02, 2.08, 204, or "room 3", "office 02"
-  const numberMatches = Array.from(
-    text.matchAll(/\b\d+\.\d+\b|\b\d{2,4}\b|\b(?:room|office|kitchen|lab|corridor|hall|space)?\s*#?(\d{1,4})\b/gi)
-  );
-  for (const match of numberMatches) {
-    const num = match[1] || match[0];
-    if (!num) continue;
-    const matchInCandidates = spaces.find(
-      (s) => candidateIds.has(s.id) && (s.name.includes(num) || s.id.includes(num) || (s.ref && s.ref.includes(num)))
-    );
-    if (matchInCandidates) {
-      add(matchInCandidates);
-      continue;
-    }
-    const matchInAll = spaces.find((s) => {
-      const tokens: string[] = s.name.match(/\b\d+\.\d+\b|\b\d{1,4}\b/g) ?? [];
-      const idEnd = s.id.split("-").pop();
-      return tokens.includes(num) || idEnd === num || s.name.includes(` ${num}`) || s.ref === num;
-    });
-    if (matchInAll) {
-      add(matchInAll);
-    }
-  }
-
-  // 3. Match distinctive room names (e.g. Makerspace, Main lobby, Cafeteria, Kitchen, Lab)
-  const GENERIC = new Set([
-    "room", "rooms", "floor", "space", "spaces", "corridor", "corridors",
-    "office", "offices", "staircase", "elevator", "lift", "printer", "printers",
-    "place", "places", "door", "doors", "level", "levels", "area", "areas"
-  ]);
-
-  for (const s of spaces) {
-    const fullName = s.name.trim();
-    if (fullName.length >= 4) {
-      const pattern = new RegExp(`\\b${escapeRegExp(fullName)}\\b`, "i");
-      if (pattern.test(text)) {
-        add(s);
-        continue;
-      }
-    }
-    const baseName = s.name.replace(/\s+\d+(\.\d+)?$/, "").trim();
-    if (baseName.length >= 3 && !GENERIC.has(baseName.toLowerCase())) {
-      const pattern = new RegExp(`\\b${escapeRegExp(baseName)}\\b`, "i");
-      if (pattern.test(text)) {
-        add(s);
-        continue;
-      }
-    }
-    if (s.ref && s.ref.length >= 2) {
-      const pattern = new RegExp(`\\b${escapeRegExp(s.ref)}\\b`, "i");
-      if (pattern.test(text)) {
-        add(s);
-      }
-    }
-  }
-
-  // Prioritize specific rooms over corridors if any rooms match
-  if (found.length > 1) {
-    const nonCorridors = found.filter((s) => !/corridor/i.test(s.name) && s.type !== "corridor");
-    if (nonCorridors.length > 0) {
-      return nonCorridors;
-    }
-  }
-
-  return found;
-}
 
 export default function Navigator() {
   const [params, setParams] = useSearchParams();
@@ -152,16 +47,16 @@ export default function Navigator() {
   const chatWorkspace=useRef<HTMLDivElement>(null);
   const [buildings, setBuildings] = useState<BuildingRow[]>([]);
   const [selected, setSelected] = useState<Space | null>(null);
-  const [voiceOut, setVoiceOut] = useState(true);
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [voiceFocusSpace, setVoiceFocusSpace] = useState<Space | null>(null);
-  const [voiceHighlightId, setVoiceHighlightId] = useState<string | null>(null);
-  const voiceTourTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
-  const [currentlySpeakingId, setCurrentlySpeakingId] = useState<number | null>(null);
-  const [heading, setHeading] = useState<string>("");
   const [weakOpen,setWeakOpen]=useState(false);
   const [scenarioOpen,setScenarioOpen]=useState(false);
+  const [quickRun,setQuickRun]=useState(0);
+  const [exploreOpen,setExploreOpen]=useState(false);
+  const [stressOpen,setStressOpen]=useState(false);
+  const [vrOk,setVrOk]=useState(false);
+  useEffect(()=>{void vrSupported().then(setVrOk);},[]);
+  const [heat,setHeat]=useState<Record<string,string>|null>(null);
+  const [stressPins,setStressPins]=useState<{id:string;floor_id:string;x:number;y:number}[]>([]);
+  const [ideaDoor,setIdeaDoor]=useState<import('../lib/types').Opening|null>(null);
   const [scenarioMark,setScenarioMark]=useState<ScenarioMark|null>(null);
   const scenarioZones=useMemo(()=>{const z:Record<string,string>={};Object.entries(scenarioMark?.crowd??{}).forEach(([id,n])=>{z[id]=n===2?"crowd2":"crowd1";});scenarioMark?.responder?.spaces.forEach(id=>{z[id]="responder";});return z;},[scenarioMark]);
   useEffect(()=>{if(nav.scenarioIn)setScenarioOpen(true);},[nav.scenarioIn]);
@@ -449,47 +344,22 @@ export default function Navigator() {
     const s = steps[i];
     if (s?.floor_id) nav.setFloorId(s.floor_id);
   };
-  const activeHighlights = useMemo(() => {
-    const set = new Set(nav.highlights);
-    if (voiceHighlightId) set.add(voiceHighlightId);
-    return set;
-  }, [nav.highlights, voiceHighlightId]);
+  const displayFloor=following&&previewPosition?previewPosition.floor_id:nav.floorId;
+  const visualRooms=nav.visualResult?.entities.filter(e=>e.kind==="room")??[];
+  const visualPrimary=(nav.visualResult?.measurements.primary_ids as string[]|undefined)?.[0];
+  const visualRoom=g?.spaces.find(s=>s.id===(visualPrimary??(visualRooms.length===1?visualRooms[0].id:null)));
+  const visualAnchor=visualRoom?(visualRoom.anchor??centroid(visualRoom.polygon)):null;
+  const focused=g?.spaces.find(s=>s.id===focusRequest?.id);
+  const focusPoint = following&&previewPosition?[previewPosition.x,previewPosition.y] as [number,number]:focused?(focused.anchor??centroid(focused.polygon)):visualAnchor??(nav.route&&steps[nav.activeStep]?.floor_id===nav.floorId?steps[nav.activeStep]?.point??null:null);
 
-  const displayFloor = following && previewPosition ? previewPosition.floor_id : nav.floorId;
-  const visualRooms = nav.visualResult?.entities.filter((e) => e.kind === "room") ?? [];
-  const visualPrimary = (nav.visualResult?.measurements.primary_ids as string[] | undefined)?.[0];
-  const visualRoom = g?.spaces.find((s) => s.id === (visualPrimary ?? (visualRooms.length === 1 ? visualRooms[0].id : null)));
-  const visualAnchor = visualRoom ? (visualRoom.anchor ?? centroid(visualRoom.polygon)) : null;
-  const voiceAnchor = voiceFocusSpace ? (voiceFocusSpace.anchor ?? centroid(voiceFocusSpace.polygon)) : null;
-  const focused = g?.spaces.find((s) => s.id === focusRequest?.id);
-  const focusPoint = following && previewPosition
-    ? ([previewPosition.x, previewPosition.y] as [number, number])
-    : voiceAnchor
-    ? voiceAnchor
-    : focused
-    ? (focused.anchor ?? centroid(focused.polygon))
-    : selected
-    ? (selected.anchor ?? centroid(selected.polygon))
-    : visualAnchor ?? (nav.route && steps[nav.activeStep]?.floor_id === nav.floorId ? steps[nav.activeStep]?.point ?? null : null);
-
-  const handleToggleVoiceMode = useCallback(() => {
-    setVoiceMode((prev) => {
-      const next = !prev;
-      if (next) setVoiceOut(true);
-      else stopSpeaking();
-      return next;
-    });
-  }, []);
-
-  const handleSend = useCallback((text: string) => {
-    clearVoiceTour();
-    nav.ask(text, selected?.id);
-    setSelected(null);
-    setWeakOpen(false);
-    setPhoneOpen(false);
-    setToolsOpen(false);
-  }, [nav.ask, selected?.id, clearVoiceTour]);
-
+  const focusRoom=(room:Space)=>{selectSpace(room);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
+  // The voice tour moves the camera and highlights the room being talked about; it never opens the room inspector over the controls.
+  const tourFocus=(room:Space)=>{nav.setFloorId(room.floor_id);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
+  const voice=useVoiceTour({spaces:g?.spaces,messages:nav.messages,busy:nav.busy,visualResult:nav.visualResult,highlights:nav.highlights,route:nav.route,setFloorId:nav.setFloorId,following,steps,activeStep:nav.activeStep,focusRoom:tourFocus,setFocusRequest});
+  // Repeat a step: same speech as the automatic one (the voice hook highlights the rooms the sentence mentions).
+  const speakStep=(step?:{text:string;headline?:string;target?:string;short?:string;cue?:string;kind?:string}|null)=>{if(step)speak(spokenStep(step as never));};
+  const setVoiceOut=(on:boolean)=>{if(on!==voiceOut)voice.toggleReadAloud();};
+  const {voiceOut,voiceFocusSpace,activeHighlights}=voice;
   const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
   if (!g) {
     return <div className="recovery" role="status">{nav.notice??<Loader label={buildings.find(b=>b.building_id===buildingId)?.name}/>}{nav.notice&&<><button onClick={nav.retryLoad}>Retry loading</button><label>Choose another building<select value={buildingId} onChange={e=>setParams({building:e.target.value})}>{buildings.map(b=><option value={b.building_id} key={b.building_id}>{b.name}</option>)}</select></label></>}</div>;
@@ -504,8 +374,7 @@ export default function Navigator() {
           <BuildingMenu buildings={buildings} value={buildingId} onChange={(b) => setParams({ building: b })} name={g.building.name} />
           <Dock>
             <IconButton label="Step-free" icon="wheelchair" pressed={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} />
-            <IconButton label="Read aloud" icon="speaker" pressed={voiceOut && !voiceMode} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} />
-            <IconButton label={voiceMode ? "Voice mode (ON)" : "Voice only"} icon="mic" pressed={voiceMode} onClick={handleToggleVoiceMode} />
+            <IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={voice.toggleReadAloud} />
           </Dock>
         </header>
         <div className="k-start">
@@ -529,7 +398,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} understood={[nav.here?`From ${labelOf(g,nav.here)}`:"",nav.route&&nav.routeMeta?.to?`To ${nav.routeMeta.to}`:"",nav.stepFree?"Step-free":"",nav.closed.size?`${nav.closed.size} closed`:""].filter(Boolean)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} currentlySpeakingId={currentlySpeakingId} onSpeakMessage={(id,text)=>{if(currentlySpeakingId===id){stopSpeaking();setCurrentlySpeakingId(null);}else{setCurrentlySpeakingId(id);speak(text,()=>setCurrentlySpeakingId(null));}}} onOption={(id, purpose) => (purpose === "choice" ? nav.ask(id) : nav.goTo(id))} onDecide={nav.decideChange} />
+          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} understood={[nav.here?`From ${labelOf(g,nav.here)}`:"",nav.route&&nav.routeMeta?.to?`To ${nav.routeMeta.to}`:"",nav.stepFree?"Step-free":"",nav.closed.size?`${nav.closed.size} closed`:""].filter(Boolean)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} currentlySpeakingId={voice.currentlySpeakingId} onSpeak={voice.speakMessage} busy={nav.busy} onOption={(id,purpose)=>purpose==="choice"?nav.ask(id):nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -542,7 +411,7 @@ export default function Navigator() {
           </div>
         )}
         {nav.turnUsage&&<details className="turn-usage"><summary aria-label="Response details">{Number(nav.turnUsage.latency_ms)>0?`${(Number(nav.turnUsage.latency_ms)/1000).toFixed(1)} s`:"Response"} · details</summary><div>{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}{typeof nav.turnUsage.first_text_ms==="number"?` · first text ${(nav.turnUsage.first_text_ms/1000).toFixed(1)} s`:""}</div></details>}
-        <Composer onStop={nav.stop} busy={nav.busy} voiceMode={voiceMode} onToggleVoiceMode={handleToggleVoiceMode} isSpeaking={isAgentSpeaking} onSend={handleSend} />
+        <Composer onStop={nav.stop} busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
       </aside>
 
       <main className="model-panel relative order-1 flex h-[46vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
@@ -558,8 +427,11 @@ export default function Navigator() {
           <Dock>
             {following&&<IconButton label="Ask" icon="send" text="Ask" pressed={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}/>}
             {following&&<IconButton label="Focus on route" icon="focus" pressed={guideFocus} onClick={()=>setGuideFocus(v=>!v)}/>}
-            {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut){stopSpeaking();clearVoiceTour();}}}/>}
-            {view!=="2d"&&<IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>}
+            {following&&vrOk&&<IconButton label="Enter VR" icon="cube" text="VR" onClick={()=>void xrStore.enterVR()}/>}
+            {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={voice.toggleReadAloud}/>}
+            <IconButton label="Voice only" icon="mic" pressed={voice.voiceMode} onClick={voice.toggleVoiceMode}/>
+            <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
+            {!following&&!compact&&nav.sessionId&&<IconButton accent label="Fire test: run the evacuation scenario in one click" text="Fire test" icon="focus" onClick={()=>{setScenarioOpen(true);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setQuickRun(n=>n+1);}}/>}
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
               <Segmented ariaLabel="Visible floors" value={scope} onChange={(v:string)=>setScope(v==="current"?"current":"building")} options={[
@@ -571,9 +443,10 @@ export default function Navigator() {
             </Popover>}
             <Popover label="Building tools" icon="tools" open={toolsOpen} onOpenChange={setToolsOpen} className="building-tools">
               {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
+              {!following&&<button aria-pressed={stressOpen} onClick={()=>{setStressOpen(v=>!v);setScenarioOpen(false);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="aid" size={18}/>Evacuation test</button>}
               {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
-                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
+                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speakStep(steps[nav.activeStep]);return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
                 onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
               {!following&&<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}><Pictogram name="aid" size={18}/>Stress test</button><Link to="/lab"><Pictogram name="info" size={18}/>Evidence</Link></>}
@@ -583,18 +456,18 @@ export default function Navigator() {
         <div className={`floor-selector-host ${view==='exterior'?'hidden':''}`}><FloorRail floors={g.floors} active={displayFloor} route={nav.route} onPick={id=>{if(following)setView("3d");nav.setFloorId(id);}} here={hereFloor} /></div>
         <div className="model-viewport" ref={sceneHost}>
           <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
-            {view==='exterior'?<Suspense fallback={<p role="status">Preparing exterior map…</p>}><ExteriorView buildingId={buildingId} onEnter={enterInterior}/></Suspense>:view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult}
-              pins={pins} previewDoor={nav.previewDoor} selected={voiceFocusSpace?.id ?? selected?.id} scenario={scenarioMark} focus={focusPoint} onSpaceClick={selectSpace} /> :
+            {view==='exterior'?<Suspense fallback={<p role="status">Preparing exterior map…</p>}><ExteriorView buildingId={buildingId} onEnter={enterInterior}/></Suspense>:view === "2d" ? <PlanView scenario={scenarioMark} geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult}
+              pins={pins} previewDoor={nav.previewDoor} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<Loader label={g.building.name} phrases={["Raising the floors","Setting the walls","Placing the furniture"]}/>}>
-                <Building3D hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id ?? selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                <Building3D heat={heat??undefined} pins={stressPins} hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
+                  closed={nav.closed} previewDoor={ideaDoor??nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id??selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speakStep(steps[nav.activeStep])} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
         </div>
         {view!=="2d"&&view!=="exterior"&&planExpanded&&<section className="map-drawer" aria-label="Linked floor plan">
           <header><span>{g.floors.find(f=>f.id===displayFloor)?.name}</span><button aria-label="Close map" onClick={()=>setPlanExpanded(false)}><Pictogram name="close" size={18}/></button></header>
-          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id ?? selected?.id} scenario={scenarioMark} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
+          <PlanView scenario={scenarioMark} geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.closeConfirm && <div role="alertdialog" aria-label="Confirm closing" className="model-notice k-confirm">
@@ -606,7 +479,8 @@ export default function Navigator() {
           <span>Closed {nav.lastClosure.name}.</span><button className="k-ctl" onClick={() => void nav.toggleClosed(nav.lastClosure!.id)}>Undo</button>
         </div>}
         {nav.notice && !nav.closeConfirm && !nav.lastClosure && <div role="status" className="model-notice"><span>{nav.notice}</span>{/^No route/.test(nav.notice)&&nav.closed.size>0&&<button className="reopen-all" onClick={()=>[...nav.closed].forEach(id=>nav.toggleClosed(id))}>Reopen closed places</button>}<button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
-        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel onBeat={(say,id)=>{setFocusRequest(r=>({id,revision:(r?.revision??0)+1}));if(voiceOut&&!window.speechSynthesis?.speaking)speak(say);}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.applyEvents}/>}
+        {stressOpen&&!following&&nav.sessionId&&<StressPanel geometry={g} sessionId={nav.sessionId} onClose={()=>setStressOpen(false)} onHeat={setHeat} onPins={setStressPins} onIdea={setIdeaDoor} onApplied={nav.apply}/>}
+        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel quickRun={quickRun} onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room)focusRoom(room);if(voiceOut&&!window.speechSynthesis?.speaking)speak(say);}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
         {weakOpen&&!following&&!scenarioOpen&&<section className="stress-drawer" aria-label="Building stress test">
           <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>
           <p>Each result closes one connector independently and checks step-free routes to mapped exits.</p>
@@ -739,12 +613,12 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk,understood=[],currentlySpeakingId,onSpeakMessage }: {
+function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk,understood=[] }: {
+  currentlySpeakingId?:number|null;onSpeak?:(id:number,text:string)=>void;
   suggest?:string[];onAsk?:(q:string)=>void;understood?:string[];
   busyLabel:string;onResult:(r:VisualResult & {total_rows:number})=>void;onRerun:(q:string)=>void;
   geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string, purpose?: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
-  currentlySpeakingId?: number | null; onSpeakMessage?: (id: number, text: string) => void;
 }) {
   const [history,setHistory]=useState(false);
   const end = useRef<HTMLDivElement>(null);
@@ -799,23 +673,13 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
               ) : <p className="mt-2 text-sm text-ink-4">{m.state === "applied" ? "Applied." : "Discarded."}</p>}
             </div>
           );
-        if (m.role === "agent") {
-          const isThisPlaying = currentlySpeakingId === m.id;
-          return (
-            <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
-              {onSpeakMessage && m.text.trim() && (
-                <button type="button" onClick={() => onSpeakMessage(m.id, m.text)} className="k-ctl" aria-pressed={isThisPlaying}
-                  aria-label={isThisPlaying ? "Stop reading" : "Read answer aloud"}>
-                  <Pictogram name="speaker" size={14} />{isThisPlaying ? "Stop" : "Read aloud"}
-                </button>
-              )}
-              {m.status==='interrupted'&&<p role="status">Answer interrupted. Computed results remain available.</p>}
-              <AgentReply text={m.text} spaces={geometry.spaces} onRoom={onRoom}/>
-              {(m.streaming || m.status === "streaming") && <span className="inline-block h-4 w-1.5 animate-pulse bg-mark ml-1 align-middle" />}
-            </div>
-          );
-        }
-        return null;
+        return (
+          <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
+            {m.role==='agent'&&m.status==='interrupted'&&<p role="status">Answer interrupted. Computed results remain available.</p>}
+            <AgentReply text={m.text} spaces={geometry.spaces} onRoom={onRoom}/>
+            {onSpeak&&m.role==='agent'&&m.status!=='streaming'&&<IconButton label={currentlySpeakingId===m.id?"Stop reading":"Read this reply"} icon="speaker" pressed={currentlySpeakingId===m.id} onClick={()=>onSpeak(m.id,m.text)}/>}
+          </div>
+        );
       })}
       {busy&&<RequestStatus label={busyLabel}/>}
       {!busy&&understood.length>0&&messages.at(-1)?.role==="agent"&&<p className="k-understood" aria-label="How this was understood"><span>Understood as</span>{understood.map(u=><b key={u}>{u}</b>)}</p>}
@@ -829,186 +693,29 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
 
 function RequestStatus({label}:{label:string}) {const [seconds,setSeconds]=useState(0);useEffect(()=>{const start=performance.now();const timer=setInterval(()=>setSeconds(Math.floor((performance.now()-start)/1000)),1000);return()=>clearInterval(timer);},[]);return <p className="request-status" role="status"><span>{label}</span><small aria-hidden="true">{seconds}s{seconds>=20?' · You can stop this request.':''}</small></p>;}
 
-function Composer({
-  busy,
-  onSend,
-  onStop,
-  voiceMode,
-  onToggleVoiceMode,
-  isSpeaking,
-}: {
-  busy: boolean;
-  onSend: (t: string) => void;
-  onStop?: () => void;
-  voiceMode: boolean;
-  onToggleVoiceMode: () => void;
-  isSpeaking: boolean;
-}) {
+function Composer({ busy, onSend,onStop }: { busy: boolean; onSend: (t: string) => void;onStop:()=>void }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState("");
-  const stopListening = useRef<((submitIfText?: boolean) => void) | null>(null);
-
-  const stopListeningSession = useCallback((submitIfText = false) => {
-    if (stopListening.current) {
-      const abortFn = stopListening.current;
-      stopListening.current = null;
-      abortFn(submitIfText);
-    }
-    setListening(false);
-  }, []);
-
-  useEffect(() => () => { stopListeningSession(false); }, [stopListeningSession]);
-
-  const submit = useCallback((value: string) => {
+  const stopListening = useRef<(() => void) | null>(null);
+  useEffect(() => () => {stopListening.current?.();}, []);
+  const submit = (value: string) => {
     const t = value.trim();
     if (!t || busy) return;
     onSend(t);
     setText("");
-  }, [busy, onSend]);
-
-  const startListeningSession = useCallback(() => {
-    if (!canListen()) {
-      setVoiceError("Voice input is not supported in this browser.");
-      return;
-    }
-    stopSpeaking();
-    window.dispatchEvent(new Event("floorwise:voice-start"));
-    setVoiceError("");
-    setListening(true);
-    stopListening.current = listen(
-      setText,
-      (t) => {
-        setListening(false);
-        submit(t);
-      },
-      () => setListening(false),
-      (err) => {
-        setListening(false);
-        setVoiceError(err);
-      }
-    );
-  }, [submit]);
-
-  // Hands-free continuous loop when voiceMode is active
-  useEffect(() => {
-    if (!voiceMode) return;
-    if (busy || isSpeaking) {
-      if (listening) {
-        stopListeningSession(false);
-      }
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (!listening && !busy && !isSpeaking) {
-        startListeningSession();
-      }
-    }, 450);
-    return () => clearTimeout(timer);
-  }, [voiceMode, busy, isSpeaking, listening, startListeningSession, stopListeningSession]);
-
-  if (voiceMode) {
-    return (
-      <div className="relative border-t border-ink-2 bg-ink-2 p-3" role="region" aria-label="Voice interaction">
-        {voiceError && (
-          <p role="status" className="mb-2 border border-signal bg-signal/20 p-2 text-xs text-signal">
-            {voiceError}
-          </p>
-        )}
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (isSpeaking) {
-                stopSpeaking();
-              } else if (listening) {
-                stopListeningSession(true);
-              } else if (!busy) {
-                startListeningSession();
-              }
-            }}
-            aria-label={isSpeaking ? "Interrupt agent" : listening ? "Done speaking" : "Start speaking"}
-            className={`grid h-12 w-12 shrink-0 place-items-center rounded-sm transition-all ${
-              isSpeaking
-                ? "animate-pulse bg-mark text-ink"
-                : busy
-                ? "bg-ink-3 text-concrete"
-                : listening
-                ? "animate-bounce bg-signal text-white"
-                : "bg-white text-ink hover:bg-concrete"
-            }`}
-          >
-            <Pictogram name={isSpeaking ? "speaker" : "mic"} size={22} />
-          </button>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${
-                  isSpeaking
-                    ? "animate-ping bg-mark"
-                    : busy
-                    ? "animate-pulse bg-concrete"
-                    : listening
-                    ? "animate-pulse bg-signal"
-                    : "bg-ink-4"
-                }`}
-              />
-              <p className="font-sign text-sm font-semibold text-white">
-                {isSpeaking
-                  ? "Building is speaking…"
-                  : busy
-                  ? "Thinking…"
-                  : listening
-                  ? "Listening to you…"
-                  : "Tap mic to speak"}
-              </p>
-            </div>
-            <p className="mt-0.5 truncate text-xs text-ink-4">
-              {isSpeaking
-                ? "Tap to interrupt"
-                : listening
-                ? (text || "Speak your destination or question (take your time)")
-                : busy
-                ? "Analyzing route & spaces…"
-                : "Microphone idle"}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            {isSpeaking && (
-              <button
-                type="button"
-                onClick={() => stopSpeaking()}
-                className="border border-ink-3 px-2 py-1 font-sign text-xs text-concrete hover:border-white hover:text-white"
-              >
-                Interrupt
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onToggleVoiceMode}
-              className="border border-ink-3 px-2.5 py-1 font-sign text-xs text-concrete hover:border-white hover:text-white"
-            >
-              Switch to text
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  };
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit(text); }} className="k-composer">
       {voiceError && <p role="status" className="k-voice-error">{voiceError}</p>}
       {canListen() && (
-        <button type="button" disabled={busy} aria-label={listening ? "Done speaking" : "Speak"} aria-pressed={listening}
-          onClick={() => { if (listening) { stopListeningSession(true); } else { startListeningSession(); } }}
+        <button type="button" disabled={busy} aria-label={listening ? "Stop listening" : "Speak"} aria-pressed={listening}
+          onClick={() => { if (listening) {stopListening.current?.();setListening(false);return;} stopSpeaking();window.dispatchEvent(new Event("floorwise:voice-start"));setVoiceError("");setListening(true);stopListening.current=listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false), setVoiceError); }}
           className="k-ctl icon" data-live={listening}>
           <Pictogram name="mic" size={20} />
         </button>
       )}
-      <textarea rows={1} maxLength={12000} value={text} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit(text);}}} onChange={(e) => {if(listening)stopListeningSession(false);setText(e.target.value);}} placeholder={listening ? "Listening…" : "Ask the building"}
+      <textarea rows={1} maxLength={12000} value={text} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit(text);}}} onChange={(e) => {if(listening){stopListening.current?.();setListening(false);}setText(e.target.value);}} placeholder={listening ? "Listening…" : "Ask the building"}
         aria-label="Message" aria-describedby="composer-help" className="k-input" />
       <span id="composer-help" className="sr-only">Enter sends; Shift Enter adds a line. Maximum 12000 characters.</span>
       {busy&&<button type="button" className="k-ctl" onClick={onStop}>Stop</button>}
@@ -1021,6 +728,7 @@ function Composer({
 function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const i = Math.max(0,Math.min(steps.length-1,index));
   const step = steps[i];
+  useEffect(() => { if (step) speak(spokenStep(step)); }, [step]);
   if (!step) return null;
   return (
     <div className="absolute inset-0 flex flex-col bg-ink/95 p-6 text-white" role="dialog" aria-label="Step by step">

@@ -158,6 +158,7 @@ def _compile(content: str) -> dict:
     walls=apply_rails(data, walls)
     overlap_list=compile_overlaps(data)
     walls=drop_overlap_walls(data, walls, overlap_list)
+    open_air={w['space_id'] for w in walls if w.get('rail') and w.get('space_id')}  # bridges and stairs in the open: no roof over them
     # Actual upper-floor footprints form ceilings below. Missing coverage stays open.
     from shapely import constrained_delaunay_triangles, make_valid
     from shapely.geometry import Polygon
@@ -174,7 +175,7 @@ def _compile(content: str) -> dict:
     roofs = []
     ordered = sorted(data['floors'], key=lambda f: f.get('level', f.get('elevation_m', 0)))
     indoor = {f['id']: unary_union([make_valid(Polygon(sp['polygon'])) for sp in data['spaces']
-                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and len(sp['polygon']) >= 3]) for f in ordered}
+                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and sp['id'] not in open_air and len(sp['polygon']) >= 3]) for f in ordered}
     for index, floor in enumerate(ordered):
         cover = indoor[floor['id']]
         if cover.is_empty:
@@ -233,7 +234,9 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
     """Open-air walkways (a bridge across an atrium, a stair standing in a void) get a fence, not a room's wall.
 
     A corridor or stair on an upper floor whose walls mostly face empty air (nothing of that floor within 0.3 m outside) is open to the sky or
-    the atrium: its open edges become railings of ail_height and carry ail: True. Walls toward neighbouring rooms stay full height. Display
+    the atrium: its open edges become railings of 
+ail_height and carry 
+ail: True. Walls toward neighbouring rooms stay full height. Display
     only; the analytical model is untouched."""
     from shapely import make_valid
     from shapely.geometry import Point, Polygon
@@ -277,7 +280,7 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
 
     # A stair standing in the air, or a long narrow walkway open on both sides (a bridge, a gallery): not a hall on the facade.
     railed = {sid for sid, length in total.items() if length and exposed.get(sid, 0.0) / length >= min_open
-              and (by_space[sid]['type'] == 'stair' or (elongated(sid) and exposed.get(sid, 0.0) / length >= 0.7))}
+              and (by_space[sid].get('type') == 'stair' or (elongated(sid) and exposed.get(sid, 0.0) / length >= 0.7))}
     out = []
     for wall, is_open in zip(walls, open_edge):
         if is_open and wall.get('space_id') in railed:

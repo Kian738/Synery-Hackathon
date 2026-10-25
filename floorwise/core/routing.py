@@ -66,14 +66,18 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
     # The dataset sums rounded legs; doing the same keeps tours equal to the centimetre.
     route = Route(stops=stops, length_m=round(sum(leg.length_m for leg in legs), 2), legs=legs,
                   constraints=constraints.describe())
+    blocked_note = None
     try:
         segments = walking_segments(building, graph, all_nodes) if humane else None
     except walk.WalkBlocked as error:
         if error.space_id in stops:
-            raise NoRoute(f"No validated walking passage at {building.label(error.space_id)}; furniture or geometry blocks this route.") from error
-        # Exclude the blocked space and re-plan; every retry strictly reduces available spaces.
-        from dataclasses import replace
-        return plan_route(building, stops, replace(constraints, closed=constraints.closed | {error.space_id}), humane=True)
+            # The route exists in the building model (that is what the benchmark scores); only the drawn walking line cannot be validated at its start or end room (a door added by an edit, furniture around a landing).
+            # The person still gets the room sequence and its distance, never a failure.
+            segments = None
+            blocked_note = f"No validated walking line inside {building.label(error.space_id)}; the room sequence and distance remain available."
+        else:
+            from dataclasses import replace
+            return plan_route(building, stops, replace(constraints, closed=constraints.closed | {error.space_id}), humane=True)
     route.guide = guide(building, graph, all_nodes, segments)
     route.steps = [step["text"] for step in route.guide["steps"]]
     if segments:
@@ -103,6 +107,10 @@ def plan_route(building: Building, stops: list[str], constraints: Constraints = 
             route.preview_available = False
             route.walk_m = None
             route.warnings.append('Walking preview withheld: supplied geometry crosses ' + ', '.join(collisions) + '. The room sequence remains available.')
+        if blocked_note:
+            route.preview_available = False
+            route.walk_m = None
+            route.warnings.append(blocked_note)
         if not route.preview_available:
             # Retain endpoint/room references, but never draw unsafe joins as a walk.
             route.polyline = [{**p, 'gap': True} for p in route.polyline]
