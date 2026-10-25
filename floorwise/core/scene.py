@@ -246,6 +246,9 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
     polygons = {s['id']: make_valid(Polygon(s['polygon'])) for s in data['spaces'] if len(s['polygon']) >= 3}
     cover = {f['id']: unary_union([polygons[s['id']] for s in data['spaces'] if s['floor_id'] == f['id'] and s['id'] in polygons]) for f in ordered}
     by_space = {s['id']: s for s in data['spaces']}
+    import shapely.prepared
+    own_buffer: dict[str, object] = {}  # buffered once per space and per floor, not once per wall (the wall loop was the slow part of a cold scene)
+    cover_buffer = {fid: shapely.prepared.prep(c.buffer(0.02)) for fid, c in cover.items()}
     open_edge: list[bool] = []
     total: dict[str, float] = {}
     exposed: dict[str, float] = {}
@@ -259,8 +262,10 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
                 nx, ny = -(by - ay) / length, (bx - ax) / length
                 mx, my = (ax + bx) / 2, (ay + by) / 2
                 sides = [Point(mx + nx * 0.3, my + ny * 0.3), Point(mx - nx * 0.3, my - ny * 0.3)]
-                outside = [p for p in sides if not polygons[owner['id']].buffer(0.05).contains(p)]
-                is_open = bool(outside) and not any(cover[owner['floor_id']].buffer(0.02).contains(p) for p in outside)
+                if owner['id'] not in own_buffer:
+                    own_buffer[owner['id']] = shapely.prepared.prep(polygons[owner['id']].buffer(0.05))
+                outside = [p for p in sides if not own_buffer[owner['id']].contains(p)]
+                is_open = bool(outside) and not any(cover_buffer[owner['floor_id']].contains(p) for p in outside)
                 total[owner['id']] = total.get(owner['id'], 0.0) + length
                 if is_open:
                     exposed[owner['id']] = exposed.get(owner['id'], 0.0) + length

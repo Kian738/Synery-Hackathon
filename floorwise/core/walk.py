@@ -325,22 +325,40 @@ def taut_path(building: Building, space_id: str, a: tuple[float, float], b: tupl
     corners = [c for part in parts if part.geom_type == "Polygon" for ring in [part.exterior, *part.interiors] for c in list(ring.coords)[:-1]]
     nodes = [qa, qb] + corners
     allowed = free.buffer(spacewalk.COVER_TOLERANCE_M)
-    matrix = spacewalk._visibility(allowed, nodes)
+    # A* over the visibility graph with the straight-line distance to the goal as the guide: the same shortest walk as the full matrix, but only
+    # the rows of the corners it actually expands are tested against the room outline (a long corridor has hundreds of corners; the full
+    # matrix cost seconds per room and made planning in big buildings slow).
+    import heapq
+
     n = len(nodes)
+    coords = np.asarray(nodes, dtype=float)
+    shapely.prepare(allowed)
+    to_goal = np.hypot(coords[:, 0] - coords[1, 0], coords[:, 1] - coords[1, 1])
+
+    def row(u: int) -> np.ndarray:
+        lines = shapely.linestrings(np.stack([np.repeat(coords[u][None, :], n, axis=0), coords], axis=1))
+        straight = np.hypot(coords[:, 0] - coords[u, 0], coords[:, 1] - coords[u, 1])
+        usable = shapely.covers(allowed, lines) | (straight == 0)
+        return np.where(usable, straight, np.inf)
+
     dist = np.full(n, np.inf)
     dist[0] = 0.0
     prev = np.full(n, -1)
     done = np.zeros(n, bool)
-    for _ in range(n):
-        masked = np.where(done, np.inf, dist)
-        u = int(np.argmin(masked))
-        if not np.isfinite(masked[u]) or u == 1:
-            break
+    heap = [(float(to_goal[0]), 0)]
+    while heap:
+        _, u = heapq.heappop(heap)
+        if done[u]:
+            continue
         done[u] = True
-        cand = dist[u] + matrix[u]
+        if u == 1:
+            break
+        cand = dist[u] + row(u)
         better = (cand < dist) & ~done
-        dist[better] = cand[better]
-        prev[better] = u
+        for v in np.nonzero(better)[0]:
+            dist[v] = cand[v]
+            prev[v] = u
+            heapq.heappush(heap, (float(cand[v] + to_goal[v]), int(v)))
     if not np.isfinite(dist[1]):
         return None
     chain, k = [], 1
