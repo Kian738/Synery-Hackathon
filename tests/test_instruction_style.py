@@ -48,3 +48,20 @@ def test_the_benchmark_answer_line_does_not_depend_on_step_wording():
     rooms = [s for s, v in building.spaces.items() if v["type"] == "room"]
     reply = answer(DATA / "dev" / "proc-factory-dev-003", f"How do I get from {building.label(rooms[0])} to {building.label(rooms[5])}?")
     assert "Answer:" in str(reply)
+
+
+def test_icons_match_what_the_step_does():
+    """The icon is the first thing read: a floor change shows a lift or stairs, a turn its direction, the start a dot, the end a pin."""
+    allowed = {"start": {"start"}, "arrive": {"arrive"}, "outside": {"outside"}, "floor": {"lift", "stairs"}, "walk": {"straight", "left", "right", "back"}}
+    seen = 0
+    for _, route in routes():
+        steps = route.guide["steps"]
+        assert steps[0]["kind"] == "start" and steps[-1]["kind"] == "arrive"
+        for step in steps:
+            seen += 1
+            assert step["icon"] in allowed[step["kind"]], (step["kind"], step["icon"], step["text"])
+            if step["kind"] == "floor":
+                assert step["icon"] == ("lift" if "lift" in step["text"].lower() else "stairs"), step["text"]
+            if step["kind"] == "walk" and step["icon"] in ("left", "right"):
+                assert step["icon"] in step["text"].lower(), step["text"]
+    assert seen > 20

@@ -40,7 +40,7 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   stairs: <path d="M3 20h5v-5h5v-5h5V5h3" />,
-  outside: <path d="M14 4h6v16h-6M3 12h11M9 7l5 5-5 5" />,
+  outside: <path d="M3 20h18M12 4v3M5.6 7.6l2 2M18.4 7.6l-2 2M7 16a5 5 0 0 1 10 0" />,
   arrive: (
     <>
       <path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z" />
@@ -51,7 +51,7 @@ const PATHS: Record<string, React.ReactNode> = {
   coffee: <path d="M4 9h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 11h2a2 2 0 0 1 0 4h-2M8 3c0 1.5 1 1.5 1 3M12 3c0 1.5 1 1.5 1 3" />,
   kitchen: <path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 3c-2 0-3 3-3 7h3v11" />,
   meeting: <path d="M3 18h18M6 18v-6h12v6M9 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0" />,
-  exit: <path d="M13 4h7v16h-7M4 12h10M10 8l4 4-4 4" />,
+  exit: <path d="M10 4H4v16h6M8 12h12M16 8l4 4-4 4" />,
   aid: <path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z" />,
   printer: <path d="M7 8V3h10v5M5 8h14a2 2 0 0 1 2 2v6h-4M3 16v-6a2 2 0 0 1 2-2M7 14h10v7H7z" />,
   lab: <path d="M9 3h6M10 3v6l-5 10a1 1 0 0 0 1 2h12a1 1 0 0 0 1-2l-5-10V3M7.5 15h9" />,
@@ -73,6 +73,8 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
 };
+
+export const PICTOGRAM_NAMES = Object.keys(PATHS);
 
 export function Pictogram({ name, size = 20, className = "", title }: { name: string; size?: number; className?: string; title?: string }) {
   return (

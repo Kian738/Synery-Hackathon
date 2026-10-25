@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router";
 import { AgentReply } from "../components/AgentReply";
 import {TurnResultLinks} from "../components/TurnResultLinks";
 import {ComparisonCard} from "../components/ComparisonCard";
-import {ExploreTools,rememberPlace} from "../components/ExploreTools";
 import {readLocal} from "../lib/share";
 import {ScenarioPanel} from '../components/ScenarioPanel';
 import { ToolTrace } from "../components/ToolTrace";
@@ -38,7 +37,6 @@ export default function Navigator() {
   const [voiceOut, setVoiceOut] = useState(false);
   const [weakOpen,setWeakOpen]=useState(false);
   const [scenarioOpen,setScenarioOpen]=useState(false);
-  const [exploreOpen,setExploreOpen]=useState(false);
   const [scenarioMark,setScenarioMark]=useState<ScenarioMark|null>(null);
   const scenarioZones=useMemo(()=>{const z:Record<string,string>={};Object.entries(scenarioMark?.crowd??{}).forEach(([id,n])=>{z[id]=n===2?"crowd2":"crowd1";});scenarioMark?.responder?.spaces.forEach(id=>{z[id]="responder";});return z;},[scenarioMark]);
   useEffect(()=>{if(nav.scenarioIn)setScenarioOpen(true);},[nav.scenarioIn]);
@@ -53,11 +51,10 @@ export default function Navigator() {
   const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow" | "exterior">(params.get("view") === "2d" ? "2d" : "3d");
-  const savedScope = (() => { try { const v = sessionStorage.getItem("floorwise.scope"); return v === "current" || v === "route" || v === "building" ? v : null; } catch { return null; } })();
-  const [scope, setScope] = useState<"current"|"route"|"building">(savedScope ?? "current");
-  const scopeTouched = useRef(savedScope !== null);
-  /** The person's own choice always wins and is remembered for the session; until then a multi-floor route opens as "Route floors" with focus on. */
-  const chooseScope = (v: "current"|"route"|"building") => { scopeTouched.current = true; try { sessionStorage.setItem("floorwise.scope", v); } catch { /* storage blocked */ } setScope(v); };
+  const [scope, setScope] = useState<"current"|"route"|"building">("building");
+  const scopeTouched = useRef(false);
+  /** Opening a map shows the whole building; a new route switches to "Route floors" (or this floor) with focus on. Choosing a view by hand wins until the next route or map. */
+  const chooseScope = (v: "current"|"route"|"building") => { scopeTouched.current = true; setScope(v); };
   const [exploded,setExploded]=useState(true);
   const [focusOn,setFocusOn]=useState(true),[guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
@@ -73,18 +70,16 @@ export default function Navigator() {
     const stride = Math.max(1, Math.ceil(pts.length / 400));
     return pts.filter((_, i) => i % stride === 0 || i === pts.length - 1).map(p => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100] as [number, number]);
   }, [nav.route, nav.activeStep]);
-  useEffect(() => { if (!nav.route || scopeTouched.current) return; setScope(nav.route.floors.length > 1 ? "route" : "current"); }, [nav.route]);
+  useEffect(() => { if (!nav.route) return; scopeTouched.current = false; setScope(nav.route.floors.length > 1 ? "route" : "current"); setFocusOn(true); }, [nav.route]);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [buildingImport, setBuildingImport] = useState(() => params.get("import") === "1"); // no visible button: building from a plan stays reachable by URL and tests
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
-  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);setExploreOpen(false);linked.current=false; }, [buildingId]);
+  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("building");scopeTouched.current=false;setFocusOn(true);setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);linked.current=false; }, [buildingId]);
   // Deep link (shareable, QR at a door): ?building=…&at=<space id>&to=<place>&step_free=1
   const linked = useRef(false);
   useEffect(()=>{document.documentElement.classList.toggle('high-contrast',readLocal<unknown>('floorwise:contrast',false)===true);document.documentElement.classList.toggle('large-text',readLocal<unknown>('floorwise:large-text',false)===true);},[]);
-  useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setExploreOpen(v=>!v);setToolsOpen(false);setScenarioOpen(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
-  useEffect(()=>{if(selected)rememberPlace(buildingId,selected.id);},[buildingId,selected?.id]);
   useEffect(()=>{if(selected&&selected.floor_id!==nav.floorId)setSelected(null);},[nav.floorId]);
   useEffect(()=>{const node=sceneHost.current;if(!node)return;const wheel=(e:WheelEvent)=>{if(e.ctrlKey)e.preventDefault();};node.addEventListener('wheel',wheel,{passive:false});return()=>node.removeEventListener('wheel',wheel);},[nav.geometry?.building.id]);
   useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){setSelected(null);setPicking(false);setShowKey(false);setWeakOpen(false);setPhoneOpen(false);setPlanExpanded(false);setQuestionOpen(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
@@ -246,7 +241,6 @@ export default function Navigator() {
             </Popover>}
             <Popover label="Building tools" icon="tools" open={toolsOpen} onOpenChange={setToolsOpen} className="building-tools">
               {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
-              {!following&&<button onClick={()=>{setExploreOpen(true);setToolsOpen(false);setScenarioOpen(false);setPlanExpanded(false);setWeakOpen(false);setPhoneOpen(false);}}><Pictogram name="pin" size={18}/>Find, save &amp; share</button>}
               {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
                 onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
@@ -273,7 +267,6 @@ export default function Navigator() {
           <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={nav.highlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
-        {exploreOpen&&<ExploreTools geometry={g} selected={selected} here={nav.here} route={nav.route} stepFree={nav.stepFree} onClose={()=>setExploreOpen(false)} onSelect={focusRoom} onHighlight={ids=>{nav.setHighlights(new Set(ids));const entity=g.assets.find(a=>a.id===ids[0]);if(entity)nav.setFloorId(entity.floor_id);}} onCompare={floor=>void nav.compareItems(floor)} onPlan={async stops=>{await nav.planStops(stops);setView('3d');}}/>}
         {nav.closeConfirm && <div role="alertdialog" aria-label="Confirm closing" className="model-notice k-confirm">
           <span><b>Close {nav.closeConfirm.name}?</b> {nav.closeConfirm.count} of {nav.closeConfirm.of} rooms would lose their way out.</span>
           <button className="k-ctl" onClick={() => nav.setCloseConfirm(null)}>Cancel</button>
