@@ -405,7 +405,15 @@ function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode,
           <p className="mt-1.5 text-sm text-ink-4">Nearest match. Also: {meta.alternatives.map((a) => `${a.room} (${a.walk_m} m)`).join(", ")}</p>
         ) : null}
       </div>
-      <div className="current-decision"><span>Decision {active+1} of {steps.length}</span><p>{steps[active]?.text}</p></div>
+      <div className="current-decision k-now">
+        <div className="k-now-top">
+          <span className="k-now-badge"><Pictogram name={steps[active]?.icon ?? "straight"} size={20} /></span>
+          <span className="k-now-count">Step {active + 1} of {steps.length}</span>
+          <span className="k-dots" aria-hidden="true">{steps.map((_, i) => <i key={i} data-on={i <= active} />)}</span>
+        </div>
+        <p className="k-now-text">{steps[active]?.text}</p>
+        {steps[active + 1] && <p className="k-next-step"><b>Next</b>{steps[active + 1].short}</p>}
+      </div>
       <details className="route-itinerary"><summary>All {steps.length} instructions</summary><ol className="divide-y divide-ink-2">
         {steps.map((s, i) => (
           <StepRow key={i} step={s} index={i} active={i === active} onClick={() => onStep(i)} floorName={floors.find((f) => f.id === s.floor_id)?.name} />

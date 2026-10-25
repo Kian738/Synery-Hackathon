@@ -137,3 +137,22 @@
 .turn-usage summary { cursor:pointer; color:var(--k-mute); font:500 12px var(--font-sans); }
 .k-search { flex:none; }
 .k-pop-title { flex:none; }
+
+/* route card: what to do now, what comes next */
+.k-now { padding:14px var(--gap-group) 12px !important; background:var(--k-bg-hi); border-top:0 !important; border-bottom:1px solid var(--k-line); }
+.k-now-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.k-now-badge { display:grid; place-items:center; width:32px; height:32px; border-radius:var(--r-ctl); background:var(--k-accent); color:#1c2226; flex:none; }
+.k-now-count { font:600 12px var(--font-sans); text-transform:uppercase; letter-spacing:.06em; color:var(--k-mute); }
+.k-dots { margin-left:auto; display:flex; gap:4px; }
+.k-dots i { width:14px; height:4px; border-radius:2px; background:var(--k-line); }
+.k-dots i[data-on="true"] { background:var(--k-accent); }
+.k-now-text { margin:0; font:600 18px/1.35 var(--font-sans); color:var(--k-ink); }
+.k-next-step { margin:8px 0 0; display:flex; gap:8px; font:500 13px/1.35 var(--font-sans); color:var(--k-mute); }
+.k-next-step b { color:var(--k-accent); font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.06em; padding-top:2px; }
+.agent-reply>p:first-child { font-weight:600; font-size:16px; color:var(--k-ink); }
+.agent-reply>p:not(:first-child) { color:#c9d6db; }
+.agent-reply li { margin:3px 0; }
+.agent-reply strong, .agent-reply b { color:var(--k-ink); }
+.current-decision.k-now .k-now-badge { color:#1c2226; background:var(--k-accent); }
+.current-decision.k-now .k-now-count { color:var(--k-mute); font-size:12px; }
+.current-decision.k-now .k-now-text { color:var(--k-ink); }
