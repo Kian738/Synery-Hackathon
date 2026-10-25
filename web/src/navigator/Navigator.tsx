@@ -29,6 +29,7 @@ import { useDemoLauncher } from "./useDemoLauncher";
 import { doorMarks } from "../lib/demo";
 import { spokenStep } from "../lib/guide";
 import { Loader } from "../components/Loader";
+import { stage, useStage } from "../chat/stage";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
@@ -191,7 +192,7 @@ export default function Navigator() {
   const tourFocus=(room:Space)=>{nav.setFloorId(room.floor_id);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
   const voice=useVoiceTour({spaces:g?.spaces,messages:nav.messages,busy:nav.busy,visualResult:nav.visualResult,highlights:nav.highlights,route:nav.route,setFloorId:nav.setFloorId,following,steps,activeStep:nav.activeStep,focusRoom:tourFocus,setFocusRequest});
   // Repeat a step: same speech as the automatic one (the voice hook highlights the rooms the sentence mentions).
-  const speakStep=(step?:{text:string;headline?:string;target?:string;short?:string;cue?:string;kind?:string}|null)=>{if(step)speak(spokenStep(step as never));};
+  const speakStep=(step?:{text:string;headline?:string;target?:string;short?:string;cue?:string;kind?:string}|null)=>{if(step)speak(spokenStep(step as never),undefined,{channel:"guide"});};
   const setVoiceOut=(on:boolean)=>{if(on!==voiceOut)voice.toggleReadAloud();};
   const {voiceOut,voiceFocusSpace,activeHighlights}=voice;
   const demo=useDemoLauncher({buildingId,geometryBuilding:g?.building.id,sessionReady:!!nav.sessionId&&!!g,auto:params.get("demo")==="fire",setBuilding:b=>setParams({building:b}),openPanel:()=>{setScenarioOpen(true);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);},voiceOut,setVoiceOut});
@@ -232,7 +233,7 @@ export default function Navigator() {
               active={nav.activeStep} onStep={focusStep} onClear={nav.clearRoute} onStepMode={() => { setView("guide");setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setStageExpanded(false); nav.setVisualResult(null); nav.setActiveStep(0); setSelected(null); }} floors={g.floors} />
           )}
           {!nav.route && nav.messages.length === 0 && (
-            <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} onDemo={compact?undefined:()=>void demo.start()} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
+            <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
           <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} understood={[nav.here?`From ${labelOf(g,nav.here)}`:"",nav.route&&nav.routeMeta?.to?`To ${nav.routeMeta.to}`:"",nav.stepFree?"Step-free":"",nav.closed.size?`${nav.closed.size} closed`:""].filter(Boolean)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} currentlySpeakingId={voice.currentlySpeakingId} onSpeak={voice.speakMessage} busy={nav.busy} onOption={(id,purpose)=>purpose==="choice"?nav.ask(id):nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
@@ -265,10 +266,7 @@ export default function Navigator() {
             {following&&<IconButton label="Focus on route" icon="focus" pressed={guideFocus} onClick={()=>setGuideFocus(v=>!v)}/>}
             {following&&vrOk&&<IconButton label="Enter VR" icon="cube" text="VR" onClick={()=>void xrStore.enterVR()}/>}
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={voice.toggleReadAloud}/>}
-            <IconButton label="Voice only" icon="mic" pressed={voice.voiceMode} onClick={voice.toggleVoiceMode}/>
             <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
-            {!following&&!compact&&<IconButton accent label="Run demo" text="Run demo" icon="play" onClick={()=>void demo.start()}/>}
-            {!following&&!compact&&nav.sessionId&&<IconButton accent label="Fire test: run the evacuation scenario in one click" text="Fire test" icon="focus" onClick={()=>{setScenarioOpen(true);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setQuickRun(n=>n+1);}}/>}
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
               <Segmented ariaLabel="Visible floors" value={scope} onChange={(v:string)=>setScope(v==="current"?"current":"building")} options={[
@@ -281,7 +279,7 @@ export default function Navigator() {
             <Popover label="Building tools" icon="tools" open={toolsOpen} onOpenChange={setToolsOpen} className="building-tools">
               {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
               {!following&&<button aria-pressed={stressOpen} onClick={()=>{setStressOpen(v=>!v);setScenarioOpen(false);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="aid" size={18}/>Evacuation test</button>}
-              {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
+              {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Fire test</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
                 onStep={action=>{if(!nav.route)return;if(action==="repeat"){speakStep(steps[nav.activeStep]);return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
@@ -297,7 +295,7 @@ export default function Navigator() {
               pins={pins} previewDoor={nav.previewDoor} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<Loader label={g.building.name} phrases={["Raising the floors","Setting the walls","Placing the furniture"]}/>}>
                 <Building3D heat={heat??undefined} pins={stressPins} doorMarks={marks} hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
-                  closed={nav.closed} previewDoor={ideaDoor??nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id??selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speakStep(steps[nav.activeStep])} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                  closed={nav.closed} previewDoor={ideaDoor??nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id??selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speakStep(steps[nav.activeStep])} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
@@ -318,7 +316,7 @@ export default function Navigator() {
         </div>}
         {nav.notice && !nav.closeConfirm && !nav.lastClosure && <div role="status" className="model-notice"><span>{nav.notice}</span>{/^No route/.test(nav.notice)&&nav.closed.size>0&&<button className="reopen-all" onClick={()=>[...nav.closed].forEach(id=>nav.toggleClosed(id))}>Reopen closed places</button>}<button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
         {stressOpen&&!following&&nav.sessionId&&<StressPanel geometry={g} sessionId={nav.sessionId} onClose={()=>setStressOpen(false)} onHeat={setHeat} onPins={setStressPins} onIdea={setIdeaDoor} onApplied={nav.apply}/>}
-        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel quickRun={quickRun} onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room&&!demo.active)focusRoom(room);if(voiceOut&&!demo.active&&!window.speechSynthesis?.speaking)speak(say);}} demo={demo.demo} onNarrate={demo.narrate} onDemoActive={demo.onActive} onFocus={id=>{const room=g.spaces.find(s=>s.id===id);if(room){nav.setFloorId(room.floor_id);focusRoom(room);}}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
+        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel quickRun={quickRun} onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room&&!demo.active)focusRoom(room);if(voiceOut&&!demo.active)speak(say,undefined,{channel:"narration",policy:"skip-if-busy"});}} demo={demo.demo} onNarrate={demo.narrate} onDemoActive={demo.onActive} onFocus={id=>{const room=g.spaces.find(s=>s.id===id);if(room){nav.setFloorId(room.floor_id);focusRoom(room);}}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
         {weakOpen&&!following&&!scenarioOpen&&<section className="stress-drawer" aria-label="Building stress test">
           <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>
           <p>Each result closes one connector independently and checks step-free routes to mapped exits.</p>
@@ -331,7 +329,7 @@ export default function Navigator() {
         {selected && !following && <RoomCard key={selected.id} space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
           onHere={() => { nav.setHere(selected.id); nav.setFloorId(selected.floor_id); setSelected(null); nav.setNotice(`Location set: ${selected.name}. Your green marker is set manually.`); }}
           onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} onFocus={()=>focusRoom(selected)} />}
-        {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking();}} />}
+        {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking("guide");}} />}
       </main>
       {buildingImport && <BuildDialog onClose={() => setBuildingImport(false)} onBuilt={id => {setBuildingImport(false);setParams({building:id});api.buildings().then(setBuildings);}} />}
 
@@ -345,6 +343,9 @@ function VisualAnswer({result,total,sessionId,onClose,onPick,onFloor,geometry}:{
   const [retry,setRetry]=useState(0);
   useEffect(()=>{setOffset(0);setRows([]);setRoom('');},[result.id]);
   useEffect(()=>{if(result.kind==='comparison')return;let current=true;setError('');setRows([]);api.resultPage(sessionId,result.id,offset,grouped?(room?'items':'rooms'):'default',room).then(page=>{if(current){setRows(page.rows);setPageTotal(page.total);}}).catch(e=>{if(current)setError(e.message);});return()=>{current=false;};},[sessionId,result.id,offset,grouped,room,retry]);
+  const stageNow=useStage();
+  useEffect(()=>{stage.setNumbered(rows.slice(0,9).map((row,i)=>({id:String(row.id),n:i+1})));},[rows]);
+  useEffect(()=>()=>stage.clear(),[]);
   if(result.kind==='comparison')return <ComparisonCard result={result} session={sessionId} onPick={onPick} onClose={onClose}/>;
   return <section className="visual-answer" aria-label="Visual answer">
     <header><span>{grouped?'Equipment by room':result.kind.replaceAll('_',' ')}</span><button aria-label="Close visual answer" onClick={onClose}>Close</button></header>
@@ -357,7 +358,7 @@ function VisualAnswer({result,total,sessionId,onClose,onPick,onFloor,geometry}:{
     {Array.isArray(result.measurements.assumptions)&&<details><summary>Inputs, method and assumptions</summary><p>{String(result.measurements.method??'')}</p><ul>{result.measurements.assumptions.map((a,i)=><li key={i}>{String(a)}</li>)}</ul></details>}
     {error&&<p role="alert">{error.includes('404')?'This earlier result expired. Use Run again on its chat card.':error}<button onClick={()=>setRetry(n=>n+1)}>Retry results</button></p>}
     {!rows.length&&pageTotal>0&&!error&&<p role="status">Loading results…</p>}
-    <ol className="result-list">{rows.map((row,i)=><li key={String(row.id??i)}><button onClick={()=>geometry.floors.some(f=>f.id===row.id)?onFloor(String(row.id)):onPick(String(row.id))} disabled={!geometry.spaces.some(s=>s.id===row.id)&&!geometry.assets.some(a=>a.id===row.id)&&!geometry.floors.some(f=>f.id===row.id)}><span>{String(row.label??row.name??row.id)}</span><b>{row.count!==undefined?String(row.count):row.area_m2!==undefined?`${row.area_m2} m²`:row.overlap_m2!==undefined?`${row.overlap_m2} m² overlap`:row.reachable!==undefined?(row.reachable?'Reachable':'Unavailable'):row.before_m!==undefined?`${row.before_m} → ${row.after_m} m`:'Show'}</b></button>{grouped&&!room&&<button aria-label={`Items in ${row.label}`} onClick={()=>{setRoom(String(row.id));setOffset(0);}}>Items</button>}</li>)}</ol>
+    <ol className="result-list">{rows.map((row,i)=><li key={String(row.id??i)} data-pulse-row={stageNow.pulse===String(row.id)||undefined}><button onMouseEnter={()=>stage.pulse(String(row.id))} onMouseLeave={()=>stage.pulse(null)} onFocus={()=>stage.pulse(String(row.id))} onBlur={()=>stage.pulse(null)} onClick={()=>geometry.floors.some(f=>f.id===row.id)?onFloor(String(row.id)):onPick(String(row.id))} disabled={!geometry.spaces.some(s=>s.id===row.id)&&!geometry.assets.some(a=>a.id===row.id)&&!geometry.floors.some(f=>f.id===row.id)}>{i<9&&<i className="k-num" aria-hidden="true">{i+1}</i>}<span>{String(row.label??row.name??row.id)}</span><b>{row.count!==undefined?String(row.count):row.area_m2!==undefined?`${row.area_m2} m²`:row.overlap_m2!==undefined?`${row.overlap_m2} m² overlap`:row.reachable!==undefined?(row.reachable?'Reachable':'Unavailable'):row.before_m!==undefined?`${row.before_m} → ${row.after_m} m`:'Show'}</b></button>{grouped&&!room&&<button aria-label={`Items in ${row.label}`} onClick={()=>{setRoom(String(row.id));setOffset(0);}}>Items</button>}</li>)}</ol>
     {pageTotal>25&&<nav aria-label="Result pages"><button disabled={offset===0} onClick={()=>setOffset(Math.max(0,offset-25))}>Previous</button><span>{offset+1}–{Math.min(offset+25,pageTotal)} of {pageTotal}</span><button disabled={offset+25>=pageTotal} onClick={()=>setOffset(offset+25)}>Next</button></nav>}
     <p className="result-provenance">{result.entities.length} matching entities across {result.floor_ids.length} floors. Lists are paged; map matches are complete.</p>
   </section>;
@@ -484,7 +485,7 @@ function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, on
         if(m.role==="trace")return <ToolTrace key={m.id} activities={m.activities} busy={m.busy}/>;
         if(m.role==='results')return <TurnResultLinks key={`results-${m.id}`} results={m.results} floors={geometry.floors} onResult={onResult} onRerun={onRerun} busy={busy}/>;
         if (m.role === "user") return <p key={m.id} className="ml-10 border-r-4 border-concrete pr-3 text-right text-[15.5px] text-concrete">{m.text}</p>;
-        if (m.role === "error") return <p key={m.id} className="border-l-4 border-signal bg-ink-2 px-3 py-2 text-[14.5px]"><span>{m.text}</span>{m.query&&<button className="retry-answer" disabled={busy} onClick={()=>onRerun(m.query!)}>Try this question again</button>}</p>;
+        if (m.role === "error") return <div key={m.id} className="k-error-card" aria-label="Answer failed"><b>Couldn’t answer that</b><p>{m.text}</p>{m.query&&<button className="retry-answer" disabled={busy} onClick={()=>onRerun(m.query!)}>Retry</button>}</div>;
         if (m.role === "options")
           return (
             <div key={m.id}>
@@ -566,7 +567,7 @@ function Composer({ busy, onSend,onStop }: { busy: boolean; onSend: (t: string) 
 function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const i = Math.max(0,Math.min(steps.length-1,index));
   const step = steps[i];
-  useEffect(() => { if (step) speak(spokenStep(step)); }, [step]);
+  useEffect(() => { if (step) speak(spokenStep(step), undefined, { channel: "guide" }); }, [step]);
   if (!step) return null;
   return (
     <div className="absolute inset-0 flex flex-col bg-ink/95 p-6 text-white" role="dialog" aria-label="Step by step">
@@ -580,7 +581,7 @@ function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; inde
       </div>
       <div className="grid grid-cols-3 gap-2">
         <button disabled={i <= 1} onClick={() => onIndex(i - 1)} className="border border-ink-3 py-4 font-sign text-xl disabled:opacity-30">Back</button>
-        <button onClick={() => speak(spokenStep(step))} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
+        <button onClick={() => speak(spokenStep(step), undefined, { channel: "guide" })} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
         <button disabled={i >= steps.length - 1} onClick={() => onIndex(i + 1)} className="bg-mark py-4 font-sign text-xl font-bold text-ink disabled:opacity-30">Next</button>
       </div>
     </div>

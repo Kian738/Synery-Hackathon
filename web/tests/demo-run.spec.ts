@@ -7,6 +7,9 @@ test("Run demo tells the five beat story with spoken sentences, bars, amber capa
   test.setTimeout(240000);
   let widened = 0;
   page.on("response", r => { if (/\/widen$/.test(r.url()) && r.ok()) widened++; });
+  // The browser voice records each sentence; the server voice is off here (as without a key), so no credits are spent.
+  await page.route("**/api/voice/status", r => r.fulfill({ json: { tts: false, stt: false, provider: "browser" } }));
+  await page.route("**/api/voice/tts", r => r.fulfill({ status: 503, body: "off" }));
   await page.addInitScript(() => {
     const spoken: string[] = [], times: number[] = [];
     (window as unknown as { __times: number[] }).__times = times;
@@ -18,10 +21,11 @@ test("Run demo tells the five beat story with spoken sentences, bars, amber capa
       speak(u: Utterance) { spoken.push(u.text); times.push(performance.now()); speaking = true; setTimeout(() => { speaking = false; u.onend?.(); }, 300); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
     Object.defineProperty(window, "speechSynthesis", { value: synth, configurable: true });
   });
+  // The story must not depend on ElevenLabs: with cloud TTS off, speak() falls back to the (stubbed) browser voice deterministically.
+  await page.route(/\/api\/(voice\/)?tts$/, r => r.fulfill({ status: 503, body: "tts off in test" }));
   const scenario = await (await page.request.get("/api/demo/scenario")).json();
-  await page.goto("/");
+  await page.goto("/?demo=fire");
   const clicked = await page.evaluate(() => performance.now());
-  await page.getByRole("button", { name: "Run demo" }).first().click();
   const headline = page.locator(".scenario-headline");
   await expect(headline).toHaveText(/Everyone is out in \d+ s/, { timeout: 90000 });
   const before = Number((await headline.innerText()).match(/(\d+) s/)![1]);

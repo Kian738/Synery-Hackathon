@@ -209,7 +209,8 @@
 .k-sheet .k-ctl { white-space:normal; text-align:center; }
 .k-range { flex:1; min-width:0; accent-color:var(--k-accent); }
 .k-sheet .k-hint { padding:0; font-size:13px; line-height:1.45; }
-@media (max-width: 640px) { .k-sheet { left:var(--gap); right:var(--gap); width:auto; bottom:var(--gap); } }
+/* Phone: the stage is short, so the sheet becomes a bottom sheet over the whole viewport instead of being clipped inside the stage. */
+@media (max-width: 640px) { .k-sheet { position:fixed; left:var(--gap); right:var(--gap); width:auto; top:auto; bottom:var(--gap); max-height:min(72dvh, calc(100dvh - 2 * var(--gap-group) - var(--ctl))); z-index:60; } }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 /* ---- room popup, start picker, welcome, info popover: all on the kit ---- */
 .k-pop-panel.up { top:auto; bottom:calc(100% + var(--gap)); }
@@ -408,3 +409,17 @@ button, [role="button"], a { -webkit-tap-highlight-color:transparent; }
 .k-bar.planned i { background:var(--k-accent); }
 .k-bar span:last-child { color:var(--k-mute); }
 .k-bar.planned span:last-child { color:var(--k-accent); }
+
+/* ---- answer cards (chat agent): numbered result rows matching 3D badges, error card ---- */
+.k-num { flex:none; display:inline-grid; place-items:center; width:22px; height:22px; border-radius:var(--r-pill); background:var(--k-accent); color:#1c2226; font:700 12px var(--font-sans); font-style:normal; }
+.result-list li[data-pulse-row="true"] > button { background:var(--k-bg-hi); box-shadow:inset 3px 0 0 var(--k-accent); }
+.world-label.door-num { display:grid; place-items:center; min-width:22px; height:22px; padding:0 6px; border-radius:var(--r-pill); background:var(--k-accent); color:#10171c; border-color:#10171c; font:700 12px var(--font-sans); }
+.world-label.door-num.pulse { background:#fff; transform:scale(1.25); box-shadow:0 0 0 4px #ffd45c88; }
+.k-error-card { display:flex; flex-direction:column; gap:6px; padding:12px; border:1px solid #7a3b3b; border-radius:var(--r-ctl); background:#2a1a1c; color:#ffd2d2; font:500 14px/1.4 var(--font-sans); }
+.k-error-card b { font:700 14px var(--font-sans); color:#ffe4e4; } .k-error-card p { margin:0; }
+.k-error-card .retry-answer { align-self:flex-start; margin:0; }
+
+/* stair / lift cutout while Guide me changes floor */
+@keyframes k-interlude { 0% { opacity: 0 } 100% { opacity: 1 } }
+.k-interlude-floors { font-size: 1.15rem; font-weight: 600; margin-top: .5rem }
+.k-interlude-note { opacity: .8; font-size: .85rem; margin-top: .15rem }

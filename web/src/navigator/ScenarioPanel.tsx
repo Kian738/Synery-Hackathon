@@ -144,8 +144,10 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     onBeat?.(due.say, due.focus);
   }, [t, beats, playing]);
   useEffect(() => { beatIdx.current = 0; lastT.current = 0; lastBeatAt.current = 0; setBeatText(""); }, [report]);
-  useEffect(() => { if (!playing) stopSpeaking(); }, [playing]);
-  useEffect(() => () => { stopSpeaking(); }, []);
+  // Pausing the replay silences its beats; a running demo owns the narration channel and is never cut by the replay ending.
+  const wasPlaying = useRef(false);
+  useEffect(() => { if (wasPlaying.current && !playing && !demo) stopSpeaking("narration"); wasPlaying.current = playing; }, [playing]);
+  useEffect(() => () => { stopSpeaking("narration"); }, []);
   const fix = report?.answer?.fixes?.[0];
   const applyFix = async () => {
     if (!fix) return;

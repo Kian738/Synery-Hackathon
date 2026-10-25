@@ -1,0 +1,36 @@
+# secrets: never in the image
+.env
+.env.*
+!.env.example
+
+# local state and tooling
+.git
+.agent-*
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.playwright-mcp
+.cache
+runs
+agent_output
+reports
+research_notes
+submissions
+SUBMISSION
+
+# web build inputs/outputs rebuilt in the image
+web/node_modules
+web/dist
+web/test-results
+web/tests
+web/tsconfig.tsbuildinfo
+
+# large files the server does not need
+*.png
+!web/public/**
+*.pdf
+*.mp4
+docs/*.pdf
+docs/industrial-agents-hackathon-2026/.git
+docs/industrial-agents-hackathon-2026/starter_agent

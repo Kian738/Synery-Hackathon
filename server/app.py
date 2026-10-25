@@ -87,6 +87,11 @@ def record_build():
     app.state.boot_fingerprint = fingerprint()
 
 
+@app.get('/healthz')
+def healthz():  # cheap liveness probe for hosting platforms and keep-warm pings
+    return {'ok': True}
+
+
 @app.get('/api/version')
 def version():
     from eval.evidence import fingerprint
@@ -844,7 +849,8 @@ if WEB_DIST.exists():
     @app.get("/lab")
     @app.get("/lab/{rest:path}")
     def index(rest: str = "") -> FileResponse:
-        return FileResponse(WEB_DIST / "index.html")
+        # no-cache: a phone that kept an old index.html asks for deleted hashed assets and shows a blank page
+        return FileResponse(WEB_DIST / "index.html", headers={"Cache-Control": "no-cache"})
 
     # Files of web/public that must sit at the root: the install manifest and the app icons (a phone installs "Floorwise" to its home screen).
     _ROOT_FILES = {"manifest.webmanifest": "application/manifest+json", "icon-192.png": "image/png", "icon-512.png": "image/png",

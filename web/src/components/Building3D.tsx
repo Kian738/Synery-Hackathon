@@ -3,8 +3,11 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { smoothTurn } from "../lib/turn";
+import { rideMode } from "../lib/rideMode";
+import { InterludeHost } from "./StairInterlude";
 import { SceneAssets } from "./SceneAssets";
 import { Beacons, type BeaconPoint } from "./Beacons";
+import { useStage } from "../chat/stage";
 import type { DoorMark } from "../lib/demo";
 const TONE={amber:"#ffd45c",accent:"#85dfb2",responder:"#6cb6ff"};
 import { XR } from "@react-three/xr";
@@ -82,16 +85,22 @@ function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates,overlaps
   },[spaces,highlights,hazard,zones,plates,heat]);
   useEffect(()=>()=>batches.forEach(b=>b.geometry?.dispose()),[batches]);
   /** Where two rooms overlap in the data, the shared part is drawn once as the mix of both room colours (no flicker, nothing hidden). */
+  // The canvas uses a logarithmic depth buffer, which writes gl_FragDepth: polygonOffset is then ignored (proved by switching the log
+  // buffer off: the stripes vanish). So the blend is lifted 3 mm for real (log depth resolves ~0.1 mm at 200 m) and its colour follows the
+  // same recolouring as the base floors: heat wins, then hazard/responder/highlight/zone, then the room kind.
   const blends=useMemo(()=>{
     const byId=new Map(spaces.map(s=>[s.id,s]));
-    return (overlaps??[]).filter(o=>byId.has(o.a)&&byId.has(o.b)).map(o=>{
-      const shape=new THREE.Shape();o.polygon.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));
+    const colourOf=(s:Space)=>{const z=s.id===hazard?"hazard":zones?.[s.id]==="responder"?"responder":highlights.has(s.id)?"highlight":zones?.[s.id];return z?(z.startsWith("#")?z:ZONE_COLORS[z]??kindScene(s)):kindScene(s);};
+    return (overlaps??[]).filter(o=>byId.has(o.a)&&byId.has(o.b)).map((o,i)=>{
+      const shape=new THREE.Shape();o.polygon.forEach(([x,y],k)=>k?shape.lineTo(x,y):shape.moveTo(x,y));
       const g=new THREE.ShapeGeometry(shape);g.rotateX(-Math.PI/2);
-      return {key:`${o.a}|${o.b}|${o.polygon[0]?.join(",")}`,geometry:g,color:new THREE.Color(kindScene(byId.get(o.a)!)).lerp(new THREE.Color(kindScene(byId.get(o.b)!)),.5)};
+      const a=byId.get(o.a)!,b=byId.get(o.b)!,ha=heat?.[a.id],hb=heat?.[b.id];
+      const color=ha||hb?new THREE.Color(ha??hb).lerp(new THREE.Color(hb??ha),.5):new THREE.Color(colourOf(a)).lerp(new THREE.Color(colourOf(b)),.5);
+      return {key:`${o.a}|${o.b}|${o.polygon[0]?.join(",")}`,geometry:g,color,lift:.003+(i%4)*.0008};
     });
-  },[spaces,overlaps]);
+  },[spaces,overlaps,heat,hazard,zones,highlights]);
   useEffect(()=>()=>blends.forEach(b=>b.geometry.dispose()),[blends]);
-  return <group position={[0,elevation,0]}>{blends.map(b=><mesh key={b.key} geometry={b.geometry} raycast={()=>null} renderOrder={1}>
+  return <group position={[0,elevation,0]}>{blends.map(b=><mesh key={b.key} geometry={b.geometry} raycast={()=>null} renderOrder={1} position={[0,b.lift,0]}>
     <meshStandardMaterial color={b.color} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-60}/></mesh>)}{batches.map((b,index)=>b.geometry&&<mesh key={b.zone} geometry={b.geometry} receiveShadow
     onAfterRender={renderer=>{renderer.domElement.dataset.scenePainted="true";}}
     onClick={(e:ThreeEvent<MouseEvent>)=>{e.stopPropagation();if(e.delta>5)return;const room=b.ranges.find(r=>(e.faceIndex??0)<r.end);if(room)onPick?.(room.space);}}>
@@ -242,7 +251,9 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       if(!walkCache.current.has(key))walkCache.current.set(key,stairWalkFor(geometry,ride.from.floor_id,ride.to.floor_id,ride.from.node,ride.to.node));
       // Some supplied connectors join stair spaces that are metres apart on the plan. Gliding between them crosses rooms and walls,
       // so there the camera climbs in place inside each stop's shaft and cuts between the two, and never uses the flight line.
-      const jump=Math.hypot(ride.to.x-ride.from.x,ride.to.y-ride.from.y)>1.5;
+      // Only clean flights are walked (lib/rideMode); everything else cuts between the two stops instead of the buggy legs.
+      const kind=geometry.connectors.find(c=>c.space_ids.includes(ride.from.node)&&c.space_ids.includes(ride.to.node))?.kind??"";
+      const jump=rideMode({kind,from:ride.from,to:ride.to,flight:walkCache.current.get(key)??null})==="interlude";
       let line=jump?undefined:walkCache.current.get(key);
       if(line&&h1<h0)line=[...line].reverse();
       // Start the walk where the person really enters the stair space and end where the route continues upstairs: the flight line alone starts
@@ -268,8 +279,10 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       if(vrPose.active){vrPose.x=rx;vrPose.y=rh;vrPose.z=-ry;}else camera.position.copy(frame(rx,ry,rh+1.65));
       const lift=geometry.connectors.some(c=>c.kind==="lift"&&c.space_ids.includes(ride.from.node)&&c.space_ids.includes(ride.to.node));
       rideState.lift=lift?{nodes:[ride.from.node,ride.to.node],y:h0+(h1-h0)*e+.02}:null;
+      const label=(id:string)=>geometry.floors.find(f=>f.id===id)?.name??id;
+      rideState.interlude=jump?{kind:lift?"lift":kind,from:label(ride.from.floor_id),to:label(ride.to.floor_id)}:null;
     }else{
-      rideState.lift=null;
+      rideState.lift=null;rideState.interlude=null;
       // The camera path is already centred and clear of walls; nothing is pushed per frame (that made the picture jitter).
       if(vrPose.active){vrPose.x=p.x;vrPose.y=height;vrPose.z=-p.y;}else camera.position.copy(frame(p.x,p.y,height+1.65));
     }
@@ -395,24 +408,28 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   },[relevant,geometry,scope,floorId]);
   const connectorGeometry=useMemo(()=>relevant?{...geometry,connectors:geometry.connectors.filter(c=>c.space_ids.some(id=>relevant.has(id)))}:geometry,[geometry,relevant]);
   const [projectedLabels,setProjectedLabels]=useState<ProjectedLabel[]>([]);
+  const staged=useStage();
+  /** Numbered badges matching the numbered rows of the chat's result list (chat/stage.ts). */
+  const numberLabels=useMemo<SceneLabel[]>(()=>follow?[]:staged.numbered.flatMap(({id,n})=>{const a=geometry.assets.find(x=>x.id===id),s=a?null:geometry.spaces.find(x=>x.id===id);const floor=a?.floor_id??s?.floor_id;if(!floor||!visibleFloors.has(floor))return [];const p=a?a.position:(s!.anchor??s!.polygon[0]);return [{id:`num-${id}`,text:String(n),tone:staged.pulse===id?"num pulse":"num",position:[p[0],elevation(floor)+2.2,-p[1]] as [number,number,number]}];}),[staged,geometry,follow,visibleFloors,explode]);
   const sceneLabels=useMemo<SceneLabel[]>(()=>follow?[]:[
+    ...numberLabels,
     ...geometry.connectors.flatMap(c=>c.space_ids.flatMap(id=>{const s=geometry.spaces.find(s=>s.id===id&&s.floor_id===floorId);if(!s||!visibleFloors.has(s.floor_id)||!connectorSpaces.has(id))return [];const b=bounds(s.polygon);return [{id:`connector-${id}`,text:c.name,icon:c.kind,position:[(b.minX+b.maxX)/2,elevation(s.floor_id)+.7,-(b.minY+b.maxY)/2] as [number,number,number]}];})),
     ...geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{const p=s.anchor??s.polygon[0];return {id:`room-${s.id}`,text:s.name,position:[p[0],elevation(s.floor_id)+1.7,-p[1]] as [number,number,number]};}),
     ...(doorMarks??[]).filter(m=>visibleFloors.has(m.floor_id)).map(m=>({id:`door-${m.id}`,text:m.text,tone:m.tone,position:[m.x,elevation(m.floor_id)+1.4,-m.y] as [number,number,number]})),
     ...(visualResult?.kind==="intervention"?(()=>{const o=visualResult.measurements.proposed_opening as Opening|undefined;return o&&visibleFloors.has(o.floor_id)?[{id:"proposed",text:"Proposed opening · not applied",position:[o.position[0],elevation(o.floor_id)+1.8,-o.position[1]] as [number,number,number]}]:[];})():[])
-  ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode,doorMarks]);
+  ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode,doorMarks,numberLabels]);
   /** Found items and highlighted rooms get a pulsing beacon (at most 12, so a "show all chairs" answer stays readable). */
   const beaconPoints=useMemo(()=>{
     if(follow||(!highlights.size&&!pins?.length&&!doorMarks?.length))return [] as BeaconPoint[];
     const out:BeaconPoint[]=[];
-    if(highlights.size)for(const a of geometry.assets){if(out.length>=12)break;if(highlights.has(a.id)&&visibleFloors.has(a.floor_id))out.push({id:a.id,x:a.position[0],y:elevation(a.floor_id)+.05,z:-a.position[1]});}
-    if(out.length<12)for(const s of geometry.spaces){if(out.length>=12)break;if(highlights.has(s.id)&&visibleFloors.has(s.floor_id)){const p=s.anchor??s.polygon[0];out.push({id:s.id,x:p[0],y:elevation(s.floor_id)+.05,z:-p[1]});}}
+    if(highlights.size)for(const a of geometry.assets){if(out.length>=12)break;if(highlights.has(a.id)&&visibleFloors.has(a.floor_id))out.push({id:a.id,x:a.position[0],y:elevation(a.floor_id)+.05,z:-a.position[1],color:staged.pulse===a.id?"#ffffff":undefined});}
+    if(out.length<12)for(const s of geometry.spaces){if(out.length>=12)break;if(highlights.has(s.id)&&visibleFloors.has(s.floor_id)){const p=s.anchor??s.polygon[0];out.push({id:s.id,x:p[0],y:elevation(s.floor_id)+.05,z:-p[1],color:staged.pulse===s.id?"#ffffff":undefined});}}
     for(const p of pins??[])if(visibleFloors.has(p.floor_id))out.push({id:`pin-${p.id}`,x:p.x,y:elevation(p.floor_id)+.05,z:-p.y,color:"#ff5a5f"});
     for(const m of doorMarks??[])if(visibleFloors.has(m.floor_id))out.push({id:`door-${m.id}`,x:m.x,y:elevation(m.floor_id)+.05,z:-m.y,color:TONE[m.tone]});
     return out;
-  },[geometry,follow,highlights,visibleFloors,explode,pins,doorMarks]);
+  },[geometry,follow,highlights,visibleFloors,explode,pins,doorMarks,staged.pulse]);
 
-  return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
+  return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-pulse={staged.pulse??""} data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
       <XR store={xrStore}>
@@ -460,6 +477,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       {follow&&route&&model&&<VrRig card={guideCard(route,model,time,sample?.step??0)} onToggle={()=>setPlaying(v=>!v)}/>}
       </XR>
     </Canvas>
+    {follow&&<InterludeHost reduced={reduced}/>}
     {!follow&&<div className="scene-label-layer">{projectedLabels.map(l=><div key={l.id} style={{position:"absolute",left:l.x,top:l.y,transform:"translate(-50%,-50%)"}}>{l.icon?<span className="connector-icon" title={l.text}><Pictogram name={l.icon} size={17}/></span>:<span className={`world-label selected-label${l.tone?` door-${l.tone}`:""}`}>{l.text}</span>}</div>)}</div>}
     {follow&&sample?.transition&&<div className="landing-transition"><span>⇅</span><b>Changing floors</b><p>{geometry.floors.find(f=>f.id===sample.point?.floor_id)?.name}</p><small>Landing preview · interior geometry not surveyed</small></div>}
     {follow&&route&&model&&<GuidePlayer route={route} model={model} time={time} speed={speed} playing={playing} step={activeStep} reduced={reduced} transition={sample?.transition?"Floor transition":null}

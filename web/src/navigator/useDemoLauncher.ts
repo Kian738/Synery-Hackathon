@@ -23,7 +23,7 @@ export function useDemoLauncher(o: { buildingId: string; geometryBuilding?: stri
   }, []);
   /** One sentence at a time: resolves when the voice ends (or a generous cap), never sooner than 1.8 s. */
   const narrate = useCallback(async (text: string) => {
-    const spoken = new Promise<void>(done => { speak(text, done); setTimeout(done, 4000 + text.length * 100); });
+    const spoken = new Promise<void>(done => { speak(text, done, { channel: "narration", policy: "queue" }); setTimeout(done, 4000 + text.length * 100); });
     await Promise.all([spoken, wait(1800)]);
   }, []);
   const [opener, setOpener] = useState<Promise<void> | undefined>();

@@ -84,7 +84,7 @@ export function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName
     <section className="welcome-panel k-welcome">
       <h1>Know your building.<br />Find your way.</h1>
       <p>{hasHere ? "Pick a place, or just ask." : `Explore ${buildingName}, or describe where you want to go.`}</p>
-      {onDemo && <IconButton accent label="Run demo" text="Run demo" icon="focus" onClick={onDemo} />}
+      {onDemo && <IconButton accent label="Run demo" text="Run demo" icon="play" onClick={onDemo} />}
       {cats.length > 0 && (
         <div className="destination-shortcuts k-chips">
           {cats.slice(0, 6).map(c => (

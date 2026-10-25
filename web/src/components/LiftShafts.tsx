@@ -8,7 +8,7 @@ import { orientedRect, slotSpace } from "./Connectors3D";
  *  car is there, and doors that slide open when it arrives. Everything is generated from the lift spaces; no car data is supplied. */
 
 /** While Guide me rides a lift, the camera drives the car so both rise together. Set by RouteCamera, read here every frame. */
-export const rideState: { lift: null | { nodes: string[]; y: number } } = { lift: null };
+export const rideState: { lift: null | { nodes: string[]; y: number }; interlude: null | { kind: string; from: string; to: string } } = { lift: null, interlude: null };
 
 const CAR_SPEED_M_S = 3.2, OPEN_BAND_M = 0.25;
 const smooth = (t: number) => t * t * (3 - 2 * t);

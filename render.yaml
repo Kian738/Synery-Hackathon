@@ -1,0 +1,22 @@
+# Render Blueprint (runner-up). Free web service: sleeps after 15 min idle, ~1 min cold start, 512 MB RAM.
+# Note: the kit data (docs/industrial-agents-hackathon-2026) is gitignored, so a Git-based Render build
+# will NOT contain it. Either commit the data to a deploy branch or deploy a prebuilt image (see docs/DEPLOY.md).
+services:
+  - type: web
+    name: floorwise
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: false
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: FLOORWISE_PROVIDER
+        sync: false

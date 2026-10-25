@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Space, VisualResult, Route } from "../lib/types";
-import { audioStreamQueue, speak, stopSpeaking } from "../lib/voice";
+import { audioStreamQueue, speak, speaker, stopSpeaking } from "../lib/voice";
 import { spokenStep } from "../lib/guide";
 import type { GuideStep } from "../lib/types";
 import type { Message } from "./useNavigator";
@@ -139,7 +139,8 @@ export function useVoiceTour(o: {
   setFocusRequest: Dispatch<SetStateAction<{ id: string; revision: number } | null>>;
 }) {
   const { spaces, messages, busy, visualResult, highlights, route, setFloorId, following, steps, activeStep, setFocusRequest } = o;
-  const [voiceOut, setVoiceOut] = useState(true);
+  const [voiceOut, setVoiceOutState] = useState(() => !speaker.isMuted());
+  const setVoiceOut = useCallback((v: boolean) => { speaker.setMuted(!v); setVoiceOutState(v); }, []);
   const [voiceMode, setVoiceMode] = useState(false);
   const [voiceFocusSpace, setVoiceFocusSpace] = useState<Space | null>(null);
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
@@ -229,7 +230,7 @@ export function useVoiceTour(o: {
       audioStreamQueue.onEnd(() => setCurrentlySpeakingId(null));
     } else {
       setCurrentlySpeakingId(last.id);
-      speak(last.text, () => setCurrentlySpeakingId(null));
+      speak(last.text, () => setCurrentlySpeakingId(null), { id: `chat:${last.id}`, channel: "chat" });
     }
   }, [messages, busy, on]);
 
@@ -241,13 +242,15 @@ export function useVoiceTour(o: {
     if (spokenFor.current === key) return;
     spokenFor.current = key;
     if (busy || audioStreamQueue.hadChunks || audioStreamQueue.active) return;
-    speak(route.guide.spoken);
+    speak(route.guide.spoken, undefined, { id: `route:${key}`, channel: "chat", policy: "skip-if-busy" });
   }, [route, on, following, busy]);
 
   useEffect(() => {
-    if (on && following && steps[activeStep]) speak(spokenStep(steps[activeStep]));
-    return () => { stopSpeaking(); };
-  }, [on, following, activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Guide me: the card shows the step AHEAD (GuidePlayer), so that is what is read, once per step change, distance first.
+    const ahead = steps[Math.min(activeStep + 1, steps.length - 1)];
+    if (on && following && ahead) speak(spokenStep(ahead), undefined, { id: `guide:${route?.length_m}:${activeStep}`, channel: "guide" });
+  }, [on, following, activeStep]);
+  useEffect(() => { if (!following) speaker.cancel("guide"); }, [following]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const silence = useCallback(() => { stopSpeaking(); audioStreamQueue.reset(); setCurrentlySpeakingId(null); clearVoiceTour(); }, [clearVoiceTour]);
 
