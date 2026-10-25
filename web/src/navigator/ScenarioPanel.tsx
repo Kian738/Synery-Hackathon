@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../lib/api";
+import { api, type ScenarioCapacity } from "../lib/api";
 import { stopSpeaking } from "../lib/voice";
+import { IconButton, Segmented } from "../ui/kit";
 import type { Audience, Geometry, RobustReport, ScenarioMark, ScenarioReport, Space, UiEvent } from "../lib/types";
 
-const AUDIENCES: { id: Audience; label: string }[] = [
-  { id: "safety_officer", label: "Safety officer" }, { id: "occupant", label: "Occupant" },
-  { id: "builder", label: "Builder" }, { id: "regulator", label: "Regulator" },
+const AUDIENCES: { value: Audience; label: string; ariaLabel: string }[] = [
+  { value: "safety_officer", label: "Safety", ariaLabel: "Safety officer" }, { value: "occupant", label: "Occupant", ariaLabel: "Occupant" },
+  { value: "builder", label: "Builder", ariaLabel: "Builder" }, { value: "regulator", label: "Regulator", ariaLabel: "Regulator" },
 ];
-const ICON = { blocker: "Blocker", risk: "Risk", improve: "Improve", info: "Note" } as const;
+const SEVERITY = { blocker: "Blocker", risk: "Risk", improve: "Improve", info: "Note" } as const;
 const ORDER = ["blocker", "risk", "improve", "info"];
 
 export function headline(r: ScenarioReport): string {
@@ -43,6 +44,10 @@ export function crowdAt(e: NonNullable<ScenarioReport["evacuation"]>, t: number)
 }
 
 type Beat = { t: number; say: string; focus: string };
+type Numbers = { people: number | null; rate: number | null };
+
+const whole = (v: string) => { const n = Math.floor(Number(v)); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
+const positive = (v: string) => { const n = Number(v); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 
 export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat }: {
   onBeat?: (say: string, focus: string) => void;
@@ -55,6 +60,7 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   const [query, setQuery] = useState("");
   const [audience, setAudience] = useState<Audience>("safety_officer");
   const [report, setReport] = useState<ScenarioReport | null>(null);
+  const [used, setUsed] = useState<Numbers>({ people: null, rate: null });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [applied, setApplied] = useState(false);
@@ -64,6 +70,8 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   const [limit, setLimit] = useState<{ element: string; value: number } | null>(null);
   const [limitExit, setLimitExit] = useState("");
   const [limitMax, setLimitMax] = useState("10");
+  const [people, setPeople] = useState("");
+  const [rate, setRate] = useState("");
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const T = report?.evacuation?.T_s ?? 0;
@@ -74,7 +82,7 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
     if (!incoming) return;
     const h = geometry.spaces.find(x => x.id === incoming.hazard);
     if (h) { setHazard(h); onFloor(h.floor_id); }
-    setLimit(null); setReport(incoming.report);
+    setLimit(null); setUsed({ people: null, rate: null }); setReport(incoming.report);
     onHighlight(new Set([incoming.hazard, ...(incoming.report.evacuation?.bottleneck ?? [])]));
   }, [incoming?.n]);
   useEffect(() => {
@@ -142,18 +150,22 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
     const q = query.trim().toLowerCase();
     return q ? geometry.spaces.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6) : [];
   }, [query, geometry.spaces]);
-  const doorName = (id: string) => { const o = geometry.openings.find(x => x.id === id); return o ? `${o.space_ids.map(name).join(" / ")} (${o.width_m} m)` : id; };
   const run = async (h = hazard, a = audience, lim = limit) => {
     if (!h) return;
+    const mine: Numbers = { people: whole(people), rate: positive(rate) };
     setBusy(true); setError(""); setApplied(false); setMore(false); setRobust(null);
     try {
-      const r = await api.scenario(sessionId, h.id, a, lim ? [{ element: lim.element, kind: "total_persons", value: lim.value }] : []);
-      setReport(r);
+      // An exit limit replaces the passage rate on that one exit (the solver keeps one cap per element).
+      const caps: ScenarioCapacity[] = mine.rate ? geometry.openings.filter(o => o.id !== lim?.element).map(o => ({ element: o.id, kind: "rate_persons_per_s", value: mine.rate! / 60 })) : [];
+      if (lim) caps.push({ element: lim.element, kind: "total_persons", value: lim.value });
+      const r = await api.scenario(sessionId, h.id, a, caps, mine.people ? { [h.id]: mine.people } : undefined);
+      setUsed(mine); setReport(r);
       onHighlight(new Set([h.id, ...(r.evacuation?.bottleneck ?? [])]));
       onFloor(h.floor_id);
     } catch (e) { setError(e instanceof Error ? e.message : "Scenario failed"); }
     setBusy(false);
   };
+  const pick = (s: Space) => { setHazard(s); setReport(null); setLimit(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); };
   // One-click first result: start the fire in the room with the most seats (the same occupant estimate the solver uses).
   const busiest = useMemo(() => {
     const seats = new Map<string, number>();
@@ -166,47 +178,68 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   const suggested = fix && report?.findings.some(f => f.suggestion);
   const abstain = report?.abstained ? report.steps.find(s => !s.ok) : null;
   const reason = abstain?.reason ?? (typeof report?.abstained === "string" ? report.abstained : report?.abstained?.reason);
-  return <section className="stress-drawer scenario-panel" aria-label="Fire / evacuation scenario">
-    <header><div><span>Scenario</span><h2>Fire / evacuation</h2></div><button aria-label="Close scenario" onClick={onClose}>Close</button></header>
-    <p>{hazard ? <>Hazard room: <b>{hazard.name}</b></> : "Click a room on the plan or 3D view, or search below, to set where the fire starts."}</p>
-    {!hazard && busiest && <button className="stress-rerun" disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }}>Quick fire test: {busiest.name} (most seats)</button>}
-    <input aria-label="Search rooms" placeholder="Search rooms" value={query} onChange={e => setQuery(e.target.value)} />
-    {matches.map(s => <button key={s.id} className="stress-result" onClick={() => { setHazard(s); setReport(null); setLimit(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); }}>{s.name}</button>)}
-    <div role="radiogroup" aria-label="Who is this for" className="scenario-audience">
-      {AUDIENCES.map(a => <button key={a.id} role="radio" aria-checked={audience === a.id} onClick={() => { setAudience(a.id); if (report) run(hazard, a.id); }}>{a.label}</button>)}
-    </div>
-    <button className="stress-rerun" disabled={!hazard || busy} onClick={() => run()}>{busy ? "Checking…" : "Run scenario"}</button>
-    {error && <p role="alert">Could not run: {error}</p>}
-    <div aria-live="polite">{busy && <p>Checking the evacuation…</p>}</div>
+  const ev = report?.evacuation;
+  const exits = Object.keys(ev?.by_exit ?? {});
+  const fireOut = ev && hazard ? (ev.schedule ?? []).reduce((a, m) => a + (m.from_space === hazard.id ? m.persons : 0), 0) : 0;
+  const source = !ev ? "" : used.people || used.rate
+    ? `Your numbers: ${used.people ? `${Math.min(fireOut, used.people)} of ${used.people} people get out of the fire room` : "people estimated from seats"}${used.rate ? `; every door passes ${used.rate} people per minute` : ""}.${used.people ? " Other rooms are estimated from seats." : ""}`
+    : `${ev.total} people, estimated from seats.`;
+
+  return <section className="k-sheet scenario" aria-label="Fire / evacuation scenario">
+    <header className="k-sheet-head">
+      <div><div className="k-pop-title">Scenario</div><h2>Fire / evacuation</h2></div>
+      <IconButton label="Close scenario" icon="close" onClick={onClose} />
+    </header>
+    <p className="k-hint">{hazard ? <>Fire room: <b>{hazard.name}</b></> : "Click a room on the map, or search, to set where the fire starts."}</p>
+    {!hazard && busiest && <IconButton accent label={`Quick fire test: ${busiest.name} (most seats)`} text={`Quick fire test: ${busiest.name}`} disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }} />}
+    <input className="k-input" aria-label="Search rooms" placeholder="Search rooms" value={query} onChange={e => setQuery(e.target.value)} />
+    {matches.length > 0 && <div className="k-sheet-list">{matches.map(s => <button key={s.id} type="button" className="k-row" onClick={() => pick(s)}>{s.name}</button>)}</div>}
+    <div className="k-pop-title">Who is this for</div>
+    <Segmented ariaLabel="Who is this for" value={audience} options={AUDIENCES} onChange={a => { setAudience(a); if (report) run(hazard, a); }} />
+    <details className="k-sheet-more">
+      <summary>Your numbers</summary>
+      <p className="k-hint">Leave empty to estimate people from seats and door rates from door widths.</p>
+      <label className="k-field"><span>People in the fire room</span><input className="k-input" type="number" min={1} step={1} inputMode="numeric" value={people} onChange={e => setPeople(e.target.value)} /></label>
+      <label className="k-field"><span>Passage rate (people per minute)</span><input className="k-input" type="number" min={1} step={1} inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)} /></label>
+    </details>
+    <IconButton accent label="Run scenario" text={busy ? "Checking…" : "Run scenario"} disabled={!hazard || busy} onClick={() => run()} />
+    {error && <p role="alert" className="k-sheet-alert">Could not run: {error}</p>}
+    <div aria-live="polite">{busy && <p className="k-hint">Checking the evacuation…</p>}</div>
     {report && <>
       <h3 className="scenario-headline" role="status">{headline(report)}</h3>
-      {report.evacuation && limit && report.evacuation.evacuated < report.evacuation.total && <p className="scenario-refusal" role="alert">Cannot meet this limit: {exitName(limit.element)} takes at most {limit.value} people and no other exit can take the rest. {report.evacuation.total - report.evacuation.evacuated} people have no way out.</p>}
-      {replay && report.evacuation && T > 0 && <div className="scenario-replay">
+      {source && <p className="k-hint scenario-source">{source}</p>}
+      {ev && limit && ev.evacuated < ev.total && <p className="k-sheet-alert" role="alert">Cannot meet this limit: {exitName(limit.element)} takes at most {limit.value} people and no other exit can take the rest. {ev.total - ev.evacuated} people have no way out.</p>}
+      {replay && ev && T > 0 && <div className="k-sheet-group">
         <p className="sr-only scenario-beat" aria-live="polite">{beatText}</p>
-        <p className="scenario-counter">{Math.round(replay.out)} of {report.evacuation.total} out</p>
-        <div className="scenario-row">
-          <button onClick={() => { if (!playing && t >= T) setT(0); setPlaying(p => !p); }}>{playing ? "Pause" : "Play"}</button>
-          <input type="range" aria-label="Replay time" min={0} max={T} step={1} value={Math.round(t)} onChange={e => { setT(Number(e.target.value)); setPlaying(false); }} />
-          <small>{Math.round(t)} s</small>
+        <p className="scenario-counter">{Math.round(replay.out)} of {ev.total} out</p>
+        <div className="k-sheet-row">
+          <IconButton label={playing ? "Pause" : "Play"} icon={playing ? "pause" : "play"} onClick={() => { if (!playing && t >= T) setT(0); setPlaying(p => !p); }} />
+          <input type="range" className="k-range" aria-label="Replay time" min={0} max={T} step={1} value={Math.round(t)} onChange={e => { setT(Number(e.target.value)); setPlaying(false); }} />
+          <span className="k-hint">{Math.round(t)} s</span>
         </div>
-        <small className="scenario-legend">Red = fire, blue = responders, amber = slow door</small>
+        <p className="k-hint">Red: fire. Blue: responders. Amber: slow door. Darker rooms hold more people.</p>
       </div>}
-      {report.evacuation?.nearest_exit && report.evacuation.nearest_exit.T_s > report.evacuation.T_s && <p className="scenario-baseline">Everyone using their nearest exit instead: {report.evacuation.nearest_exit.T_s} s ({report.evacuation.nearest_exit.T_s - report.evacuation.T_s} s slower). Exits are planned together here.</p>}
-      {report.abstained && !report.evacuation ? <p>Stopped at {abstain ? `step ${abstain.id}: ` : "a step: "}{reason ?? "A step could not be completed."}</p> : <>
-        <details><summary>{report.steps.length} steps checked</summary>
+      {ev?.nearest_exit && ev.nearest_exit.T_s > ev.T_s && <p className="k-hint">Everyone using their nearest exit instead: {ev.nearest_exit.T_s} s ({ev.nearest_exit.T_s - ev.T_s} s slower). Exits are planned together here.</p>}
+      {report.abstained && !ev ? <p>Stopped at {abstain ? `step ${abstain.id}: ` : "a step: "}{reason ?? "A step could not be completed."}</p> : <>
+        <details className="k-sheet-more"><summary>{report.steps.length} steps checked</summary>
           <ol>{report.steps.map(s => <li key={s.id}>{s.ok ? s.summary : `Stopped: ${s.summary}`}</li>)}</ol></details>
-        {Object.keys(report.evacuation?.by_exit ?? {}).length > 0 && <div className="scenario-row scenario-limit">
-          <select aria-label="Exit to limit" value={limitExit || Object.keys(report.evacuation!.by_exit)[0]} onChange={e => setLimitExit(e.target.value)}>
-            {Object.keys(report.evacuation!.by_exit).map(id => <option key={id} value={id}>{exitName(id)}</option>)}
+        {findings.map((f, i) => <div key={i} className="k-sheet-finding" data-severity={f.severity}><b>{SEVERITY[f.severity]}</b><span>{f.title}</span><small>{f.detail}</small></div>)}
+        {report.findings.length > 3 && <IconButton label={more ? "Show fewer" : "Show more"} text={more ? "Show fewer" : "Show more"} onClick={() => setMore(v => !v)} />}
+        {suggested && fix && <IconButton accent label={applied ? "Applied to model" : `Apply to model (widen door to ${fix.width_m} m)`} text={applied ? "Applied to model" : `Apply to model: widen door to ${fix.width_m} m`} disabled={applied}
+          onClick={async () => { const { events } = await api.widen(sessionId, fix.element, fix.width_m); apply(events); await run(hazard, audience); setApplied(true); }} />}
+        {exits.length > 0 && <div className="k-sheet-group">
+          <div className="k-pop-title">Limit one exit (0 blocks it)</div>
+          <select className="k-input" aria-label="Exit to limit" value={limitExit || exits[0]} onChange={e => setLimitExit(e.target.value)}>
+            {exits.map(id => <option key={id} value={id}>{exitName(id)}</option>)}
           </select>
-          <input type="number" min={0} aria-label="Max people" placeholder="max people" value={limitMax} onChange={e => setLimitMax(e.target.value)} />
-          <button disabled={busy || limitMax === ""} onClick={() => { const l = { element: limitExit || Object.keys(report.evacuation!.by_exit)[0], value: Math.max(0, Math.floor(Number(limitMax))) }; setLimit(l); run(hazard, audience, l); }}>Re-run with limit</button>
+          <div className="k-sheet-row">
+            <input className="k-input k-num" type="number" min={0} aria-label="Max people" placeholder="Max people" value={limitMax} onChange={e => setLimitMax(e.target.value)} />
+            <IconButton label="Re-run with limit" text="Re-run with limit" disabled={busy || limitMax === ""} onClick={() => { const l = { element: limitExit || exits[0], value: Math.max(0, Math.floor(Number(limitMax))) }; setLimit(l); run(hazard, audience, l); }} />
+          </div>
         </div>}
-        {findings.map((f, i) => <div key={i} className="scenario-finding"><b>{ICON[f.severity]}</b> {f.title}<br /><small>{f.detail}</small></div>)}
-        {report.findings.length > 3 && <button onClick={() => setMore(v => !v)}>{more ? "Show fewer" : "Show more"}</button>}
-        {hazard && !robust && <button disabled={robustBusy} onClick={async () => { setRobustBusy(true); try { setRobust(await api.scenarioRobust(sessionId, hazard.id)); } catch (e) { setError(e instanceof Error ? e.message : "Check failed"); } setRobustBusy(false); }}>{robustBusy ? "Checking each exit…" : "Check if an exit fails"}</button>}
-        {robust && <p className="scenario-robust">If one exit is lost, everyone is out in {Math.max(...robust.before.map(r => r.T_s))} s{robust.fixes.length ? <>; widening {robust.fixes[0].name} to {robust.fixes[0].width_m} m brings that worst case to {Math.max(...robust.after.map(r => r.T_s))} s</> : "; no door change improves that"}.</p>}
-        {suggested && fix && <button className="stress-rerun" disabled={applied} onClick={async () => { const { events } = await api.widen(sessionId, fix.element, fix.width_m); apply(events); await run(hazard, audience); setApplied(true); }}>{applied ? "Applied to model" : `Apply to model (widen door to ${fix.width_m} m)`}</button>}
+        {hazard && !robust && <IconButton label="Check if an exit fails" text={robustBusy ? "Checking each exit…" : "Check if an exit fails"} disabled={robustBusy}
+          onClick={async () => { setRobustBusy(true); try { setRobust(await api.scenarioRobust(sessionId, hazard.id)); } catch (e) { setError(e instanceof Error ? e.message : "Check failed"); } setRobustBusy(false); }} />}
+        {robust && <p className="k-hint">If one exit is lost, everyone is out in {Math.max(...robust.before.map(r => r.T_s))} s{robust.fixes.length ? <>; widening {robust.fixes[0].name} to {robust.fixes[0].width_m} m brings that worst case to {Math.max(...robust.after.map(r => r.T_s))} s</> : "; no door change improves that"}.</p>}
       </>}
     </>}
   </section>;

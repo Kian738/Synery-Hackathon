@@ -22,7 +22,7 @@ def router(get_session, call):
     api.include_router(legacy)
     @api.post('/api/sessions/{session_id}/scenario')
     async def scenario(session_id:str,body:ScenarioBody|TemplateBody):
-        if isinstance(body,TemplateBody):return await asyncio.to_thread(run_template,session_id,body)
+        if isinstance(body,TemplateBody):return await asyncio.to_thread(run_template,session_id,body.model_dump())
         entry=get_session(session_id)
         def work():
             from floorwise.agent.scenarios import simulate
