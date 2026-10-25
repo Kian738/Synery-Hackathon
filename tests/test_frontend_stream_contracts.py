@@ -9,3 +9,10 @@ def test_frontend_sse_parser_handles_chunks_cancellation_and_interruption():
     if not node:pytest.skip('Node runtime unavailable')
     result=subprocess.run([node,'--experimental-strip-types','web/tests/api-contracts.mjs'],cwd=ROOT,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
+
+
+def test_room_links_and_structured_replies_render_without_confusing_measurements():
+    node=shutil.which('node')
+    if not node:pytest.skip('Node runtime unavailable')
+    result=subprocess.run([node,'--experimental-strip-types','web/tests/chat-contracts.mjs'],cwd=ROOT,capture_output=True,text=True,timeout=30)
+    assert result.returncode==0,result.stdout+result.stderr

@@ -373,3 +373,15 @@ body {
 @media(prefers-reduced-motion:reduce){.exterior-view {transition:none;}}
 
 .request-status {display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#c4d3d9;padding:8px 0;}.request-status small {white-space:nowrap;font-variant-numeric:tabular-nums;}.tool-evidence pre {font-size:11px;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;}.retry-answer {display:block;text-decoration:underline;margin-top:8px;min-height:40px;}.progress-chapters button {position:absolute;top:-7px;width:16px;height:20px;transform:translateX(-50%);pointer-events:auto;padding:0;border:0;background:transparent;}.progress-chapters button i {position:static;display:block;margin:auto;width:4px;height:8px;background:#d5e1e5;}.progress-chapters button i[data-floor=true] {height:11px;background:#ffe063;}.guide-player .progress-chapters {pointer-events:none;}.guide-player .progress-chapters button:focus-visible {outline:2px solid #87c9ff;}.turn-usage summary {cursor:pointer;min-height:24px;}.turn-usage div {padding:6px 0;overflow-wrap:anywhere;}
+
+/* One chat scroll surface; answers are compact semantic blocks, not paragraph-per-line. */
+.chat-workspace{min-width:0;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;}
+.chat-workspace .conversation-scroll{min-height:0;overflow:visible;flex:none;scrollbar-gutter:auto;}
+.agent-reply{font-size:15px;line-height:1.45;min-width:0;overflow-wrap:anywhere;}
+.agent-reply p{margin:0 0 10px;}.agent-reply ul,.agent-reply ol{padding-left:19px;margin:6px 0 10px;list-style-position:outside;}.agent-reply ul{list-style-type:disc;}.agent-reply ol{list-style-type:decimal;}.agent-reply li{padding-left:2px;margin:5px 0;}.agent-reply h4{font-weight:600;margin:10px 0 5px;}.agent-reply strong{font-weight:600;}.agent-reply .room-mention{white-space:normal;overflow-wrap:anywhere;}
+.navigator-shell .model-panel .room-inspector{width:min(290px,calc(100% - 24px));max-height:calc(100% - 96px);overflow-y:auto;padding:12px;box-shadow:0 5px 18px #0003;}.room-inspector h3{font-size:20px;}.room-card-details{font-size:13px;margin-top:6px;}.room-card-details>summary{cursor:pointer;color:#b6c5cc;min-height:30px;display:list-item;}.room-card-details p{margin:4px 0;}.room-inspector .focus-room{margin:4px 0;}
+@media(max-width:640px){.navigator-shell .model-panel .room-inspector{left:10px;right:10px;width:auto;}.agent-reply{font-size:14px;}}
+
+.large-text .agent-reply{font-size:17px!important;line-height:1.5;}
+
+.answer-result-group{font-size:13px;color:#b6c5cc;border-top:1px solid #34464f;padding-top:5px;}.answer-result-group summary{cursor:pointer;min-height:36px;padding:8px 0;}.answer-result-group ul{max-height:190px;overflow:auto;}.answer-result-group li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #34464f;}.answer-result-group small{display:block;font-size:12px;}.answer-result-group button{color:#8bd7ef;min-height:36px;text-decoration:underline;flex-shrink:0;}

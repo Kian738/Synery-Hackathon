@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { RoomText } from "../components/RoomText";
+import { AgentReply } from "../components/AgentReply";
+import {TurnResultLinks} from "../components/TurnResultLinks";
 import {ComparisonCard} from "../components/ComparisonCard";
 import {ExploreTools,rememberPlace} from "../components/ExploreTools";
 import {readLocal} from "../lib/share";
@@ -27,6 +28,7 @@ export default function Navigator() {
   const buildingId = params.get("building") ?? DEFAULT_BUILDING;
   const nav = useNavigator(buildingId);
   const sceneHost=useRef<HTMLDivElement>(null);
+  const chatWorkspace=useRef<HTMLDivElement>(null);
   const [buildings, setBuildings] = useState<BuildingRow[]>([]);
   const [selected, setSelected] = useState<Space | null>(null);
   const [voiceOut, setVoiceOut] = useState(false);
@@ -184,7 +186,7 @@ export default function Navigator() {
           )}
         </div>
 
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+        <div ref={chatWorkspace} className="chat-workspace scroll-thin min-h-0 flex-1 overflow-y-auto">
           {nav.visualResult&&nav.sessionId&&<VisualAnswer result={nav.visualResult} total={nav.visualResult.total_rows} sessionId={nav.sessionId} onClose={()=>{nav.setVisualResult(null);nav.setHighlights(new Set());}} onPick={id=>{const room=g.spaces.find(s=>s.id===id)??g.spaces.find(s=>s.id===g.assets.find(a=>a.id===id)?.space_id);if(room)focusRoom(room);}} onFloor={nav.setFloorId} geometry={g}/> }
           {nav.route && !nav.visualResult && (
             <RouteSign route={nav.route} meta={nav.routeMeta} stepFree={nav.route.constraints.includes("step-free")}
@@ -193,7 +195,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));}} onRerun={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -266,7 +268,7 @@ export default function Navigator() {
           <details><summary>Evidence and assumptions</summary><p>Computed by removing each connector from the route graph and comparing exit reachability. This is a single-failure sensitivity check, not a fire or crowd-capacity simulation. Occupancy and door throughput are not supplied.</p></details>
           <button className="stress-rerun" disabled={nav.busy} onClick={nav.inspectWeakPoints}>Run again</button>
         </section>}
-        {selected && !following && <RoomCard space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
+        {selected && !following && <RoomCard key={selected.id} space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
           onHere={() => { nav.setHere(selected.id); nav.setFloorId(selected.floor_id); setSelected(null); nav.setNotice(`Location set: ${selected.name}. Your green marker is set manually.`); }}
           onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} onFocus={()=>focusRoom(selected)} />}
         {stepMode && nav.route && <StepMode steps={steps} index={nav.activeStep} onIndex={focusStep} onClose={() => {setStepMode(false);stopSpeaking();}} />}
@@ -437,25 +439,27 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
   const [history,setHistory]=useState(false);
   const end = useRef<HTMLDivElement>(null);
   const pinned=useRef(true),lastUser=useRef<number|null>(null);
-  useEffect(()=>{const user=messages.filter(m=>m.role==='user').at(-1);if(user?.id!==lastUser.current){lastUser.current=user?.id??null;pinned.current=true;}const panel=end.current?.parentElement;if(panel&&pinned.current)panel.scrollTop=panel.scrollHeight;},[messages,busy]);
+  useEffect(()=>{const user=messages.filter(m=>m.role==='user').at(-1);if(user?.id!==lastUser.current){lastUser.current=user?.id??null;pinned.current=true;}const panel=end.current?.closest<HTMLElement>(".chat-workspace")??end.current?.parentElement;if(panel&&pinned.current)panel.scrollTop=panel.scrollHeight;},[messages,busy]);
+  useEffect(()=>{const panel=end.current?.closest<HTMLElement>(".chat-workspace");if(!panel)return;const update=()=>{pinned.current=panel.scrollHeight-panel.scrollTop-panel.clientHeight<80;};panel.addEventListener('scroll',update,{passive:true});return()=>panel.removeEventListener('scroll',update);},[messages.length,busy]);
   const turns=useMemo(()=>{
     const turns:Message[][]=[];
     messages.forEach(m=>{if(m.role==="user"||!turns.length)turns.push([]);turns[turns.length-1].push(m);});
     return turns;
   },[messages]);
-  const shown=history?turns:turns.slice(-2);
+  const shown=history?turns:turns.slice(-1);
   const visible=shown.flatMap(turn=>[
     ...turn.filter(m=>m.role==="user"),
     {role:"trace" as const,id:-(turn[0]?.id??1),activities:turn.filter((m):m is Extract<Message,{role:"activity"}>=>m.role==="activity"),busy:busy&&turn===turns.at(-1)},
-    ...turn.filter(m=>m.role!=="activity"&&m.role!=="user"&&(m.role!=="agent"||m.text.trim()))
+    ...turn.filter(m=>m.role!=="activity"&&m.role!=="user"&&m.role!=="result"&&(m.role!=="agent"||m.text.trim())),
+    {role:"results" as const,id:turn[0]?.id??0,results:turn.filter((m):m is Extract<Message,{role:"result"}>=>m.role==="result")}
   ]);
   if (!messages.length && !busy) return null;
   return (
-    <section aria-label="Conversation" aria-live="off" onScroll={e=>{const p=e.currentTarget;pinned.current=p.scrollHeight-p.scrollTop-p.clientHeight<80;}} style={{maxHeight:320,overflowY:"auto"}} className="space-y-3 px-4 py-4">
-      {turns.length>2&&<button className="conversation-history" aria-expanded={history} onClick={()=>setHistory(!history)}>{history?"Collapse history":`Earlier conversation (${turns.length-2} turns)`}</button>}
+    <section aria-label="Conversation" aria-live="off" className="conversation-scroll space-y-3 px-4 py-4">
+      {turns.length>1&&<button className="conversation-history" aria-expanded={history} onClick={()=>setHistory(!history)}>{history?"Collapse history":`Earlier conversation (${turns.length-1} turn${turns.length===2?"":"s"})`}</button>}
       {visible.map((m) => {
         if(m.role==="trace")return <ToolTrace key={m.id} activities={m.activities} busy={m.busy}/>;
-        if(m.role==='result')return <div key={m.id} className="answer-reference"><span>{m.text}</span><button onClick={()=>onResult(m.result)}>View results</button>{m.query&&<button onClick={()=>onRerun(m.query!)} disabled={busy}>Run again</button>}</div>;
+        if(m.role==='results')return <TurnResultLinks key={`results-${m.id}`} results={m.results} floors={geometry.floors} onResult={onResult} onRerun={onRerun} busy={busy}/>;
         if (m.role === "user") return <p key={m.id} className="ml-10 border-r-4 border-concrete pr-3 text-right text-[15.5px] text-concrete">{m.text}</p>;
         if (m.role === "error") return <p key={m.id} className="border-l-4 border-signal bg-ink-2 px-3 py-2 text-[14.5px]"><span>{m.text}</span>{m.query&&<button className="retry-answer" disabled={busy} onClick={()=>onRerun(m.query!)}>Try this question again</button>}</p>;
         if (m.role === "options")
@@ -487,7 +491,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
         return (
           <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
             {m.role==='agent'&&m.status==='interrupted'&&<p role="status">Answer interrupted. Computed results remain available.</p>}
-            {m.text.split("\n").filter(Boolean).map((line, i) => <p key={i}><RoomText text={line.replace(/\*\*/g, "")} spaces={geometry.spaces} onRoom={onRoom}/></p>)}
+            <AgentReply text={m.text} spaces={geometry.spaces} onRoom={onRoom}/>
           </div>
         );
       })}
@@ -544,15 +548,16 @@ function RoomCard({ space, building, onClose, onHere, onGo, closed, onToggleClos
     <div className="room-inspector absolute inset-x-3 bottom-3 border border-ink bg-white p-4 shadow-[4px_4px_0_var(--color-ink)] sm:left-auto sm:right-16 sm:w-[340px]" role="dialog" aria-label={space.name}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] text-ink-3">{ZONE_LABEL[zoneOf(space)]} · {floor?.name}</p>
+          <p className="text-[13px] text-ink-3">{floor?.name} · {area(space.polygon).toFixed(1)} m²</p>
           <h3 className="font-sign text-[22px] font-bold leading-tight">{space.name}</h3>
-          <p className="text-[14px] text-ink-3">{area(space.polygon).toFixed(1)} m²{space.ref && !space.name.includes(space.ref) ? ` · ${space.ref}` : ""}</p>
         </div>
         <button onClick={onClose} aria-label="Close"><Pictogram name="close" size={20} /></button>
       </div>
+      <details className="room-card-details"><summary>Room details</summary><p>{ZONE_LABEL[zoneOf(space)]}</p>
       <button className="focus-room" onClick={onFocus}><Pictogram name="fit" size={16}/>Focus room</button>
       {counts.length > 0 && <p className="mt-2 text-[14px] text-ink-2">{counts.slice(0,6).map(([t, n]) => `${n} ${t.replace(/_/g, " ")}`).join(" · ")}</p>}
       {counts.length>6&&<details><summary>All {counts.length} item types</summary>{counts.map(([t,n])=><p key={t}>{n} {t.replaceAll("_"," ")}</p>)}</details>}
+      </details>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button onClick={onGo} className="bg-ink py-2.5 font-sign text-[16px] font-bold text-white hover:bg-ink-2">Go here</button>
         <button onClick={onHere} className="border-2 border-escape py-2 font-sign text-[16px] font-bold text-escape hover:bg-escape hover:text-white">I'm here</button>
