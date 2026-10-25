@@ -173,7 +173,10 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
     cam.near=0.05;cam.fov=70;cam.far=Math.max(120,Math.min(saved.far,400));cam.updateProjectionMatrix();invalidate();
     return()=>{cam.near=saved.near;cam.fov=saved.fov;cam.far=saved.far;cam.updateProjectionMatrix();invalidate();};
   },[camera,invalidate]);
-  useEffect(()=>{first.current=true;invalidate();},[seekVersion,model,invalidate]);
+  // Snap the heading only on an explicit seek or a genuinely different route. A rebuilt-but-identical model (a state update
+  // at arrival creates one) must not reset it: that made the view spin up to 180 degrees in one frame.
+  const routeKey=model?`${model.duration.toFixed(3)}|${model.sections.length}|${model.first?.x}|${model.first?.y}`:"";
+  useEffect(()=>{first.current=true;invalidate();},[seekVersion,routeKey,invalidate]);
   useEffect(()=>{invalidate();},[lookOffset,invalidate]);
   useFrame((_,dt)=>{
     const now=performance.now(),elapsed=Math.max(0,(now-lastTick.current)/1000);lastTick.current=now;
@@ -228,7 +231,9 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
     if(first.current||!heading.current)heading.current=target.clone();
     else{ // turn toward the target: eased, but never faster than 80 degrees per second
       const cross=heading.current.x*target.z-heading.current.z*target.x,dot=heading.current.dot(target),angle=Math.atan2(cross,dot);
-      const step=Math.sign(angle)*Math.min(Math.abs(angle)*(1-Math.exp(-dt/0.45)),THREE.MathUtils.degToRad(80)*dt);
+      // A long frame (a stall, a busy machine) must not buy a long turn: the cap is per real frame, so clamp the frame time.
+      const turnDt=Math.min(dt,0.05);
+      const step=Math.sign(angle)*Math.min(Math.abs(angle)*(1-Math.exp(-turnDt/0.45)),THREE.MathUtils.degToRad(80)*turnDt);
       heading.current.applyAxisAngle(new THREE.Vector3(0,-1,0),step).normalize();
     }
     const direction=heading.current.clone();
