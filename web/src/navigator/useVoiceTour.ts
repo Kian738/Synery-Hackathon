@@ -175,6 +175,7 @@ export function useVoiceTour(o: {
 
   useEffect(() => {
     const onChunk = (e: Event) => {
+      if (followingRef.current) return;  // Guide me owns the camera while it walks the route
       if (!on || !spaces) return;
       const detail = (e as CustomEvent<{ text: string; audio?: HTMLAudioElement }>).detail;
       const text = detail?.text;
@@ -197,11 +198,14 @@ export function useVoiceTour(o: {
     };
   }, [on, spaces, visualResult, highlights, route, setFloorId, clearVoiceTour, tourRooms]);
 
+  const followingRef = useRef(following);
+  followingRef.current = following;
   const lastProcessed = useRef<number | null>(null);
   useEffect(() => {
     if (!spaces) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "agent" || last.id === lastProcessed.current || last.status === "streaming") return;
+    if (following) return;
     lastProcessed.current = last.id;
     const matched = findSpacesMentionedInText(last.text, spaces, visualResult, highlights);
     if (matched.length) tourRooms(matched);
