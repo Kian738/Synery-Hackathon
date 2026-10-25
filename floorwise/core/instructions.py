@@ -230,7 +230,8 @@ def _lead(building: Building, metres: float, passed: list[str], to: str | None =
     if metres < 4 and not passed:
         return ""
     through = f" along {_names(building, passed)}" if passed else ""
-    return f"Walk {metres:.0f} m{through}" + (f" to {to}" if to else "") + ". "
+    far = f"about {5 * round(metres / 5):.0f}" if metres >= 20 else f"{metres:.0f}"  # long distances in 5 m steps: nobody paces out 33 m exactly
+    return f"Walk {far} m{through}" + (f" to {to}" if to else "") + ". "
 
 
 def spoken(steps: list[Step]) -> str:

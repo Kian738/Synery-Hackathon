@@ -203,7 +203,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} understood={[nav.here?`From ${labelOf(g,nav.here)}`:"",nav.route&&nav.routeMeta?.to?`To ${nav.routeMeta.to}`:"",nav.stepFree?"Step-free":"",nav.closed.size?`${nav.closed.size} closed`:""].filter(Boolean)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -401,15 +401,12 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   const isFloor = step.kind === "floor";
   return (
     <li>
-      <button onClick={onClick} aria-current={active ? "step" : undefined}
-        className={`flex w-full gap-3 px-4 py-3 text-left ${active ? "bg-ink-2" : "hover:bg-ink-2/60"} ${isFloor ? "border-l-4 border-mark" : "border-l-4 border-transparent"}`}>
-        <span className={`grid h-9 w-9 shrink-0 place-items-center ${step.kind === "arrive" ? "bg-mark text-ink" : isFloor ? "bg-white text-ink" : "border border-ink-3 text-white"}`}>
-          <Pictogram name={step.icon} size={20} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15.5px] leading-snug">{step.text}</span>
+      <button type="button" onClick={onClick} aria-current={active ? "step" : undefined} className="k-step" data-kind={step.kind} data-active={active}>
+        <span className="k-step-icon"><Pictogram name={step.icon} size={18} /></span>
+        <span className="k-step-body">
+          <span className="k-step-text">{step.text}</span>
           {(step.metres > 0 || isFloor) && (
-            <span className="mt-0.5 block text-[13px] text-ink-4">{index > 0 && step.metres > 0 ? `${Math.round(step.metres)} m` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
+            <span className="k-step-meta">{index > 0 && step.metres > 0 ? `${Math.round(step.metres)} m` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
           )}
         </span>
       </button>
@@ -417,8 +414,8 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk }: {
-  suggest?:string[];onAsk?:(q:string)=>void;
+function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk,understood=[] }: {
+  suggest?:string[];onAsk?:(q:string)=>void;understood?:string[];
   busyLabel:string;onResult:(r:VisualResult & {total_rows:number})=>void;onRerun:(q:string)=>void;
   geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
@@ -484,6 +481,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
         );
       })}
       {busy&&<RequestStatus label={busyLabel}/>}
+      {!busy&&understood.length>0&&messages.at(-1)?.role==="agent"&&<p className="k-understood" aria-label="How this was understood"><span>Understood as</span>{understood.map(u=><b key={u}>{u}</b>)}</p>}
       {!busy&&onAsk&&suggest.length>0&&messages.at(-1)?.role==="agent"&&<div className="k-next" aria-label="Ask next">{suggest.filter(q=>q!==(messages.filter(m=>m.role==="user").at(-1) as {text?:string}|undefined)?.text).slice(0,3).map(q=><button key={q} className="k-ctl" onClick={()=>onAsk(q)}>{q}</button>)}</div>}
       <p className="sr-only" aria-live="polite">{!busy&&messages.some(m=>m.role==='agent'&&m.status!=='streaming')?'New answer available in the conversation.':''}</p>
       <div ref={end} />
