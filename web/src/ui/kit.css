@@ -99,3 +99,7 @@
   .k-rail { left: auto; right: var(--gap-group); top: calc(var(--gap-group) + 2 * var(--ctl) + 2 * var(--gap)); max-height: calc(100% - 200px); }
   .k-status .k-pill { height: auto; min-height: var(--ctl); padding: 4px 6px 4px 12px; flex-wrap: wrap; }
 }
+.k-ctl.accent:hover:not(:disabled) { background:#ffe082; border-color:#ffe082; color:#1c2226; }
+.k-ctl.accent:disabled { opacity:1; background:#3a3320; border-color:#4a4228; color:#c9bd8e; }
+.auto-speed { height:30px; padding:0 12px; border:1px solid var(--k-line); border-radius:var(--r-pill); background:transparent; color:var(--k-mute); font:var(--k-font); cursor:pointer; }
+.auto-speed[aria-pressed="true"] { background:var(--k-accent); border-color:var(--k-accent); color:#1c2226; }

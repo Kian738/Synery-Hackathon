@@ -123,9 +123,9 @@ def _tools():
 def test_an_exit_limit_reroutes_people_and_the_twin_gets_the_result():
     import json
     session, tools = _tools()
-    free = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"]))["evacuation"]
+    free = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], occupants={"Canteen 0.28": 40}, passage_rate_per_minute=60))["evacuation"]
     busiest = max(free["by_exit"], key=free["by_exit"].get)
-    limited = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], exit_limits=[{"exit": busiest, "max_people": 10}]))["evacuation"]
+    limited = json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], occupants={"Canteen 0.28": 40}, passage_rate_per_minute=60, exit_limits=[{"exit": busiest, "max_people": 10}]))["evacuation"]
     assert limited["by_exit"].get(busiest, 0) <= 10 < free["by_exit"][busiest]
     assert limited["T_s"] >= free["T_s"]
     events = [e for e in session.events if e["type"] == "scenario_result"]
@@ -135,7 +135,7 @@ def test_an_exit_limit_reroutes_people_and_the_twin_gets_the_result():
 def test_the_report_carries_a_responder_route_to_draw_and_replay_is_voice_controllable():
     session, tools = _tools()
     import json
-    json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"]))
+    json.loads(tools["plan_scenario"].fn(hazard_rooms=["Canteen 0.28"], occupants={"Canteen 0.28": 40}, passage_rate_per_minute=60))
     report = next(e for e in session.events if e["type"] == "scenario_result")["report"]
     assert report["responder"]["spaces"] and report["responder"]["elements"] and report["responder"]["arrival_s"] > 0
     tools["scenario_replay"].fn(action="seek", seconds=40)

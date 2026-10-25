@@ -230,8 +230,9 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
  focus?:boolean;
  hazard?:string;zones?:Record<string,string>;
  geometry:Geometry;floorId:string;route?:Route|null;previousRoute?:Route|null;highlights?:Set<string>;closed?:Set<string>;previewDoor?:Opening|null;
- lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
+ lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string;heading?:number})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
+  const [autoSpeed,setAutoSpeed]=useState(true);
   const [focusInner,setFocusInner]=useState(focusProp);
   const focus=onFocus?focusProp:focusInner;
   const setFocus=(f:(v:boolean)=>boolean)=>{const next=f(focus);if(onFocus)onFocus(next);else setFocusInner(next);};
@@ -246,7 +247,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   const pick=useCallback((space:Space)=>{if(!follow&&!gesture.current.moved)onSpaceClick?.(space);},[onSpaceClick,follow]);
   const [fitVersion,setFitVersion]=useState(0);
   const [playing,setPlaying]=useState(false),[time,setTime]=useState(0),[speed,setSpeed]=useState(1),[seekVersion,setSeekVersion]=useState(0);
-  const clock=useRef(0), model=useMemo(()=>route?presentation(follow?{...route,polyline:cameraPath(route.polyline,geometry.scene?.walls??[],doorsOf(geometry))}:route):null,[route,follow,geometry]);
+  const clock=useRef(0), model=useMemo(()=>route?presentation(follow?{...route,polyline:cameraPath(route.polyline,geometry.scene?.walls??[],doorsOf(geometry))}:route,autoSpeed):null,[route,follow,geometry,autoSpeed]);
   const sample=model?samplePreview(model,time):null;
   const connectorSpaces=useMemo(()=>new Set([...(route?.polyline.map(p=>p.node)??[]),...(selected?[selected]:[])]),[route,selected]);
   const activeOpening=useMemo(()=>{
@@ -262,7 +263,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   useEffect(()=>{if(model){setPlaying(false);seek(model.chapters[activeStep]??0);}},[seekRequest]);
   useEffect(()=>{const hidden=()=>{if(document.hidden)setPlaying(false);};document.addEventListener("visibilitychange",hidden);return()=>document.removeEventListener("visibilitychange",hidden);},[]);
   useEffect(()=>{if(!follow)return;const key=(e:KeyboardEvent)=>{if(e.defaultPrevented||/INPUT|SELECT|TEXTAREA|BUTTON/.test((e.target as HTMLElement)?.tagName))return;if(e.code==="Space"&&!reduced){e.preventDefault();if(!previewMode)onPreview?.();if(clock.current>=(model?.duration??Infinity))seek(0);setPlaying(v=>!v);}if(e.code==="ArrowRight"||e.code==="ArrowLeft"){e.preventDefault();seek(Math.max(0,Math.min(model?.duration??0,clock.current+(e.code==="ArrowRight"?5:-5))));}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);},[follow,previewMode,model,reduced,onPreview]);
-  const report=(value:number)=>{setTime(old=>Math.abs(old-value)>.001?value:old);if(!model)return;const s=samplePreview(model,value);if(s.step!==activeStep)onStep?.(s.step);if(s.point)onPosition?.(s.point);if(s.arrived)setPlaying(false);};
+  const report=(value:number)=>{setTime(old=>Math.abs(old-value)>.001?value:old);if(!model)return;const s=samplePreview(model,value);if(s.step!==activeStep)onStep?.(s.step);if(s.point)onPosition?.({...s.point,heading:(Math.atan2(s.heading[0],s.heading[1])*180/Math.PI+360)%360});if(s.arrived)setPlaying(false);};
   const box=useMemo(()=>bounds(geometry.spaces.flatMap(s=>s.polygon)),[geometry]);
   const fitBox=useMemo(()=>{
     const rooms=geometry.spaces.filter(s=>(scope!=="current"||visualResult?.kind==="stacking"||visualResult?.kind==="distance"||s.floor_id===floorId)&&(emphasis?s.id===emphasis:highlights.has(s.id)));
@@ -348,7 +349,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
     {follow&&route&&model&&<GuidePlayer route={route} model={model} time={time} speed={speed} playing={playing} step={activeStep} reduced={reduced} transition={sample?.transition?"Floor transition":null}
       onSeek={seek} onPlay={()=>{if(!previewMode)onPreview?.();if(sample?.arrived)seek(0);setPlaying(v=>sample?.arrived?true:!v);}}
       onPrevious={()=>{setPlaying(false);seek(model.chapters[activeStep-1]??0);}} onNext={()=>{setPlaying(false);seek(model.chapters[Math.min(activeStep+1,model.chapters.length-1)]??model.duration);}}
-      onSpeed={setSpeed} onRepeat={onRepeat} onExit={()=>{setPlaying(false);onFinish?.();}}/>}
+      onSpeed={setSpeed} auto={autoSpeed} onAuto={setAutoSpeed} onRepeat={onRepeat} onExit={()=>{setPlaying(false);onFinish?.();}}/>}
     {!follow&&route&&!visualResult&&scope!=="building"&&<div className="k-status"><button type="button" className="k-pill" data-testid="focus-toggle" aria-pressed={focus} onClick={()=>setFocus(v=>!v)}>{focus?<><b>Route area</b><span>{hiddenCount} other rooms dimmed</span><u>Show all rooms</u></>:<><b>All rooms</b><span>Everything shown</span><u>Focus on route</u></>}</button></div>}
     {!follow&&<div className="k-cam" aria-label="3D camera controls"><Dock col>
       <IconButton label={orbiting?"Move building":"Rotate building"} icon={orbiting?"orbit":"hand"} pressed={orbiting} onClick={()=>setOrbiting(!orbiting)}/>
