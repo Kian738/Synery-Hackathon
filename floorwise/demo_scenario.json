@@ -1,0 +1,12 @@
+{
+ "building_id": "osm-way61408163",
+ "room_id": "osm-way61408163-F0-S013",
+ "room": "Office 0371 (Ground floor)",
+ "people": 502,
+ "floors": 3,
+ "T_s": 115,
+ "ccrp_s": 115,
+ "nearest_exit_s": 245,
+ "fix_before_s": 115,
+ "fix_after_s": 75
+}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pictogram } from "../components/Pictogram";
+import { IconButton } from "../ui/kit";
 import { floorColor } from "../lib/floorColors";
 import { area } from "../lib/geometry";
 import { kindOf, ROOM_KIND } from "../lib/roomKinds";
@@ -74,7 +75,8 @@ export function StartPicker({ geometry, entrances, onPick }: { geometry: Geometr
   );
 }
 
-export function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examples }: {
+export function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examples, onDemo }: {
+  onDemo?: () => void;
   categories: { key: string; label: string; query: string; icon: string }[];
   onPick: (q: string) => void; onAsk: (t: string) => void; hasHere: boolean; buildingName: string; examples: string[];
 }) {
@@ -82,6 +84,7 @@ export function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName
     <section className="welcome-panel k-welcome">
       <h1>Know your building.<br />Find your way.</h1>
       <p>{hasHere ? "Pick a place, or just ask." : `Explore ${buildingName}, or describe where you want to go.`}</p>
+      {onDemo && <IconButton accent label="Run demo" text="Run demo" icon="focus" onClick={onDemo} />}
       {cats.length > 0 && (
         <div className="destination-shortcuts k-chips">
           {cats.slice(0, 6).map(c => (

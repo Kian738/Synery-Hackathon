@@ -1,4 +1,4 @@
-import type {Audience, BuildingRow, Geometry, Route, RobustReport, ScenarioReport, UiEvent } from "./types";
+import type {DemoScenario, Audience, BuildingRow, Geometry, Route, RobustReport, ScenarioReport, UiEvent } from "./types";
 
 export class ApiError extends Error {
   candidates: { id: string; label?: string }[];
@@ -25,6 +25,7 @@ type WithEvents<T> = { result: T; events: UiEvent[] };
 export type ScenarioCapacity = { element: string; kind: "total_persons" | "rate_persons_per_s"; value: number };
 
 export const api = {
+  demoScenario: () => fetch("/api/demo/scenario").then(r => json<DemoScenario>(r)),
   /** A capacity of 0 blocks that element (sent as a hazard); `people` overrides the seat estimate for the given spaces. */
   scenario: (id: string, hazardSpace: string, audience: Audience, capacities: ScenarioCapacity[] = [], people?: Record<string, number>, onStep?: (s: { id: string; op: string; ok: boolean; summary: string }) => void) => {
     const blocked = capacities.filter(c => c.value === 0).map(c => c.element), caps = capacities.filter(c => c.value > 0);

@@ -2,7 +2,7 @@ import {useFrame,useThree} from "@react-three/fiber";
 import {useMemo,useRef} from "react";
 import * as THREE from "three";
 
-export interface SceneLabel {id:string;position:[number,number,number];text:string;icon?:string}
+export interface SceneLabel {id:string;position:[number,number,number];text:string;icon?:string;tone?:string}
 export interface ProjectedLabel extends SceneLabel {x:number;y:number}
 /** DOM labels stay in Navigator's React tree. Separate DOM roots inside the canvas
  * can race their teardown when a remote step changes view and floor together. */

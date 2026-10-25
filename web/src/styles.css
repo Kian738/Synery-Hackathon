@@ -431,3 +431,6 @@ body {
 .player-options>button { border:0 !important; border-radius:999px !important; background:#ffd45c !important; color:#1c2226 !important; font:700 14px var(--font-sans); padding:0 18px !important; height:36px; min-height:36px; width:auto !important; }
 .model-notice { border-radius:12px; } .model-notice button { border-radius:999px; }
 .model-notice .reopen-all { margin-left:10px; padding:5px 12px; border:0; background:#ffd45c; color:#1c2226; font-weight:700; }
+.world-label.door-amber { background:#ffd45c; color:#10171c; border-color:#182329; font-weight:700; }
+.world-label.door-accent { background:#85dfb2; color:#10171c; border-color:#182329; font-weight:700; }
+.world-label.door-responder { background:#6cb6ff; color:#10171c; border-color:#182329; font-weight:700; }

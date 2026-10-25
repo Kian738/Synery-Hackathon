@@ -5,6 +5,7 @@ POST /api/sessions/{id}/scenario        run a template ("evacuation", "delivery"
 POST /api/sessions/{id}/scenario/ask    the single most important missing input for a partial scenario, or null
 Every number is the output of a checked step; the UI only words and draws it."""
 import json
+from pathlib import Path
 import queue
 import threading
 
@@ -128,3 +129,15 @@ def scenario_router(get_session):
         return {"question": None if question is None else to_dict(question)}
 
     return router
+
+
+DEMO_FILE = Path(__file__).resolve().parent.parent / "floorwise" / "demo_scenario.json"
+demo_router = APIRouter(prefix="/api/demo")
+
+
+@demo_router.get("/scenario")
+def demo_scenario():
+    """The measured multi-hop fire scenario the Run demo button plays (committed file, written by the measuring script)."""
+    if not DEMO_FILE.is_file():
+        raise HTTPException(503, "Demo scenario file floorwise/demo_scenario.json is missing; run the demo measurement first.")
+    return json.loads(DEMO_FILE.read_text(encoding="utf-8"))

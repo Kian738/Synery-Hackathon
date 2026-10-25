@@ -5,6 +5,8 @@ import * as THREE from "three";
 import { smoothTurn } from "../lib/turn";
 import { SceneAssets } from "./SceneAssets";
 import { Beacons, type BeaconPoint } from "./Beacons";
+import type { DoorMark } from "../lib/demo";
+const TONE={amber:"#ffd45c",accent:"#85dfb2",responder:"#6cb6ff"};
 import { XR } from "@react-three/xr";
 import { VrRig } from "./VrRig";
 import { vrPose, xrStore } from "../lib/xr";
@@ -311,7 +313,8 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
   });return null;
 }
 
-export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,zones,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset,focus:focusProp=true,onFocus,heat,pins}: {
+export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,zones,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset,focus:focusProp=true,onFocus,heat,pins,doorMarks}: {
+  doorMarks?:DoorMark[];
   heat?:Record<string,string>;pins?:{id:string;floor_id:string;x:number;y:number}[];
  onFocus?:(v:boolean)=>void;
  focus?:boolean;
@@ -395,17 +398,19 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   const sceneLabels=useMemo<SceneLabel[]>(()=>follow?[]:[
     ...geometry.connectors.flatMap(c=>c.space_ids.flatMap(id=>{const s=geometry.spaces.find(s=>s.id===id&&s.floor_id===floorId);if(!s||!visibleFloors.has(s.floor_id)||!connectorSpaces.has(id))return [];const b=bounds(s.polygon);return [{id:`connector-${id}`,text:c.name,icon:c.kind,position:[(b.minX+b.maxX)/2,elevation(s.floor_id)+.7,-(b.minY+b.maxY)/2] as [number,number,number]}];})),
     ...geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{const p=s.anchor??s.polygon[0];return {id:`room-${s.id}`,text:s.name,position:[p[0],elevation(s.floor_id)+1.7,-p[1]] as [number,number,number]};}),
+    ...(doorMarks??[]).filter(m=>visibleFloors.has(m.floor_id)).map(m=>({id:`door-${m.id}`,text:m.text,tone:m.tone,position:[m.x,elevation(m.floor_id)+1.4,-m.y] as [number,number,number]})),
     ...(visualResult?.kind==="intervention"?(()=>{const o=visualResult.measurements.proposed_opening as Opening|undefined;return o&&visibleFloors.has(o.floor_id)?[{id:"proposed",text:"Proposed opening · not applied",position:[o.position[0],elevation(o.floor_id)+1.8,-o.position[1]] as [number,number,number]}]:[];})():[])
-  ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode]);
+  ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode,doorMarks]);
   /** Found items and highlighted rooms get a pulsing beacon (at most 12, so a "show all chairs" answer stays readable). */
   const beaconPoints=useMemo(()=>{
-    if(follow||(!highlights.size&&!pins?.length))return [] as BeaconPoint[];
+    if(follow||(!highlights.size&&!pins?.length&&!doorMarks?.length))return [] as BeaconPoint[];
     const out:BeaconPoint[]=[];
     if(highlights.size)for(const a of geometry.assets){if(out.length>=12)break;if(highlights.has(a.id)&&visibleFloors.has(a.floor_id))out.push({id:a.id,x:a.position[0],y:elevation(a.floor_id)+.05,z:-a.position[1]});}
     if(out.length<12)for(const s of geometry.spaces){if(out.length>=12)break;if(highlights.has(s.id)&&visibleFloors.has(s.floor_id)){const p=s.anchor??s.polygon[0];out.push({id:s.id,x:p[0],y:elevation(s.floor_id)+.05,z:-p[1]});}}
     for(const p of pins??[])if(visibleFloors.has(p.floor_id))out.push({id:`pin-${p.id}`,x:p.x,y:elevation(p.floor_id)+.05,z:-p.y,color:"#ff5a5f"});
+    for(const m of doorMarks??[])if(visibleFloors.has(m.floor_id))out.push({id:`door-${m.id}`,x:m.x,y:elevation(m.floor_id)+.05,z:-m.y,color:TONE[m.tone]});
     return out;
-  },[geometry,follow,highlights,visibleFloors,explode,pins]);
+  },[geometry,follow,highlights,visibleFloors,explode,pins,doorMarks]);
 
   return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
@@ -455,7 +460,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       {follow&&route&&model&&<VrRig card={guideCard(route,model,time,sample?.step??0)} onToggle={()=>setPlaying(v=>!v)}/>}
       </XR>
     </Canvas>
-    {!follow&&<div className="scene-label-layer">{projectedLabels.map(l=><div key={l.id} style={{position:"absolute",left:l.x,top:l.y,transform:"translate(-50%,-50%)"}}>{l.icon?<span className="connector-icon" title={l.text}><Pictogram name={l.icon} size={17}/></span>:<span className="world-label selected-label">{l.text}</span>}</div>)}</div>}
+    {!follow&&<div className="scene-label-layer">{projectedLabels.map(l=><div key={l.id} style={{position:"absolute",left:l.x,top:l.y,transform:"translate(-50%,-50%)"}}>{l.icon?<span className="connector-icon" title={l.text}><Pictogram name={l.icon} size={17}/></span>:<span className={`world-label selected-label${l.tone?` door-${l.tone}`:""}`}>{l.text}</span>}</div>)}</div>}
     {follow&&sample?.transition&&<div className="landing-transition"><span>⇅</span><b>Changing floors</b><p>{geometry.floors.find(f=>f.id===sample.point?.floor_id)?.name}</p><small>Landing preview · interior geometry not surveyed</small></div>}
     {follow&&route&&model&&<GuidePlayer route={route} model={model} time={time} speed={speed} playing={playing} step={activeStep} reduced={reduced} transition={sample?.transition?"Floor transition":null}
       onSeek={seek} onPlay={()=>{if(!previewMode)onPreview?.();if(sample?.arrived)seek(0);setPlaying(v=>sample?.arrived?true:!v);}}

@@ -70,7 +70,7 @@ test('scenario states its assumptions and presents a computed comparison',async(
   const headline=page.locator('.scenario-headline');
   await expect(headline).toHaveText(/Everyone is out in \d+ s|of \d+ people get out/,{timeout:60000});
   await expect(panel.getByText(/estimated from seats/)).toBeVisible();
-  await expect(page.getByText(/Everyone using their nearest exit instead/)).toBeVisible();
+  await expect(page.getByText(/Everyone to the nearest exit/)).toBeVisible();
   await page.getByRole('button',{name:'Show more'}).click();
   await expect(page.getByText('What this is built on')).toBeVisible();
   const before=await headline.innerText();
