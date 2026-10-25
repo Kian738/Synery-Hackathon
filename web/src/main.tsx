@@ -3,8 +3,12 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import Navigator from "./navigator/Navigator";
+import { ActivityBar } from "./components/ActivityBar";
+import { installActivityTracking } from "./lib/activity";
 import "./styles.css";
 import "./ui/kit.css";
+
+installActivityTracking();
 
 const Lab = lazy(() => import("./lab/Lab"));
 const Phone = lazy(() => import("./companion/PhoneCompanion").then(m=>({default:m.PhoneCompanion})));
@@ -17,6 +21,7 @@ for (const name of ["gesturestart", "gesturechange", "gestureend"]) addEventList
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary><BrowserRouter>
+      <ActivityBar />
       <Routes>
         <Route path="/" element={<Navigator />} />
         <Route path="/phone" element={<Suspense fallback={null}><Phone /></Suspense>} />

@@ -154,6 +154,7 @@ def _compile(content: str) -> dict:
                 owner=source[int(owners[0])]['space_id'] if len(owners) else None
                 unique.append({'floor_id':fid,'space_id':owner,'a':list(a),'b':list(b),'height_m':source[0]['height_m']})
     walls=unique
+    walls=apply_rails(data, walls)
     # Actual upper-floor footprints form ceilings below. Missing coverage stays open.
     from shapely import constrained_delaunay_triangles, make_valid
     from shapely.geometry import Polygon
@@ -190,7 +191,7 @@ def _compile(content: str) -> dict:
     from floorwise.core.stair_scene import compile_stair_plates, compile_stair_shafts
     shafts=compile_stair_shafts(data)
     plates=compile_stair_plates(data,shafts)
-    return {'stair_shafts':shafts,'plates':plates,'overlaps':compile_overlaps(data), 'revision': hashlib.sha256(('scene-v4:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    return {'stair_shafts':shafts,'plates':plates,'overlaps':compile_overlaps(data), 'revision': hashlib.sha256(('scene-v5:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
@@ -223,4 +224,56 @@ def compile_overlaps(data: dict, min_area: float = 0.05) -> list[dict]:
                 for part in getattr(shared, 'geoms', [shared]):
                     if part.geom_type == 'Polygon' and part.area >= min_area:
                         out.append({'floor_id': floor_id, 'a': first, 'b': second, 'polygon': [list(p) for p in part.exterior.coords][:-1], 'area_m2': round(part.area, 3)})
+    return out
+
+def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_open: float = 0.6) -> list[dict]:
+    """Open-air walkways (a bridge across an atrium, a stair standing in a void) get a fence, not a room's wall.
+
+    A corridor or stair on an upper floor whose walls mostly face empty air (nothing of that floor within 0.3 m outside) is open to the sky or
+    the atrium: its open edges become railings of ail_height and carry ail: True. Walls toward neighbouring rooms stay full height. Display
+    only; the analytical model is untouched."""
+    from shapely import make_valid
+    from shapely.geometry import Point, Polygon
+    from shapely.ops import unary_union
+
+    ordered = sorted(data['floors'], key=lambda f: f.get('level', f.get('elevation_m', 0)))
+    if len(ordered) < 2:
+        return walls
+    lowest = ordered[0]['id']
+    polygons = {s['id']: make_valid(Polygon(s['polygon'])) for s in data['spaces'] if len(s['polygon']) >= 3}
+    cover = {f['id']: unary_union([polygons[s['id']] for s in data['spaces'] if s['floor_id'] == f['id'] and s['id'] in polygons]) for f in ordered}
+    by_space = {s['id']: s for s in data['spaces']}
+    open_edge: list[bool] = []
+    total: dict[str, float] = {}
+    exposed: dict[str, float] = {}
+    for wall in walls:
+        owner = by_space.get(wall.get('space_id') or '')
+        is_open = False
+        if owner and owner['type'] in ('corridor', 'stair') and owner['floor_id'] != lowest and owner['id'] in polygons:
+            (ax, ay), (bx, by) = wall['a'], wall['b']
+            length = math.hypot(bx - ax, by - ay)
+            if length > 1e-6:
+                nx, ny = -(by - ay) / length, (bx - ax) / length
+                mx, my = (ax + bx) / 2, (ay + by) / 2
+                sides = [Point(mx + nx * 0.3, my + ny * 0.3), Point(mx - nx * 0.3, my - ny * 0.3)]
+                outside = [p for p in sides if not polygons[owner['id']].buffer(0.05).contains(p)]
+                is_open = bool(outside) and not any(cover[owner['floor_id']].buffer(0.02).contains(p) for p in outside)
+                total[owner['id']] = total.get(owner['id'], 0.0) + length
+                if is_open:
+                    exposed[owner['id']] = exposed.get(owner['id'], 0.0) + length
+        open_edge.append(is_open)
+    def elongated(sid: str) -> bool:
+        edges = list(polygons[sid].minimum_rotated_rectangle.exterior.coords)
+        sides = sorted(math.dist(edges[i], edges[i + 1]) for i in range(2))
+        return sides[0] > 0 and sides[1] / sides[0] >= 3.0
+
+    # A stair standing in the air, or a long narrow walkway open on both sides (a bridge, a gallery): not a hall on the facade.
+    railed = {sid for sid, length in total.items() if length and exposed.get(sid, 0.0) / length >= min_open
+              and (by_space[sid]['type'] == 'stair' or (elongated(sid) and exposed.get(sid, 0.0) / length >= 0.7))}
+    out = []
+    for wall, is_open in zip(walls, open_edge):
+        if is_open and wall.get('space_id') in railed:
+            out.append({**wall, 'height_m': min(wall['height_m'], rail_height), 'rail': True})
+        else:
+            out.append(wall)
     return out

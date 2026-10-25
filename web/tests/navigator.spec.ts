@@ -204,7 +204,7 @@ test("microphone denial is recoverable and does not submit speech", async ({page
   });
   await page.goto(CAMPUS);
   await page.getByRole("button",{name:"Speak",exact:true}).click();
-  await expect(page.getByRole("status")).toContainText("Microphone access was denied");
+  await expect(page.getByRole("status").filter({hasText:"Microphone access was denied"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Speak",exact:true})).toBeVisible();
   await expect(page.getByRole("region",{name:"Conversation"})).toHaveCount(0);
 });

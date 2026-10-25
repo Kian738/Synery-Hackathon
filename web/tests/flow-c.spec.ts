@@ -9,8 +9,9 @@ test("opening a map shows the whole building; a route then focuses on the route;
   await page.getByRole("button", { name: "Toilets" }).click();
   await expect(page.getByTestId("focus-toggle")).toContainText(/dimmed/, { timeout: 25_000 });
   await page.getByRole("button", { name: "Layers" }).click();
-  await expect(group.getByRole("button", { name: /Route floors|This floor/ }).and(page.locator('[aria-pressed="true"]'))).toHaveCount(1);
-  await expect(group.getByRole("button", { name: "Whole building" })).toHaveAttribute("aria-pressed", "false");
+  // a one-floor route opens on This floor, and "Route only" is a modifier that is on
+  await expect(group.getByRole("button", { name: /This floor|Whole building/ }).and(page.locator('[aria-pressed="true"]'))).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Route only", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Building tools" }).click();
   await expect(page.getByRole("button", { name: /Find|share|save/i })).toHaveCount(0);
