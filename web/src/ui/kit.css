@@ -196,11 +196,15 @@
 .k-sheet-more ol { margin:0; padding-left:28px; color:var(--k-mute); }
 .k-sheet-more li { margin:4px 0; }
 .k-field { display:flex; flex-direction:column; gap:4px; color:var(--k-mute); font:var(--k-font); }
-.k-sheet-finding { display:grid; grid-template-columns:auto 1fr; gap:2px var(--gap); padding:var(--gap) 12px; border:1px solid var(--k-line); border-radius:var(--r-ctl); }
+.k-sheet-finding { display:block; padding:var(--gap) 12px; border:1px solid var(--k-line); border-radius:var(--r-ctl); }
+.k-sheet-finding summary { display:grid; grid-template-columns:auto 1fr; gap:var(--gap); align-items:baseline; cursor:pointer; list-style:none; }
+.k-sheet-finding summary::-webkit-details-marker { display:none; }
+.k-sheet-finding summary:focus-visible { outline:2px solid var(--k-accent); outline-offset:2px; }
+.k-sheet-finding[open] small { display:block; margin-top:6px; }
 .k-sheet-finding b { font:700 11px/20px var(--font-sans); text-transform:uppercase; letter-spacing:.06em; color:var(--k-mute); }
 .k-sheet-finding[data-severity="blocker"] b, .k-sheet-finding[data-severity="risk"] b { color:var(--k-danger); }
 .k-sheet-finding[data-severity="improve"] b { color:var(--k-accent); }
-.k-sheet-finding small { grid-column:2; color:var(--k-mute); font:500 12px/1.4 var(--font-sans); }
+.k-sheet-finding small { grid-column:auto; color:var(--k-mute); font:500 12px/1.4 var(--font-sans); }
 .k-sheet-alert { padding:var(--gap) 12px; border:1px solid var(--k-danger); border-radius:var(--r-ctl); }
 .k-sheet .k-ctl { white-space:normal; text-align:center; }
 .k-range { flex:1; min-width:0; accent-color:var(--k-accent); }

@@ -74,6 +74,7 @@ test('scenario states its assumptions and presents a computed comparison',async(
   await page.getByRole('button',{name:'Show more'}).click();
   await expect(page.getByText('What this is built on')).toBeVisible();
   const before=await headline.innerText();
+  await panel.getByText('Change room, audience or numbers',{exact:true}).click();
   await panel.getByText('Your numbers',{exact:true}).click();
   await panel.getByLabel('People in the fire room').fill('20');
   await panel.getByLabel('Passage rate (people per minute)').fill('20');

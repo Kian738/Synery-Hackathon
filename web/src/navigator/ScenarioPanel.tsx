@@ -189,13 +189,8 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     ? `Your numbers: ${used.people ? `${Math.min(fireOut, used.people)} of ${used.people} people get out of the fire room` : "people estimated from seats"}${used.rate ? `; every door passes ${used.rate} people per minute` : ""}.${used.people ? " Other rooms are estimated from seats." : ""}`
     : `${ev.total} people, estimated from seats.`;
 
-  return <section className="k-sheet scenario" aria-label="Fire / evacuation scenario">
-    <header className="k-sheet-head">
-      <div><div className="k-pop-title">Scenario</div><h2>Fire / evacuation</h2></div>
-      <IconButton label="Close scenario" icon="close" onClick={onClose} />
-    </header>
-    <p className="k-hint">{hazard ? <>Fire room: <b>{hazard.name}</b></> : "Click a room on the map, or search, to set where the fire starts."}</p>
-    {!hazard && busiest && <IconButton accent label={`Quick fire test: ${busiest.name} (most seats)`} text={`Quick fire test: ${busiest.name}`} disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }} />}
+  // Before a result: the inputs lead. After one: the result leads and the inputs fold into one line at the bottom.
+  const inputs = <>
     <input className="k-input" aria-label="Search rooms" placeholder="Search rooms" value={query} onChange={e => setQuery(e.target.value)} />
     {matches.length > 0 && <div className="k-sheet-list">{matches.map(s => <button key={s.id} type="button" className="k-row" onClick={() => pick(s)}>{s.name}</button>)}</div>}
     <div className="k-pop-title">Who is this for</div>
@@ -207,6 +202,15 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       <label className="k-field"><span>Passage rate (people per minute)</span><input className="k-input" type="number" min={1} step={1} inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)} /></label>
     </details>
     <IconButton accent label="Run scenario" text={busy ? "Checking…" : "Run scenario"} disabled={!hazard || busy} onClick={() => run()} />
+  </>;
+  return <section className="k-sheet scenario" aria-label="Fire / evacuation scenario">
+    <header className="k-sheet-head">
+      <div><div className="k-pop-title">Scenario</div><h2>Fire / evacuation</h2></div>
+      <IconButton label="Close scenario" icon="close" onClick={onClose} />
+    </header>
+    <p className="k-hint">{hazard ? <>Fire room: <b>{hazard.name}</b></> : "Click a room on the map, or search, to set where the fire starts."}</p>
+    {!hazard && busiest && <IconButton accent label={`Quick fire test: ${busiest.name} (most seats)`} text={`Quick fire test: ${busiest.name}`} disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }} />}
+    {!report && inputs}
     {error && <p role="alert" className="k-sheet-alert">Could not run: {error}</p>}
     <div aria-live="polite">{busy && <p className="k-hint">{liveStep || "Checking the evacuation…"}</p>}</div>
     {report && <>
@@ -225,12 +229,11 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       </div>}
       {ev?.nearest_exit && ev.nearest_exit.T_s > ev.T_s && <p className="k-hint">Everyone using their nearest exit instead: {ev.nearest_exit.T_s} s ({ev.nearest_exit.T_s - ev.T_s} s slower). Exits are planned together here.</p>}
       {report.abstained && !ev ? <p>Stopped at {abstain ? `step ${abstain.id}: ` : "a step: "}{reason ?? "A step could not be completed."}</p> : <>
-        <details className="k-sheet-more"><summary>{report.steps.length} steps checked</summary>
-          <ol>{report.steps.map(s => <li key={s.id}>{s.ok ? s.summary : `Stopped: ${s.summary}`}</li>)}</ol></details>
-        {findings.map((f, i) => <div key={i} className="k-sheet-finding" data-severity={f.severity}><b>{SEVERITY[f.severity]}</b><span>{f.title}</span><small>{f.detail}</small></div>)}
-        {report.findings.length > 3 && <IconButton label={more ? "Show fewer" : "Show more"} text={more ? "Show fewer" : "Show more"} onClick={() => setMore(v => !v)} />}
         {suggested && fix && <IconButton accent label={applied ? "Applied to model" : `Apply to model (widen door to ${fix.width_m} m)`} text={applied ? "Applied to model" : `Apply to model: widen door to ${fix.width_m} m`} disabled={applied}
           onClick={async () => { const { events } = await api.widen(sessionId, fix.element, fix.width_m); apply(events); await run(hazard, audience); setApplied(true); }} />}
+        {findings.map((f, i) => <details key={i} className="k-sheet-finding" data-severity={f.severity}><summary><b>{SEVERITY[f.severity]}</b><span>{f.title}</span></summary><small>{f.detail}</small></details>)}
+        {report.findings.length > 3 && <IconButton label={more ? "Show fewer" : "Show more"} text={more ? "Show fewer" : "Show more"} onClick={() => setMore(v => !v)} />}
+        <details className="k-sheet-more"><summary>What if</summary>
         {exits.length > 0 && <div className="k-sheet-group">
           <div className="k-pop-title">Limit one exit (0 blocks it)</div>
           <select className="k-input" aria-label="Exit to limit" value={limitExit || exits[0]} onChange={e => setLimitExit(e.target.value)}>
@@ -244,7 +247,11 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
         {hazard && !robust && <IconButton label="Check if an exit fails" text={robustBusy ? "Checking each exit…" : "Check if an exit fails"} disabled={robustBusy}
           onClick={async () => { setRobustBusy(true); try { setRobust(await api.scenarioRobust(sessionId, hazard.id)); } catch (e) { setError(e instanceof Error ? e.message : "Check failed"); } setRobustBusy(false); }} />}
         {robust && <p className="k-hint">If one exit is lost, everyone is out in {Math.max(...robust.before.map(r => r.T_s))} s{robust.fixes.length ? <>; widening {robust.fixes[0].name} to {robust.fixes[0].width_m} m brings that worst case to {Math.max(...robust.after.map(r => r.T_s))} s</> : "; no door change improves that"}.</p>}
+        </details>
+        <details className="k-sheet-more"><summary>{report.steps.length} steps checked</summary>
+          <ol>{report.steps.map(s => <li key={s.id}>{s.ok ? s.summary : `Stopped: ${s.summary}`}</li>)}</ol></details>
       </>}
     </>}
+    {report && <details className="k-sheet-more"><summary>Change room, audience or numbers</summary>{inputs}</details>}
   </section>;
 }
