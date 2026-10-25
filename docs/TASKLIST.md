@@ -28,7 +28,16 @@ Status: `done` (verified), `open`, `partial` (works, a part is not verified by e
 | B: loader, small model details | done | screenshot of loader; catalogue tests |
 | Lift car back z-fight | partial | car now clear of walls by construction; not looked at from behind in the app |
 | Testing phase (gold bank, journeys, audit, rigour) | in progress | `eval.gold` (phrasing robustness), `eval.audit_all`, `normalize.py` |
-| E phone HTTPS, F phone/VR, G scenarios | open | see plan |
+| Scope: This floor / Whole building + "Route only" modifier; route turns it on, map opens whole building | done | `flow-c.spec.ts`, `focus-guide.spec.ts` |
+| Guide me: ahead-card with live metre countdown, stair ride joins real entry/exit and keeps 0.47 m off walls, look-around by drag, thicker line | done | `focus-guide.spec.ts` (walls clearance test), screenshots |
+| Open-air bridges/stairs: 1.1 m fences, no roof; overlap walls and wide-opening walls dropped; fewer withheld walking previews (92 to 35 of 1681) | done | `test_scene_rails.py`, `withheld` audit script numbers in commit message |
+| Route planning speed: A* inside a room, rails once per space | done | CIT cold 10.5 s to 3.5 s; gates unchanged |
+| Editing: add a door between X and Y by name, once per pair, placed clear of furniture and corners, undo exact, edit flashes the rooms | done | `tests/test_door_e2e.py` (5 buildings), `test_edit_capabilities.py` |
+| Request activity bar (named status + stopwatch) | done | `lib/activity.ts`, `ActivityBar.tsx`; no skeleton cards yet |
+| Journeys, axe a11y, properties on 280 buildings, gold bank in gates | done | `journeys.spec.ts`, `a11y.spec.ts`, `test_properties.py`, `eval.gold` |
+| E phone HTTPS | partial | `scripts/phone_https.ps1` + PHONE_DEMO.md; no physical phone tried |
+| Scenario research | done | `docs/SCENARIO_RESEARCH.md` (existing `floorwise/evacuation` min-cost-flow found; gap = per-person queue simulator on RouteGraph, door ranking, heat maps) |
+| F phone/VR, G scenarios engine and visuals | open | next |
 
 ## Older open items
 - TUM 4107 missing floor (`data-floor-coverage` test), loading animation, whole building as default view, left panel declutter.

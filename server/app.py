@@ -104,6 +104,8 @@ app.include_router(lab_router)
 app.include_router(create_companion_router())
 from server.voice import router as voice_router
 app.include_router(voice_router)
+from server.stress import create_stress_router
+app.include_router(create_stress_router(lambda sid: session_or_404(sid)))
 from server.scenarios import router as scenario_router
 app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
