@@ -1,21 +1,14 @@
 import type { Geometry, Route, XY } from "./types";
 
-/** Focus + context (docs/UI_RESEARCH.md §1): the rooms a person needs to read a route, and nothing else. */
-const CONTEXT_M = 5;
-
-/** The route's own rooms, the stops, anything highlighted, and rooms whose door lies within CONTEXT_M of the walked line.
- *  Null means "draw everything" (no route, or focus switched off). */
+/** Focus (docs/UI_RESEARCH.md §1): only the rooms the route enters, its stops, anything highlighted, and the other ends of its connectors.
+ *  Rooms merely beside the walked corridor are not kept. Null means "draw everything" (no route, or focus switched off). */
 export function relevantSpaces(
-  geometry: Pick<Geometry, "openings" | "connectors">,
+  geometry: Pick<Geometry, "connectors">,
   route: Route | null | undefined,
   extra: Iterable<string> = [],
 ): Set<string> | null {
   if (!route) return null;
   const keep = new Set<string>([...route.polyline.map(p => p.node), ...route.stops, ...extra]);
-  const line = route.polyline.filter((_, i) => i % 2 === 0 || i === route.polyline.length - 1);
-  for (const o of geometry.openings) {
-    if (line.some(p => p.floor_id === o.floor_id && Math.hypot(p.x - o.position[0], p.y - o.position[1]) < CONTEXT_M)) o.space_ids.forEach(id => keep.add(id));
-  }
   for (const c of geometry.connectors) if (c.space_ids.some(id => keep.has(id))) c.space_ids.forEach(id => keep.add(id));
   return keep;
 }
