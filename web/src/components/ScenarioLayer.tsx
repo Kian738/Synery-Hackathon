@@ -116,10 +116,20 @@ export function ScenarioLayer({ geometry, elevations, visibleFloors }: { geometr
     if (n !== count) setCount(n);
   });
 
-  if (!scene) return null;
-  const hazard = scene.kind === "flow" && scene.hazard ? spaces.get(scene.hazard) : undefined;
+  const hazard = scene?.kind === "flow" && scene.hazard ? spaces.get(scene.hazard) : undefined;
   const hazardAt = hazard && visibleFloors.has(hazard.floor_id) ? anchor(hazard.id) : null;
-  const exits = scene.kind === "flow" ? Object.keys(scene.byExit).map(id => openings.get(id)).filter((o): o is NonNullable<typeof o> => !!o && visibleFloors.has(o.floor_id)) : [];
+  const exits = scene?.kind === "flow" ? Object.keys(scene.byExit).map(id => openings.get(id)).filter((o): o is NonNullable<typeof o> => !!o && visibleFloors.has(o.floor_id)) : [];
+  const queues = scene?.kind === "rooms" ? scene.queues.filter(q => visibleFloors.has(q.floor_id)) : [];
+  // One data- attribute per visual so specs can check what the 3D layer drew without reading pixels.
+  const visuals = { arrows: plan?.doors.length ?? 0, exits: exits.length, queues: queues.length, fire: hazardAt ? 1 : 0, smoke: hazardAt ? "illustrative" : "" };
+  const visualKey = JSON.stringify(visuals);
+  useEffect(() => {
+    const host = (gl.domElement.closest("[data-testid=building-scene]") as HTMLElement | null) ?? gl.domElement, v = JSON.parse(visualKey) as typeof visuals;
+    host.dataset.scenarioArrows = String(v.arrows); host.dataset.scenarioExits = String(v.exits); host.dataset.scenarioQueues = String(v.queues);
+    host.dataset.scenarioFire = String(v.fire); host.dataset.scenarioSmoke = v.smoke; host.dataset.scenarioMotion = reduced ? "static" : "animated";
+    return () => { for (const k of ["scenarioArrows", "scenarioExits", "scenarioQueues", "scenarioFire", "scenarioSmoke", "scenarioMotion"]) delete host.dataset[k]; };
+  }, [visualKey, gl, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!scene) return null;
   return <group>
     <instancedMesh ref={dots} args={[undefined, undefined, CAP]} frustumCulled={false} renderOrder={120}>
       <sphereGeometry args={[0.16, 8, 6]} />
@@ -144,7 +154,7 @@ export function ScenarioLayer({ geometry, elevations, visibleFloors }: { geometr
     {exits.map(o => <mesh key={o.id} ref={m => { if (m) exitBars.current.set(o.id, m); else exitBars.current.delete(o.id); }} userData={{ base: (elevations[o.floor_id] ?? 0) + 0.1 }} position={[o.position[0], (elevations[o.floor_id] ?? 0) + 0.1, -o.position[1]]} renderOrder={116}>
       <boxGeometry args={[0.5, 1, 0.5]} /><meshBasicMaterial color="#34c77b" transparent opacity={0.9} depthTest={false} />
     </mesh>)}
-    {scene.kind === "rooms" && scene.queues.filter(q => visibleFloors.has(q.floor_id)).map(q => {
+    {queues.map(q => {
       const h = Math.min(4, 0.3 + q.queue * 0.08);
       return <mesh key={q.id} position={[q.x, (elevations[q.floor_id] ?? 0) + h / 2 + 0.1, -q.y]} renderOrder={116}>
         <cylinderGeometry args={[0.35, 0.35, h, 12]} /><meshBasicMaterial color="#f2a33a" transparent opacity={0.85} depthTest={false} />

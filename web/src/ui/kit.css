@@ -476,3 +476,22 @@ html, body { overflow-x:hidden; }
 .companion-drawer .phone-card-note { color:var(--k-mute) !important; font-size:13px; }
 .companion-drawer .cmp-laptop { border-top:1px solid var(--k-line); margin-top:var(--gap-group); padding-top:var(--gap) !important; }
 .companion-drawer .cmp-laptop h2 { display:none; }
+/* ---- phone portrait bottom sheet (agent-phone3): map full height behind, the sign column snaps to peek / half / full ---- */
+.k-sheet-handle { display:none; }
+@media (max-width:640px) and (orientation:portrait) {
+  .navigator-shell { --sheet-h:50dvh; }
+  .navigator-shell[data-sheet="peek"] { --sheet-h:calc(96px + env(safe-area-inset-bottom)); }
+  .navigator-shell[data-sheet="full"] { --sheet-h:calc(100dvh - 64px - env(safe-area-inset-top)); }
+  .navigator-shell:not(.guiding):not(.stage-expanded) .model-panel, .navigator-shell.first-use:not(.guiding):not(.stage-expanded) .model-panel { height:calc(100dvh - var(--sheet-h) + 16px); flex:none; }
+  .navigator-shell:not(.guiding):not(.stage-expanded) .navigation-panel { position:fixed; left:0; right:0; bottom:0; height:var(--sheet-h); z-index:30; padding-top:18px; border:0; border-top:1px solid #34464f; border-radius:16px 16px 0 0; box-shadow:0 -8px 24px #0006; transition:height .22s cubic-bezier(.2,.8,.2,1); overflow:hidden; }
+  .navigator-shell:not(.guiding):not(.stage-expanded) .k-sheet-handle { display:grid; place-items:center; position:fixed; z-index:31; left:50%; bottom:calc(var(--sheet-h) - 22px); transform:translateX(-50%); width:72px; height:40px; padding:0; border:0; background:transparent; touch-action:none; cursor:grab; transition:bottom .22s cubic-bezier(.2,.8,.2,1); }
+  .k-sheet-handle i { display:block; width:40px; height:5px; border-radius:999px; background:#7f949e; }
+  .navigator-shell[data-sheet="peek"]:not(.guiding) .navigation-panel > .k-head, .navigator-shell[data-sheet="peek"]:not(.guiding) .navigation-panel > .k-start { display:none; }
+}
+@media (max-width:640px) and (orientation:portrait) and (prefers-reduced-motion:reduce) { .navigator-shell .navigation-panel, .k-sheet-handle { transition:none !important; } }
+/* ---- Scenarios on a phone (agent-scen2): crowd and outage drawers use the whole screen, above the room card and the bottom sheet ---- */
+@media (max-width:640px) {
+  .stress-drawer { position:fixed !important; left:8px; right:8px; top:64px; bottom:8px; width:auto; z-index:40; overscroll-behavior:contain; }
+  .k-sheet.scenario { z-index:40; }
+  .stress-drawer .k-scen-chips .k-ctl, .k-sheet.scenario .k-scen-chips .k-ctl { min-height:40px; }
+}

@@ -28,6 +28,11 @@ test("one scenario at a time, one shared scrubber, people dots in 3D", async ({ 
   await expect(page.locator("[data-scrubber=shared]")).toHaveCount(1);
   const scene = page.getByTestId("building-scene");
   await expect.poll(async () => Number(await scene.getAttribute("data-scenario-dots") ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
+  await expect(scene).toHaveAttribute("data-scenario-fire", "1");
+  await expect(scene).toHaveAttribute("data-scenario-smoke", "illustrative");
+  await expect.poll(async () => Number(await scene.getAttribute("data-scenario-arrows") ?? 0)).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await scene.getAttribute("data-scenario-exits") ?? 0)).toBeGreaterThan(0);
+  await expect(scene).toHaveAttribute("data-scenario-motion", /static|animated/);
   await fs.mkdir(shots, { recursive: true });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(shots, `${test.info().project.name}-${page.viewportSize()!.width}-fire.png`) });
@@ -61,4 +66,34 @@ test("on a phone the Scenarios sheet fits and the scrubber is reachable", async 
   await fs.mkdir(shots, { recursive: true });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(shots, "phone-390-fire.png") });
+});
+
+test("phone 390x844: every chip fits, tap targets >= 40 px, Exit blocked closes the busiest exit", async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await fs.mkdir(shots, { recursive: true });
+  const chips = page.getByRole("group", { name: "Scenario" });
+  for (const b of await chips.getByRole("button").all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+  await chips.getByRole("button", { name: "Exit blocked" }).click();
+  await expect(page.getByRole("heading", { name: "Fire with an exit blocked" })).toBeVisible();
+  await page.getByRole("button", { name: /Quick fire test/ }).click();
+  await expect(page.locator(".scenario-headline")).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator(".k-sheet.scenario")).toContainText(/blocked|closed|limit/i);
+  const play = page.getByRole("button", { name: /^(Play|Pause)$/ }).first();
+  await play.scrollIntoViewIfNeeded(); await expect(play).toBeInViewport();
+  expect((await play.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+  await page.screenshot({ path: path.join(shots, "phone-390-blocked.png") });
+  for (const [name, file] of [["Fire in a room", "fire2"], ["Crowd surge", "crowd"], ["Lift/stair outage", "outage"]] as const) {
+    await page.getByRole("group", { name: "Scenario" }).getByRole("button", { name }).click();
+    await page.waitForTimeout(3000);
+    const g = page.getByRole("group", { name: "Scenario" });
+    await expect(g).toBeVisible();
+    const box = (await g.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(391);
+    await expect(g).toBeInViewport({ ratio: 1 });
+    const drawer = page.locator(".stress-drawer");
+    if (await drawer.count()) { const d = (await drawer.boundingBox())!; expect(d.y + d.height).toBeLessThanOrEqual(845); expect(d.height).toBeGreaterThan(500); }
+    await page.screenshot({ path: path.join(shots, `phone-390-${file}.png`) });
+  }
 });

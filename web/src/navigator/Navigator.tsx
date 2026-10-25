@@ -87,6 +87,11 @@ export default function Navigator() {
   const [exploded,setExploded]=useState(true);
   const [guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
+  // phone portrait bottom sheet: peek / half / full; drag or tap the handle
+  const [sheet,setSheet]=useState<"peek"|"half"|"full">("half");
+  const sheetDrag=useRef<number|null>(null);
+  const SHEETS=["peek","half","full"] as const;
+  const moveSheet=(dir:number)=>setSheet(s=>SHEETS[Math.max(0,Math.min(2,SHEETS.indexOf(s)+dir))]);
   const [stageExpanded,setStageExpanded]=useState(params.get("explore")==="1");
   const [seekRequest,setSeekRequest]=useState(0);
   const [previewPosition,setPreviewPosition]=useState<{x:number;y:number;floor_id:string;heading?:number}|null>(null);
@@ -215,7 +220,11 @@ export default function Navigator() {
   }
 
   return (
-    <div className={`navigator-shell flex h-full flex-col lg:flex-row ${!nav.route && nav.messages.length === 0 ? "first-use" : ""} ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`}>
+    <div className={`navigator-shell flex h-full flex-col lg:flex-row ${!nav.route && nav.messages.length === 0 ? "first-use" : ""} ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`} data-sheet={sheet}>
+      <button type="button" className="k-sheet-handle" aria-label={`Resize panel (${sheet})`} data-sheet={sheet}
+        onPointerDown={e=>{sheetDrag.current=e.clientY;}}
+        onPointerUp={e=>{const y0=sheetDrag.current;sheetDrag.current=null;if(y0==null)return;const dy=e.clientY-y0;if(Math.abs(dy)<24)setSheet(s=>s==="full"?"peek":SHEETS[SHEETS.indexOf(s)+1]);else moveSheet(dy<0?(dy<-260?2:1):(dy>260?-2:-1));}}
+        onKeyDown={e=>{if(e.key==="ArrowUp"){e.preventDefault();moveSheet(1);}else if(e.key==="ArrowDown"){e.preventDefault();moveSheet(-1);}}}><i /></button>
       <JourneyBanner buildingId={buildingId} routeFailed={!!nav.notice && !nav.route} atExit={atTripExit} guiding={following || stepMode} onStartGuide={startGuide} />
       {/* ---------- sign column ---------- */}
       <aside className="order-2 flex min-h-0 flex-1 flex-col navigation-panel bg-ink text-white lg:order-1 lg:w-[370px] lg:flex-none">

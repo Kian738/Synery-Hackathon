@@ -250,7 +250,8 @@ test("camera path crosses every door through its middle, square to the wall", as
   expect(crossings).toBeGreaterThan(0);
 });
 
-test("Guide me walks down the real stair flights: height only falls, in many small steps", async ({ page }) => {
+test("Guide me walks down the real stair flights: height only falls and the floor change is one short cutout", async ({ page }) => {
+  test.setTimeout(120_000);
   const building = "osm-way27917482";
   await page.goto(`/?building=${building}&at=${building}-F3-S069&to=00.05.058`);
   await page.getByRole("button", { name: "Guide me", exact: true }).click();
@@ -272,7 +273,8 @@ test("Guide me walks down the real stair flights: height only falls, in many sma
   expect(rises).toBe(0);
   expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(3);
   const intermediate = new Set(ys.map(y => Math.round(y * 4) / 4).filter(y => y > Math.min(...ys) + 0.3 && y < Math.max(...ys) - 0.3));
-  expect(intermediate.size).toBeGreaterThan(6); // many distinct heights while on the stairs, not one jump
+  // The stair walk is replaced by one short cutout (2.4 s however many floors), so only a few heights occur in between.
+  expect(intermediate.size).toBeLessThanOrEqual(12);
 });
 
 test("Guide me projection keeps the near plane tight and the field of view modest", async ({ page }) => {
