@@ -199,9 +199,12 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       const shaft=[ride.from.node,ride.to.node].map(id=>geometry.spaces.find(sp=>sp.id===id)?.polygon).filter((q):q is XY[]=>!!q&&q.length>2);
       const key=`${ride.from.floor_id}|${ride.to.floor_id}|${ride.from.node}|${ride.to.node}`;
       if(!walkCache.current.has(key))walkCache.current.set(key,stairWalkFor(geometry,ride.from.floor_id,ride.to.floor_id,ride.from.node,ride.to.node));
-      let line=walkCache.current.get(key);
+      // Some supplied connectors join stair spaces that are metres apart on the plan. Gliding between them crosses rooms and walls,
+      // so there the camera climbs in place inside each stop's shaft and cuts between the two, and never uses the flight line.
+      const jump=Math.hypot(ride.to.x-ride.from.x,ride.to.y-ride.from.y)>1.5;
+      let line=jump?undefined:walkCache.current.get(key);
       if(line&&h1<h0)line=[...line].reverse();
-      let rx=ride.from.x+(ride.to.x-ride.from.x)*e,ry=ride.from.y+(ride.to.y-ride.from.y)*e,rh=h0+(h1-h0)*e;
+      let rx=jump?(e<.5?ride.from.x:ride.to.x):ride.from.x+(ride.to.x-ride.from.x)*e,ry=jump?(e<.5?ride.from.y:ride.to.y):ride.from.y+(ride.to.y-ride.from.y)*e,rh=h0+(h1-h0)*e;
       if(line){ // walk the real flights: position, height and heading come from the stair's own line
         const len=line.slice(1).reduce((a,q,i)=>a+Math.hypot(q.x-line![i].x,q.y-line![i].y),0);let want=len*e,acc=0,k=0;
         while(k<line.length-2&&acc+Math.hypot(line[k+1].x-line[k].x,line[k+1].y-line[k].y)<want){acc+=Math.hypot(line[k+1].x-line[k].x,line[k+1].y-line[k].y);k++;}
