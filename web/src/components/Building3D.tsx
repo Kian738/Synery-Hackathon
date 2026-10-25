@@ -37,7 +37,10 @@ const frame = (x:number,y:number,h:number) => new THREE.Vector3(x,h,-y);
 function edgeDistance(poly:XY[],px:number,py:number){return poly.reduce((m,q,i)=>{const r=poly[(i+1)%poly.length],dx=r[0]-q[0],dy=r[1]-q[1],l2=dx*dx+dy*dy||1,t=Math.max(0,Math.min(1,((px-q[0])*dx+(py-q[1])*dy)/l2));return Math.min(m,Math.hypot(px-q[0]-t*dx,py-q[1]-t*dy));},Infinity);}
 /** Move a point toward the polygon's centre until it is inside and at least `margin` metres from every edge (or as far as it gets in 24 steps). */
 function pullInside(poly:XY[],x:number,y:number,margin:number):[number,number]{
-  const cx=poly.reduce((a,q)=>a+q[0],0)/poly.length,cy=poly.reduce((a,q)=>a+q[1],0)/poly.length;
+  // Aim for the roomiest point of the polygon (the spot farthest from every wall), not its centroid: an L-shaped or skewed hall has a centroid beside a wall.
+  const xs=poly.map(q=>q[0]),ys=poly.map(q=>q[1]),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  let cx=poly.reduce((a,q)=>a+q[0],0)/poly.length,cy=poly.reduce((a,q)=>a+q[1],0)/poly.length,best=insidePolygon(poly,cx,cy)?edgeDistance(poly,cx,cy):-1;
+  for(let i=0;i<=12;i++)for(let j=0;j<=12;j++){const gx=x0+(x1-x0)*i/12,gy=y0+(y1-y0)*j/12;if(!insidePolygon(poly,gx,gy))continue;const d=edgeDistance(poly,gx,gy);if(d>best){best=d;cx=gx;cy=gy;}}
   let px=x,py=y;
   for(let k=0;k<24&&(!insidePolygon(poly,px,py)||edgeDistance(poly,px,py)<margin);k++){px+=(cx-px)*.15;py+=(cy-py)*.15;}
   return [px,py];
