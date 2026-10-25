@@ -75,7 +75,7 @@ export default function Navigator() {
   useEffect(() => { if (!nav.route || scopeTouched.current) return; setScope(nav.route.floors.length > 1 ? "route" : "current"); }, [nav.route]);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const [buildingImport, setBuildingImport] = useState(false);
+  const [buildingImport, setBuildingImport] = useState(() => params.get("import") === "1"); // no visible button: building from a plan stays reachable by URL and tests
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
   useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);setExploreOpen(false);linked.current=false; }, [buildingId]);
@@ -179,7 +179,6 @@ export default function Navigator() {
           <Dock>
             <IconButton label="Step-free" icon="wheelchair" pressed={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} />
             <IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} />
-            <IconButton label="Import plan" icon="upload" onClick={() => setBuildingImport(true)} />
           </Dock>
         </header>
         <div className="k-start">
@@ -227,7 +226,6 @@ export default function Navigator() {
                 {value:"3d",label:"3D",ariaLabel:"3D",icon:"cube",tip:"3D building"},
                 {value:"2d",label:"Plan",ariaLabel:"Floor plan",icon:"plan",tip:"Floor plan"}]}/>
               <IconButton label="Guide me" icon="walk" text="Guide me" accent disabled={!nav.route || nav.route.preview_available === false} onClick={() => {setView("guide");setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setStageExpanded(false);nav.setVisualResult(null);setSelected(null);}}/>
-              <IconButton label={stageExpanded?"Shrink building view":"Expand building view"} icon="expand" pressed={stageExpanded} onClick={()=>{if(stageExpanded)setPlanExpanded(false);setStageExpanded(!stageExpanded);}}/>
             </>}
           </Dock>
           <Dock>
@@ -275,7 +273,15 @@ export default function Navigator() {
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {exploreOpen&&<ExploreTools geometry={g} selected={selected} here={nav.here} route={nav.route} stepFree={nav.stepFree} onClose={()=>setExploreOpen(false)} onSelect={focusRoom} onHighlight={ids=>{nav.setHighlights(new Set(ids));const entity=g.assets.find(a=>a.id===ids[0]);if(entity)nav.setFloorId(entity.floor_id);}} onCompare={floor=>void nav.compareItems(floor)} onPlan={async stops=>{await nav.planStops(stops);setView('3d');}}/>}
-        {nav.notice && <div role="status" className="model-notice"><span>{nav.notice}</span>{/^No route/.test(nav.notice)&&nav.closed.size>0&&<button className="reopen-all" onClick={()=>[...nav.closed].forEach(id=>nav.toggleClosed(id))}>Reopen closed places</button>}<button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
+        {nav.closeConfirm && <div role="alertdialog" aria-label="Confirm closing" className="model-notice k-confirm">
+          <span><b>Close {nav.closeConfirm.name}?</b> {nav.closeConfirm.count} of {nav.closeConfirm.of} rooms would lose their way out.</span>
+          <button className="k-ctl" onClick={() => nav.setCloseConfirm(null)}>Cancel</button>
+          <button className="k-ctl accent" onClick={() => { const c = nav.closeConfirm!; nav.setCloseConfirm(null); void nav.toggleClosed(c.id, true); }}>Close anyway</button>
+        </div>}
+        {!nav.closeConfirm && nav.lastClosure && <div role="status" className="model-notice k-confirm">
+          <span>Closed {nav.lastClosure.name}.</span><button className="k-ctl" onClick={() => void nav.toggleClosed(nav.lastClosure!.id)}>Undo</button>
+        </div>}
+        {nav.notice && !nav.closeConfirm && !nav.lastClosure && <div role="status" className="model-notice"><span>{nav.notice}</span>{/^No route/.test(nav.notice)&&nav.closed.size>0&&<button className="reopen-all" onClick={()=>[...nav.closed].forEach(id=>nav.toggleClosed(id))}>Reopen closed places</button>}<button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
         {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel geometry={g} sessionId={nav.sessionId} room={selected?.id??nav.here} onClose={()=>setScenarioOpen(false)} onResult={nav.apply}/>}
         {weakOpen&&!following&&!scenarioOpen&&<section className="stress-drawer" aria-label="Building stress test">
           <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>

@@ -27,6 +27,7 @@ export const api = {
   resultPage: (session:string,result:string,offset=0,view='default',room='') => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25&view=${view}${room?`&room=${encodeURIComponent(room)}`:""}`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),
   profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
   widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
+  closePreview: (sessionId: string, element: string) => post(`/api/sessions/${sessionId}/close/preview`, { element, closed: true }).then(json<WithEvents<any>>),
   weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
   buildings: () => fetch("/api/buildings").then(json<BuildingRow[]>),
   geometry: (building: string) => fetch(`/api/buildings/${building}`).then(json<Geometry>),

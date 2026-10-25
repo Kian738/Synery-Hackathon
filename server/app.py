@@ -260,6 +260,13 @@ class CloseBody(BaseModel):
     closed: bool = True
 
 
+@app.post("/api/sessions/{session_id}/close/preview")
+def close_preview(session_id: str, body: CloseBody) -> dict:
+    entry = session_or_404(session_id)
+    with session_write(entry):
+        return call(entry["session"], "closure_preview", body.element)
+
+
 @app.post("/api/sessions/{session_id}/close")
 def close(session_id: str, body: CloseBody) -> dict:
     entry = session_or_404(session_id)

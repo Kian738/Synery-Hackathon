@@ -449,6 +449,21 @@ class Session:
                 result['walking_change_m'] = round(current_walk-previous_walk,1)
         return result
 
+    def closure_preview(self, element: str) -> dict:
+        """What closing this place would do, without closing it (the UI asks before stranding rooms)."""
+        element_id = self.element(element)
+        was_closed = element_id in self.closed
+        before = self.impact_snapshot()
+        self.closed.add(element_id)
+        try:
+            impact = self.impact(before)
+        finally:
+            if not was_closed:
+                self.closed.discard(element_id)
+        b = self.building
+        name = b.connectors[element_id]["name"] if element_id in b.connectors else b.label(element_id) if element_id in b.spaces else element_id
+        return {"element": name, "id": element_id, "already_closed": was_closed, "impact": impact}
+
     def door_preview(self, first: str, second: str) -> dict:
         b = self.building
         a, c = self.space(first), self.space(second)

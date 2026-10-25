@@ -155,3 +155,36 @@ def test_http_edit_flow_changes_the_route_and_undo_restores_it():
     assert route_length() < before
     assert client.post(f"/api/sessions/{session_id}/undo").json()["result"]["undone"] == "add_door"
     assert route_length() == before
+
+
+def test_closure_preview_reports_the_impact_without_closing_anything(session):
+    b = session.building
+    lift = next(c for c in b.connectors.values() if c["kind"] == "lift")
+    before = set(session.closed)
+    preview = session.closure_preview(lift["name"])
+    assert preview["id"] == next(k for k, v in b.connectors.items() if v is lift) and not preview["already_closed"]
+    assert preview["impact"]["cut_off_count"] >= 0 and "of_rooms" in preview["impact"]
+    assert session.closed == before, "a preview must not close anything"
+    session.set_closed(lift["name"], True)
+    assert session.closure_preview(lift["name"])["already_closed"] is True
+    session.set_closed(lift["name"], False)
+    assert session.closed == before
+
+
+def test_closing_a_bridge_corridor_strands_rooms_and_the_route_says_so():
+    from floorwise.core.routing import NoRoute
+
+    building = Building.load(DATA / "dev" / "osm-way27917482")
+    session = Session.for_building(building)
+    corridor = "osm-way27917482-F0-S026"
+    preview = session.closure_preview(corridor)
+    assert preview["impact"]["cut_off_count"] > 0, "closing the main corridor must be flagged"
+    start = next(s for s, v in building.spaces.items() if v["name"] == "Eingang Nord")
+    goal = next(s for s, v in building.spaces.items() if v["name"] == "Corridor 3.400")
+    assert plan_route(session.building, [start, goal], Constraints()).length_m > 0
+    session.set_closed(corridor, True)
+    with pytest.raises(NoRoute) as error:
+        plan_route(session.building, [start, goal], Constraints(closed=frozenset(session.closed)))
+    assert "closed" in str(error.value)
+    session.set_closed(corridor, False)
+    assert plan_route(session.building, [start, goal], Constraints(closed=frozenset(session.closed))).length_m > 0

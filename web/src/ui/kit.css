@@ -167,3 +167,5 @@
 .k-card-name { padding:0 6px; font:700 14px/1.25 var(--font-sans); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .k-card-meta { padding:0 6px; font:500 12px var(--font-sans); color:var(--k-mute); }
 @media (max-width:640px) { .k-atlas { inset:0; border-radius:0; } .k-atlas-grid { grid-template-columns:repeat(2,1fr); gap:var(--gap); } }
+.k-confirm { display:flex; align-items:center; gap:var(--gap); flex-wrap:wrap; }
+.k-confirm span { flex:1 1 220px; }

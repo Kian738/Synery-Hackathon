@@ -7,8 +7,7 @@ test('import requires a measured dimension and exposes unverified draft fields',
     expect(route.request().postDataBuffer()?.toString()).toContain('20');
     await route.fulfill({contentType:'application/json',body:JSON.stringify({building_id:'proc-campus-dev-000',report:{status:'draft',review_required:true,warnings:['Floor 1: no common labelled core; alignment is unverified.'],inferred_fields:['Opening widths are unverified.']}})});
   });
-  await page.goto('/?building=proc-campus-dev-000');
-  await page.getByRole('button',{name:'Import plan',exact:true}).click();
+  await page.goto('/?building=proc-campus-dev-000&import=1');
   const dialog=page.getByRole('dialog',{name:'Import floor plans'});
   const width=dialog.getByRole('spinbutton',{name:'First plan width (metres)'});
   await expect(width).toHaveValue('');

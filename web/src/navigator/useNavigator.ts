@@ -198,12 +198,22 @@ export function useNavigator(buildingId: string) {
     }
   }, [sessionId, geometry, here, stepFree, apply]);
 
+  const [closeConfirm,setCloseConfirm]=useState<{id:string;name:string;count:number;of:number}|null>(null);
+  const [lastClosure,setLastClosure]=useState<{id:string;name:string}|null>(null);
   const mutationPending=useRef(new Set<string>());
-  const toggleClosed = useCallback(async (id: string) => {
+  const toggleClosed = useCallback(async (id: string, force = false) => {
     if (!sessionId||busy||mutationPending.current.has(id)) return;
     const current=generation.current;mutationPending.current.add(id);
-    try {const { result, events } = await api.close(sessionId, id, !closed.has(id));
+    try {
+      // Closing something that strands rooms asks first: one tap on a bridge corridor used to make most routes impossible.
+      if(!closed.has(id)&&!force){
+        const preview=(await api.closePreview(sessionId,id)).result;
+        if(current!==generation.current)return;
+        if(preview.impact.cut_off_count>0){setCloseConfirm({id,name:preview.element,count:preview.impact.cut_off_count,of:preview.impact.of_rooms??0});return;}
+      }
+      const { result, events } = await api.close(sessionId, id, !closed.has(id));
       if(current!==generation.current)return;apply(events);setNotice(impactText(result.impact));
+      if(result.closed){setLastClosure({id,name:result.element});setTimeout(()=>setLastClosure(l=>l?.id===id?null:l),9000);}else setLastClosure(null);
     } catch(error){if(current===generation.current)setNotice(String(error));}
     finally{mutationPending.current.delete(id);}
   }, [sessionId, closed, apply,busy]);
@@ -293,7 +303,7 @@ export function useNavigator(buildingId: string) {
   return {
     retryLoad:()=>setLoadRevision(n=>n+1),compareItems,planStops,visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, hereSource, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
-    goTo, ask, toggleClosed, decideChange,busyLabel,apply,
+    closeConfirm, setCloseConfirm, lastClosure, goTo, ask, toggleClosed, decideChange,busyLabel,apply,
     scenarioIn, replayCmd, clearScenarioEvents: () => { setScenarioIn(null); setReplayCmd(null); },
   };
 }
