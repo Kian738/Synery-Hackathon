@@ -187,6 +187,7 @@
 .k-room-more { font:500 13px var(--font-sans); color:var(--k-mute); } .k-room-more summary { cursor:pointer; padding:4px 0; } .k-room-more p { margin:4px 0; color:var(--k-ink); }
 .k-room-close[aria-pressed="true"] { background:#2a1a1c; border-color:#7a3b3b; color:#ffd2d2; }
 .k-room-close { width:100%; }
+.k-room-close[aria-pressed="true"]:hover, .k-room-close[aria-pressed="true"]:focus-visible { background:#3a2326; border-color:#b25a5a; color:#fff0f0; }
 @media (max-width:640px) { .k-room { left:var(--gap-group); right:var(--gap-group); width:auto; bottom:var(--gap-group); } .k-info { display:none; } }
 
 .k-picker { display:flex; flex-direction:column; gap:var(--gap); padding-top:var(--gap); }
@@ -248,3 +249,63 @@
 .k-step-body { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
 .k-step-text { font:500 15px/1.4 var(--font-sans); }
 .k-step-meta { color:var(--k-mute); font:500 12px var(--font-sans); }
+
+/* Guide me card: one action at a time. Icon, what to do, where it leads, how far; the next action is previewed in one quiet line. */
+.k-guide-now { display:grid !important; grid-template-columns:auto 1fr auto auto; align-items:center; gap:14px; min-height:76px; }
+.k-guide-icon { display:grid; place-items:center; width:56px; height:56px; border-radius:var(--r-lg, 16px); background:var(--accent, #ffd45c); color:#1a1405; }
+.k-guide-icon svg { width:30px; height:30px; }
+.k-guide-body { display:grid; gap:2px; min-width:0; }
+.k-guide-body small { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#9fb3bb; }
+.k-guide-body strong { font-size:22px; line-height:1.15; color:#f4f8f9; }
+.k-guide-target { font-size:15px; color:#d6e2e6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.k-guide-next { font-style:normal; font-size:13px; color:#8fa6af; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.k-guide-cue { padding:6px 12px; border-radius:999px; background:#22333b; color:#ffe39a; font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.k-guide-now[data-kind="floor"] .k-guide-icon { background:#74c9ef; }
+.k-guide-now[data-kind="arrive"] .k-guide-icon { background:#6bd49a; }
+@media (max-width:640px) { .k-guide-now { grid-template-columns:auto 1fr auto; gap:10px; } .k-guide-icon { width:46px; height:46px; } .k-guide-body strong { font-size:18px; } .k-guide-cue { grid-column:2; justify-self:start; } }
+.k-step-detail { display:block; margin-top:4px; font-size:13px; color:#9fb3bb; }
+
+/* Guide me card, second pass: sentence case everywhere, one big number counting down, quiet secondary lines. */
+.k-guide-now, .k-guide-now * { text-transform:none !important; letter-spacing:0 !important; }
+.k-guide-now { grid-template-columns:auto 1fr auto auto; }
+.k-guide-count { font-size:12px; color:#8fa6af; }
+.k-guide-body strong { font-size:22px; font-weight:700; }
+.k-guide-target { font-size:15px; color:#d6e2e6 !important; font-weight:500; }
+.k-guide-next { font-size:12px; color:#7f959e; }
+.k-guide-hint { font-size:13px; color:#ffe39a; }
+
+/* Activity: a sliding bar at the very top and a named status below it while the app waits for the server. */
+.k-activity { position:fixed; inset:0 0 auto 0; z-index:90; pointer-events:none; display:grid; justify-items:center; }
+.k-activity-bar { display:block; width:100%; height:3px; background:linear-gradient(90deg,transparent 0 30%,#ffd45c 30% 60%,transparent 60% 100%); background-size:200% 100%; animation:k-activity-slide 1.1s linear infinite; }
+.k-activity-pill { display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:8px 16px; border-radius:999px; background:#10191eee; border:1px solid #34464f; color:#f4f8f9; font-size:14px; box-shadow:0 8px 24px #0008; }
+.k-activity-pill i { width:12px; height:12px; border-radius:50%; border:2px solid #ffd45c; border-top-color:transparent; animation:k-activity-spin .8s linear infinite; }
+.k-activity-pill em { font-style:normal; color:#9fb3bb; margin-left:6px; }
+@keyframes k-activity-slide { from { background-position:200% 0; } to { background-position:-100% 0; } }
+@keyframes k-activity-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .k-activity-bar { animation:none; background:#ffd45c; } .k-activity-pill i { animation:none; border-top-color:#ffd45c; } }
+.k-guide-meter { display:inline-flex; align-items:baseline; gap:3px; padding:6px 14px; border-radius:14px; background:#1d2c33; color:#ffe39a; font-variant-numeric:tabular-nums; min-width:64px; justify-content:center; }
+.k-guide-meter i { font-style:normal; font-size:30px; font-weight:800; line-height:1; }
+.k-guide-meter u { text-decoration:none; font-size:14px; color:#c9b36a; }
+.k-guide-meter i.now { font-size:20px; }
+.k-guide-cue { display:none; }
+@media (max-width:640px) { .k-guide-now { grid-template-columns:auto 1fr auto; } .k-guide-meter { padding:4px 10px; min-width:52px; } .k-guide-meter i { font-size:24px; } .k-guide-next { display:none; } }
+.k-guide-icon { color:#1a1405 !important; }
+.k-guide-icon svg { color:#1a1405; }
+@media (max-width:640px) {
+  .guide-player { box-sizing:border-box; max-width:calc(100% - 20px); overflow:hidden; }
+  .guide-player .player-transport { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 10px; }
+  .guide-player .player-time { display:none; }
+  .guide-player .speed-options button { min-width:34px; padding:0 6px; }
+  .k-guide-now > button { width:36px; height:36px; }
+}
+
+/* Loader: floors rise one after another, then breathe. */
+.k-loader { display:grid; justify-items:center; align-content:center; gap:10px; min-height:100%; padding:40px 16px; color:#cfdde2; text-align:center; }
+.k-loader strong { font-size:18px; color:#f4f8f9; }
+.k-loader span { font-size:14px; color:#9fb3bb; min-height:20px; }
+.k-loader-floor { opacity:0; transform:translateY(18px); animation:k-loader-rise .7s cubic-bezier(.2,.8,.2,1) forwards, k-loader-breathe 2.4s ease-in-out 1.4s infinite; }
+@keyframes k-loader-rise { to { opacity:1; transform:translateY(0); } }
+@keyframes k-loader-breathe { 50% { transform:translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .k-loader-floor { opacity:1; transform:none; animation:none; } }
+.recovery:has(.k-loader) { display:grid; place-items:center; min-height:100vh; width:100%; max-width:none; margin:0; padding:0; background:#0d161a; }
+.k-loader { width:100%; box-sizing:border-box; }

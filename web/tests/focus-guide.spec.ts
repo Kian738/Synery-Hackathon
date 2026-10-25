@@ -67,6 +67,7 @@ test("Guide me keeps the eye off the walls along the whole route", async ({ page
   await expect(slider).toBeAttached({ timeout: 20_000 });
   const canvas = page.locator("canvas");
   let tooClose = 0, samples = 0;
+  const close: string[] = [];
   for (let i = 0; i <= 24; i++) {
     await slider.evaluate((el: HTMLInputElement, f: number) => {
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -84,11 +85,13 @@ test("Guide me keeps the eye off the walls along the whole route", async ({ page
       const dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1], len2 = dx * dx + dy * dy;
       if (len2 < 1e-9) continue;
       const t = Math.max(0, Math.min(1, ((x - w.a[0]) * dx + (y - w.a[1]) * dy) / len2));
-      if (Math.hypot(x - (w.a[0] + dx * t), y - (w.a[1] + dy * t)) < CAMERA_RADIUS_M - 0.02) { tooClose++; break; }
+      const d = Math.hypot(x - (w.a[0] + dx * t), y - (w.a[1] + dy * t));
+      if (d < CAMERA_RADIUS_M - 0.02) { tooClose++; close.push(`sample ${i} floor ${floor} at ${x.toFixed(2)},${y.toFixed(2)} is ${d.toFixed(2)} m from a wall`); break; }
     }
   }
   expect(walls.length).toBeGreaterThan(0);
   expect(samples).toBeGreaterThan(10);
+  expect(close).toEqual([]);
   expect(tooClose).toBe(0);
 });
 
@@ -145,7 +148,7 @@ test("focus mode shows dimmed rooms and says how many", async ({ page }) => {
   const pill = page.getByTestId("focus-toggle");
   await expect(pill).toContainText(/\d+ other rooms dimmed/, { timeout: 20_000 });
   await pill.click();
-  await expect(pill).toContainText("All rooms");
+  await expect(pill).toContainText("Everything");
 });
 
 test("lift cars travel to the floor you pick and their doors stay shut elsewhere", async ({ page }) => {
@@ -279,13 +282,14 @@ test("Guide me projection keeps the near plane tight and the field of view modes
   expect(Number(await canvas.getAttribute("data-camera-fov"))).toBeLessThanOrEqual(72);
 });
 
-test("a multi-floor route opens as Route floors with focus on; a one-floor route stays on This floor", async ({ page }) => {
+test("a multi-floor route opens as Whole building with Route only on; a one-floor route opens on This floor; a building opens as Whole building", async ({ page }) => {
   const building = "osm-way27917482";
   await page.goto(`/?building=${building}&at=${building}-F3-S069&to=00.05.058`);
   await expect(page.getByTestId("focus-toggle")).toContainText(/dimmed/, { timeout: 25_000 });
   await page.getByRole("button", { name: "Layers" }).click();
   const group = page.getByRole("group", { name: "Visible floors" });
-  await expect(group.getByRole("button", { name: "Route floors" })).toHaveAttribute("aria-pressed", "true");
+  await expect(group.getByRole("button", { name: "Whole building" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Route only", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.goto("/?building=proc-campus-test-013&to=Lift");
   await page.getByRole("button", { name: "Layers" }).click();
   await expect(page.getByRole("group", { name: "Visible floors" }).getByRole("button", { name: "This floor" })).toHaveAttribute("aria-pressed", "true", { timeout: 25_000 });

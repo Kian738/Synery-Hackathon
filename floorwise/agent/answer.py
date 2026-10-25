@@ -10,6 +10,7 @@ from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
+from floorwise.agent.normalize import clean_question, has_chatter
 from floorwise.agent.parse_rules import parse_rules
 from floorwise.agent.solve import SolveError, solve
 from floorwise.agent.spec import QuerySpec, describe_ambiguity, resolve_spec_all
@@ -33,9 +34,18 @@ def llm_parser():
 
 
 def parse(building: Building, question: str) -> tuple[QuerySpec | None, str]:
+    if has_chatter(question):  # the rules would swallow "Hi, could you help me? Lift 2" into a place name: strip the chatter first
+        spec = parse_rules(clean_question(question))
+        if spec is not None:
+            return spec, "rules+clean"
     spec = parse_rules(question)
     if spec is not None:
         return spec, "rules"
+    cleaned = clean_question(question)  # chatter, dictation, small typos: only tried when the exact wording did not parse
+    if cleaned != question:
+        spec = parse_rules(cleaned)
+        if spec is not None:
+            return spec, "rules+clean"
     if not USE_LLM:
         return None, "none"
     spec, _usage = llm_parser().parse(building, question)

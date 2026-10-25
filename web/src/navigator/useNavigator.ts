@@ -36,6 +36,7 @@ const ACTIVITY: Record<string, (i: any) => string> = {
 
 /** The space behind an entrance, preferring lobbies on the floor nearest the ground. */
 export function mainEntrance(g: Geometry): string | null {
+  if (g.main_entrance && g.spaces.some((x) => x.id === g.main_entrance)) return g.main_entrance;
   const levels = new Map(g.floors.map((f) => [f.id, Math.abs(f.level)]));
   const behind = entrances(g);
   const rank = (x: Geometry["spaces"][number]) => (x.room_type === "lobby" ? 0 : 10) + (levels.get(x.floor_id) ?? 0) + (x.type === "room" ? 0.5 : 0);
@@ -192,7 +193,8 @@ export function useNavigator(buildingId: string) {
       if (current !== generation.current) return;
       if (result.error) {
         setPreviousRoute(routeRef.current); setRoute(null); apply(events);
-        setNotice(result.error);
+        const apart=(result as {disconnected?:{text:string;nearest_reachable_place?:string;possible_missing_door?:string[]}}).disconnected;
+        setNotice(apart?`${result.error}. ${apart.text}${apart.nearest_reachable_place?` Closest place you can reach: ${apart.nearest_reachable_place}.`:""}${apart.possible_missing_door?` A door may be missing between ${apart.possible_missing_door.join(" and ")}.`:""}`:result.error);
         return;
       }
       setRouteMeta({ from: result.from, to: result.to, alternatives: result.other_matches_further_away });

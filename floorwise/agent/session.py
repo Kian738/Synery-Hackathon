@@ -4,6 +4,8 @@ Tools (for Claude) and the REST API (for the app) both go through this object, s
 and what the map shows can never disagree."""
 
 import copy
+
+import networkx as nx
 from dataclasses import asdict, replace
 import re
 import itertools
@@ -11,7 +13,7 @@ from dataclasses import dataclass, field
 
 from floorwise.core import geometry, ops
 from floorwise.core import resolve as R
-from floorwise.core.graph import Constraints
+from floorwise.core.graph import Constraints, RouteGraph
 from floorwise.core.model import Building
 from floorwise.core.connectors import inventory as connector_inventory_data, connector_kind
 from floorwise.core.routing import NoRoute, Route, plan_route
@@ -366,7 +368,9 @@ class Session:
                 widening = fix.widen[0]
                 self.emit("fix_preview", opening={**b.openings[widening.opening_id], "width_m": widening.to_m},
                           fix=asdict(fix), start=first, destination=last)
-            return {"error": str(error), "without_extra_constraints_m": relaxed.length_m if relaxed else None, "why": asdict(fix)}
+            disconnected = self.disconnection(first, last)
+            return {"error": str(error), "without_extra_constraints_m": relaxed.length_m if relaxed else None, "why": asdict(fix),
+                    **({"disconnected": disconnected} if disconnected else {})}
         self.last_route = route
         self.emit("route", route=route.to_dict())
         return {
@@ -377,6 +381,34 @@ class Session:
             **({"assumed_start": f"Start not given: assumed the main entrance, {b.label(assumed)}. Say so in one line."} if assumed else {}),
             **({"other_matches_further_away": alternatives} if alternatives else {}),
         }
+
+    def disconnection(self, first: str, last: str) -> dict | None:
+        """The two places lie in separate parts of the building (no door, stair or lift joins them, whatever the person asked for).
+
+        Says so, names the closest place that can be reached from the start, and flags a wall the two parts share, where a door may be missing."""
+        b = self.building
+        graph = RouteGraph(b, Constraints(closed=frozenset(self.closed)), keep=frozenset({first, last})).graph
+        if first not in graph or last not in graph:
+            return None
+        part = nx.node_connected_component(graph, first)
+        if last in part:
+            return None
+        other = nx.node_connected_component(graph, last)
+        rooms = lambda ids: [s for s in ids if s in b.spaces and b.spaces[s]["type"] != "outdoor"]
+        here, there = rooms(part), rooms(other)
+        target = b.polygons[last]
+        same_floor = [s for s in here if b.spaces[s]["floor_id"] == b.spaces[last]["floor_id"] and b.spaces[s]["type"] == "room"] or [s for s in here if b.spaces[s]["type"] == "room"] or here
+        nearest = min(same_floor, key=lambda s: b.polygons[s].distance(target)) if same_floor else None
+        gap = None
+        for a in here:
+            for c in there:
+                if b.spaces[a]["floor_id"] == b.spaces[c]["floor_id"] and b.polygons[a].distance(b.polygons[c]) <= 0.5:
+                    gap = (a, c) if gap is None or b.polygons[a].distance(b.polygons[c]) < b.polygons[gap[0]].distance(b.polygons[gap[1]]) else gap
+        text = (f"{b.label(first)} and {b.label(last)} lie in separate parts of the building: {len(here)} rooms reach {b.label(first)}, {len(there)} reach {b.label(last)}, "
+                "and no door, stair or lift in the data joins them.")
+        return {"text": text, "rooms_reachable_from_start": len(here), "rooms_with_destination": len(there),
+                **({"nearest_reachable_place": b.label(nearest)} if nearest else {}),
+                **({"possible_missing_door": [b.label(gap[0]), b.label(gap[1])]} if gap else {})}
 
     def reachable(self, start: str, floor: str, **constraint_args) -> dict:
         b = self.building
@@ -685,7 +717,10 @@ class Session:
 
 
 def main_entrance(building: Building) -> str | None:
-    """The space behind an entrance, preferring lobbies on the floor nearest the ground."""
+    """The space behind an entrance, preferring lobbies on the floor nearest the ground.
+
+    Only entrances in the largest connected part count: some buildings have a side entrance that opens into a few rooms with no way on
+    (`eval.connectivity`), and starting there would answer "no route" to most questions."""
     candidates = []
     for opening in building.openings.values():
         if "outside" not in opening["space_ids"]:
@@ -694,4 +729,10 @@ def main_entrance(building: Building) -> str | None:
         space = building.spaces[space_id]
         rank = (0 if space["room_type"] == "lobby" else 1, abs(building.level(space["floor_id"])), space["type"] == "room")
         candidates.append((rank, space_id))
-    return min(candidates)[1] if candidates else None
+    if not candidates:
+        return None
+    graph = RouteGraph(building, Constraints()).graph
+    sizes = {sid: len(c) for c in nx.connected_components(graph) for sid in c if sid in building.spaces}
+    best = max(sizes.get(sid, 0) for _, sid in candidates)
+    pool = [c for c in candidates if sizes.get(c[1], 0) == best] if best else candidates
+    return min(pool)[1]

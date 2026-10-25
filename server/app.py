@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from floorwise.agent.session import Session
+from floorwise.agent.session import Session, main_entrance
 from floorwise.core.model import Building
 from floorwise.core.resolve import ResolveError
 from floorwise.paths import DATA, ROOT
@@ -143,6 +143,8 @@ from server.campus import router as campus_router  # noqa: E402
 app.include_router(lab_router)
 app.include_router(campus_router)
 app.include_router(create_companion_router())
+from server.voice import router as voice_router
+app.include_router(voice_router)
 
 
 @lru_cache(maxsize=1)
@@ -176,6 +178,7 @@ def geometry_payload(b: Building) -> dict:
     anchors={sid: list(poly.representative_point().coords)[0] for sid,poly in b.polygons.items()}
     return {
         "building": b.info,
+        "main_entrance": main_entrance(b),
         "floors": sorted(b.data["floors"], key=lambda f: f["level"]),
         "spaces": [
             {**{k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")}, "anchor": anchors[s["id"]]} for s in b.spaces.values()
@@ -687,6 +690,7 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
                 message = ('Request stopped. Computed results remain available.' if cancelled.is_set() or isinstance(error, InterruptedError) else
                            'The language service timed out. Please retry. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else
+                           'The language service has no valid API key: start the server with `uv run --env-file .env uvicorn server.app:app`. Routes, maps and edits still work.' if type(error).__name__ in ('CredentialsError', 'AuthenticationError', 'PermissionDeniedError') else
                            'The language service could not complete this request. Please retry; computed results remain available.')
                 diagnostic=str(getattr(error,'body',{}).get('error',{}).get('message','')) if isinstance(getattr(error,'body',None),dict) else ''
                 for key,value in os.environ.items():

@@ -104,6 +104,13 @@ def resolve_space(building: Building, mention: str, floor_hint: str | None = Non
             f"'{mention}' matches {len(exact)} spaces; which one?",
             [{"id": i, "label": building.label(i), "hint": hints.get(i, "")} for i in exact for hints in [distinguishing_hints(building, exact)]],
         )
+    # Dictated or typed without dots and brackets ("generic room 0106056" for "Generic room 01.06.056"): same letters and digits, one space.
+    squash = lambda text: "".join(ch for ch in normalise(text) if ch.isalnum())
+    flat = squash(mention)
+    if flat:
+        loose = [s["id"] for s in pool if squash(s["name"]) == flat]
+        if len(loose) == 1:
+            return Resolution(loose[0], 0.97)
     # "room 0.29", "the 2.04 lab": a token that is a room number settles it when unique on the floor.
     refs = [t for t in key.split() if any(ch.isdigit() for ch in t)]
     for token in refs:

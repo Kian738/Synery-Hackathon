@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import type { Asset } from "../lib/types";
+import { facingTable } from "../lib/facing";
 import { getAssetVisual, DEFAULT_FOOTPRINT_M, type AssetPart } from "../scene-assets/catalog";
 
-type Part=AssetPart & {asset:Asset};
+type Part=AssetPart & {asset:Asset;facing:number};
 
-/** The dataset's rotation 0 puts an item's front toward the wall behind it, our models put their front on local -Z: measured by
- *  `uv run python -m eval.orientation` (desks, wardrobes, sofas, fridges 97-100 %, toilets 69 %, beds 78 % have their front at the wall). */
-const FACING_OFFSET_DEG=180;
+// Orientation lives in lib/facing.ts: the dataset's rotation 0 puts an item's front toward the wall behind it (measured by `eval.orientation`);
+// seating is turned toward the nearest table or screen because its dataset rotation carries no signal.
 
 /** Soft ambient-occlusion look: every unit shape is darker toward its underside, so legs, drawers and undersides read as depth
  *  without any extra lights. The vertex colour multiplies the per-instance colour. */
@@ -40,7 +40,7 @@ function Instances({parts,shape,elevation,highlighted,muted,near}:{parts:Part[];
       const p=parts[i],a=p.asset,f=a.footprint;
       const width=f&&Number.isFinite(f.width_m)&&f.width_m>0?f.width_m:DEFAULT_FOOTPRINT_M;
       const depth=f&&Number.isFinite(f.depth_m)&&f.depth_m>0?f.depth_m:DEFAULT_FOOTPRINT_M;
-      parent.position.set(a.position[0],0,-a.position[1]);parent.rotation.set(0,THREE.MathUtils.degToRad((f?.rotation_deg??0)+FACING_OFFSET_DEG),0);parent.updateMatrix();
+      parent.position.set(a.position[0],0,-a.position[1]);parent.rotation.set(0,THREE.MathUtils.degToRad(p.facing),0);parent.updateMatrix();
       local.position.set(p.position[0]*width,p.position[1]+0.005,p.position[2]*depth);
       local.rotation.set(...(p.rotation??[0,0,0]));local.scale.set(p.scale[0]*width,p.scale[1],p.scale[2]*depth);local.updateMatrix();
       mesh.setMatrixAt(i,parent.matrix.clone().multiply(local.matrix));
@@ -54,12 +54,13 @@ function Instances({parts,shape,elevation,highlighted,muted,near}:{parts:Part[];
     <meshStandardMaterial vertexColors roughness={.62} metalness={.1}/>
   </instancedMesh></group>;
 }
-export function SceneAssets({assets,elevation,highlighted=false,muted=false,interior=false,near=true}:{assets:Asset[];elevation:number;highlighted?:boolean;muted?:boolean;interior?:boolean;near?:boolean}){
+export function SceneAssets({assets,context,rings,elevation,highlighted=false,muted=false,interior=false,near=true}:{assets:Asset[];context?:Asset[];rings?:Map<string,[number,number][]>;elevation:number;highlighted?:boolean;muted?:boolean;interior?:boolean;near?:boolean}){
   const groups=useMemo(()=>{
     const groups:{box:Part[];cylinder:Part[];sphere:Part[]}={box:[],cylinder:[],sphere:[]};
     const lod=interior||near?"interior":"overview";
-    assets.forEach(asset=>getAssetVisual(asset,lod).parts.forEach(p=>groups[p.shape].push({...p,asset})));
+    const facing=facingTable(context??assets,rings);
+    assets.forEach(asset=>getAssetVisual(asset,lod).parts.forEach(p=>groups[p.shape].push({...p,asset,facing:facing.get(asset.id)??0})));
     return groups;
-  },[assets,interior,near]);
+  },[assets,context,rings,interior,near]);
   return <>{(["box","cylinder","sphere"] as const).map(shape=><Instances key={shape} shape={shape} parts={groups[shape]} elevation={elevation} highlighted={highlighted} muted={muted} near={interior||near}/>)}</>;
 }

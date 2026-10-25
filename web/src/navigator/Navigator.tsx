@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { AgentReply } from "../components/AgentReply";
 import {TurnResultLinks} from "../components/TurnResultLinks";
 import {ComparisonCard} from "../components/ComparisonCard";
-import {ExploreTools,rememberPlace} from "../components/ExploreTools";
 import {readLocal} from "../lib/share";
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
@@ -21,6 +20,8 @@ import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
 import { audioStreamQueue, canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { ScenarioPanel } from "./ScenarioPanel";
+import { spokenStep } from "../lib/guide";
+import { Loader } from "../components/Loader";
 import { JourneyBanner } from "../journey/JourneyBanner";
 import { currentIndoorLeg, nextLeg, setJourneyIndex } from "../journey/journey";
 import { entrances, type Message, useNavigator } from "./useNavigator";
@@ -161,7 +162,6 @@ export default function Navigator() {
   const [heading, setHeading] = useState<string>("");
   const [weakOpen,setWeakOpen]=useState(false);
   const [scenarioOpen,setScenarioOpen]=useState(false);
-  const [exploreOpen,setExploreOpen]=useState(false);
   const [scenarioMark,setScenarioMark]=useState<ScenarioMark|null>(null);
   const scenarioZones=useMemo(()=>{const z:Record<string,string>={};Object.entries(scenarioMark?.crowd??{}).forEach(([id,n])=>{z[id]=n===2?"crowd2":"crowd1";});scenarioMark?.responder?.spaces.forEach(id=>{z[id]="responder";});return z;},[scenarioMark]);
   useEffect(()=>{if(nav.scenarioIn)setScenarioOpen(true);},[nav.scenarioIn]);
@@ -176,13 +176,12 @@ export default function Navigator() {
   const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow" | "exterior">(params.get("view") === "2d" ? "2d" : "3d");
-  const savedScope = (() => { try { const v = sessionStorage.getItem("floorwise.scope"); return v === "current" || v === "route" || v === "building" ? v : null; } catch { return null; } })();
-  const [scope, setScope] = useState<"current"|"route"|"building">(savedScope ?? "current");
-  const scopeTouched = useRef(savedScope !== null);
-  /** The person's own choice always wins and is remembered for the session; until then a multi-floor route opens as "Route floors" with focus on. */
-  const chooseScope = (v: "current"|"route"|"building") => { scopeTouched.current = true; try { sessionStorage.setItem("floorwise.scope", v); } catch { /* storage blocked */ } setScope(v); };
+  /** What is drawn: this floor or the whole building, and independently "route only" (just what the route needs; with a route it is on by
+   *  default, and a new route turns it on again). Opening a map shows the whole building. */
+  const [scope, setScope] = useState<"current"|"building">("building");
+  const [focusOn, setFocusOn] = useState(true);
   const [exploded,setExploded]=useState(true);
-  const [focusOn,setFocusOn]=useState(true),[guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
+  const [guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
   const [stageExpanded,setStageExpanded]=useState(params.get("explore")==="1");
   const [seekRequest,setSeekRequest]=useState(0);
@@ -196,18 +195,16 @@ export default function Navigator() {
     const stride = Math.max(1, Math.ceil(pts.length / 400));
     return pts.filter((_, i) => i % stride === 0 || i === pts.length - 1).map(p => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100] as [number, number]);
   }, [nav.route, nav.activeStep]);
-  useEffect(() => { if (!nav.route || scopeTouched.current) return; setScope(nav.route.floors.length > 1 ? "route" : "current"); }, [nav.route]);
+  useEffect(() => { if (!nav.route) return; setScope(nav.route.floors.length > 1 ? "building" : "current"); setFocusOn(true); }, [nav.route]);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [buildingImport, setBuildingImport] = useState(() => params.get("import") === "1"); // no visible button: building from a plan stays reachable by URL and tests
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
-  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("current");setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);setExploreOpen(false);linked.current=false; }, [buildingId]);
+  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("building");setFocusOn(true);setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);linked.current=false; }, [buildingId]);
   // Deep link (shareable, QR at a door): ?building=…&at=<space id>&to=<place>&step_free=1
   const linked = useRef(false);
   useEffect(()=>{document.documentElement.classList.toggle('high-contrast',readLocal<unknown>('floorwise:contrast',false)===true);document.documentElement.classList.toggle('large-text',readLocal<unknown>('floorwise:large-text',false)===true);},[]);
-  useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setExploreOpen(v=>!v);setToolsOpen(false);setScenarioOpen(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
-  useEffect(()=>{if(selected)rememberPlace(buildingId,selected.id);},[buildingId,selected?.id]);
   useEffect(()=>{if(selected&&selected.floor_id!==nav.floorId)setSelected(null);},[nav.floorId]);
   useEffect(()=>{const node=sceneHost.current;if(!node)return;const wheel=(e:WheelEvent)=>{if(e.ctrlKey)e.preventDefault();};node.addEventListener('wheel',wheel,{passive:false});return()=>node.removeEventListener('wheel',wheel);},[nav.geometry?.building.id]);
   useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){setSelected(null);setPicking(false);setShowKey(false);setWeakOpen(false);setPhoneOpen(false);setPlanExpanded(false);setQuestionOpen(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
@@ -421,7 +418,7 @@ export default function Navigator() {
 
   useEffect(() => {
     if ((voiceOut || voiceMode) && following && steps[nav.activeStep]) {
-      speak(steps[nav.activeStep].short ?? steps[nav.activeStep].text ?? "");
+      speak(spokenStep(steps[nav.activeStep]));
     }
     return () => {
       stopSpeaking();
@@ -495,7 +492,7 @@ export default function Navigator() {
 
   const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
   if (!g) {
-    return <div className="recovery" role="status">{nav.notice??"Loading building…"}{nav.notice&&<><button onClick={nav.retryLoad}>Retry loading</button><label>Choose another building<select value={buildingId} onChange={e=>setParams({building:e.target.value})}>{buildings.map(b=><option value={b.building_id} key={b.building_id}>{b.name}</option>)}</select></label></>}</div>;
+    return <div className="recovery" role="status">{nav.notice??<Loader label={buildings.find(b=>b.building_id===buildingId)?.name}/>}{nav.notice&&<><button onClick={nav.retryLoad}>Retry loading</button><label>Choose another building<select value={buildingId} onChange={e=>setParams({building:e.target.value})}>{buildings.map(b=><option value={b.building_id} key={b.building_id}>{b.name}</option>)}</select></label></>}</div>;
   }
 
   return (
@@ -562,23 +559,21 @@ export default function Navigator() {
             {following&&<IconButton label="Ask" icon="send" text="Ask" pressed={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}/>}
             {following&&<IconButton label="Focus on route" icon="focus" pressed={guideFocus} onClick={()=>setGuideFocus(v=>!v)}/>}
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={()=>{setVoiceOut(!voiceOut);if(voiceOut){stopSpeaking();clearVoiceTour();}}}/>}
-            <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
+            {view!=="2d"&&<IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>}
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
-              <Segmented ariaLabel="Visible floors" value={scope} onChange={chooseScope} options={[
+              <Segmented ariaLabel="Visible floors" value={scope} onChange={(v:string)=>setScope(v==="current"?"current":"building")} options={[
                 {value:"current",label:"This floor",ariaLabel:"This floor"},
-                {value:"route",label:"Route",ariaLabel:"Route floors",disabled:!nav.route},
-                {value:"building",label:"Building",ariaLabel:"Whole building"}]}/>
+                {value:"building",label:"Whole building",ariaLabel:"Whole building"}]}/>
+              {!!nav.route&&<button aria-pressed={focusOn} onClick={()=>setFocusOn(v=>!v)}><Pictogram name="focus" size={18}/>Route only</button>}
               {scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}><Pictogram name="spread" size={18}/>Spread floors apart</button>}
-              {!!nav.route&&scope!=="building"&&<button aria-pressed={focusOn} onClick={()=>setFocusOn(v=>!v)}><Pictogram name="focus" size={18}/>Focus on route</button>}
               {nav.closed.size>0&&<><div className="k-pop-title">Closed places</div>{[...nav.closed].map(id=><div className="k-closed" key={id}><span>{g.spaces.find(x=>x.id===id)?.name??g.connectors.find(x=>x.id===id)?.name??"Door"}</span><button onClick={()=>nav.toggleClosed(id)}>Reopen</button></div>)}</>}
             </Popover>}
             <Popover label="Building tools" icon="tools" open={toolsOpen} onOpenChange={setToolsOpen} className="building-tools">
               {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
-              {!following&&<button onClick={()=>{setExploreOpen(true);setToolsOpen(false);setScenarioOpen(false);setPlanExpanded(false);setWeakOpen(false);setPhoneOpen(false);}}><Pictogram name="pin" size={18}/>Find, save &amp; share</button>}
               {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
-                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
+                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
                 onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
               {!following&&<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}><Pictogram name="aid" size={18}/>Stress test</button><Link to="/lab"><Pictogram name="info" size={18}/>Evidence</Link></>}
@@ -590,9 +585,9 @@ export default function Navigator() {
           <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
             {view==='exterior'?<Suspense fallback={<p role="status">Preparing exterior map…</p>}><ExteriorView buildingId={buildingId} onEnter={enterInterior}/></Suspense>:view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult}
               pins={pins} previewDoor={nav.previewDoor} selected={voiceFocusSpace?.id ?? selected?.id} scenario={scenarioMark} focus={focusPoint} onSpaceClick={selectSpace} /> :
-              <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
+              <Suspense fallback={<Loader label={g.building.name} phrases={["Raising the floors","Setting the walls","Placing the furniture"]}/>}>
                 <Building3D hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id ?? selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id ?? selected?.id} visualResult={nav.visualResult} heading={heading?Number(heading):undefined} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
@@ -602,7 +597,6 @@ export default function Navigator() {
           <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id ?? selected?.id} scenario={scenarioMark} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
-        {exploreOpen&&<ExploreTools geometry={g} selected={selected} here={nav.here} route={nav.route} stepFree={nav.stepFree} onClose={()=>setExploreOpen(false)} onSelect={focusRoom} onHighlight={ids=>{nav.setHighlights(new Set(ids));const entity=g.assets.find(a=>a.id===ids[0]);if(entity)nav.setFloorId(entity.floor_id);}} onCompare={floor=>void nav.compareItems(floor)} onPlan={async stops=>{await nav.planStops(stops);setView('3d');}}/>}
         {nav.closeConfirm && <div role="alertdialog" aria-label="Confirm closing" className="model-notice k-confirm">
           <span><b>Close {nav.closeConfirm.name}?</b> {nav.closeConfirm.count} of {nav.closeConfirm.of} rooms would lose their way out.</span>
           <button className="k-ctl" onClick={() => nav.setCloseConfirm(null)}>Cancel</button>
@@ -733,9 +727,11 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
       <button type="button" onClick={onClick} aria-current={active ? "step" : undefined} className="k-step" data-kind={step.kind} data-active={active}>
         <span className="k-step-icon"><Pictogram name={step.icon} size={18} /></span>
         <span className="k-step-body">
-          <span className="k-step-text">{step.text}</span>
+          {step.headline
+            ? <><span className="k-step-text"><b>{step.headline}</b> {step.target}</span>{active && <span className="k-step-detail">{step.text}</span>}</>
+            : <span className="k-step-text">{step.text}</span>}
           {(step.metres > 0 || isFloor) && (
-            <span className="k-step-meta">{index > 0 && step.metres > 0 ? `${Math.round(step.metres)} m` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
+            <span className="k-step-meta">{index > 0 && step.metres > 0 ? `${step.cue && step.cue !== "now" ? step.cue : `${Math.round(step.metres)} m`}` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
           )}
         </span>
       </button>
@@ -1038,7 +1034,7 @@ function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; inde
       </div>
       <div className="grid grid-cols-3 gap-2">
         <button disabled={i <= 1} onClick={() => onIndex(i - 1)} className="border border-ink-3 py-4 font-sign text-xl disabled:opacity-30">Back</button>
-        <button onClick={() => speak(step.text)} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
+        <button onClick={() => speak(spokenStep(step))} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
         <button disabled={i >= steps.length - 1} onClick={() => onIndex(i + 1)} className="bg-mark py-4 font-sign text-xl font-bold text-ink disabled:opacity-30">Next</button>
       </div>
     </div>
