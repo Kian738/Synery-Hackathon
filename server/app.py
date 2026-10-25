@@ -491,3 +491,13 @@ if WEB_DIST.exists():
     @app.get("/lab/{rest:path}")
     def index(rest: str = "") -> FileResponse:
         return FileResponse(WEB_DIST / "index.html")
+
+    # Files of web/public that must sit at the root: the install manifest and the app icons (a phone installs "Floorwise" to its home screen).
+    _ROOT_FILES = {"manifest.webmanifest": "application/manifest+json", "icon-192.png": "image/png", "icon-512.png": "image/png",
+                   "icon-maskable-512.png": "image/png", "apple-touch-icon.png": "image/png"}
+
+    @app.get("/{name}")
+    def root_file(name: str) -> FileResponse:
+        if name not in _ROOT_FILES or not (WEB_DIST / name).exists():
+            raise HTTPException(404, "Not found")
+        return FileResponse(WEB_DIST / name, media_type=_ROOT_FILES[name], headers={"Cache-Control": "public, max-age=86400"})

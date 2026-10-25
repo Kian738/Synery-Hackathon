@@ -296,6 +296,15 @@
 @media (max-width:640px) { .k-stress { right:8px; left:8px; width:auto; top:64px; max-height:calc(100% - 80px); } }
 .k-guide-hint { font-size:13px; color:#ffe39a; }
 
+/* Native feel on a phone: no rubber-band scroll of the page, no grey tap flash, the bottom controls clear of the home indicator. */
+html, body { overscroll-behavior:none; }
+button, [role="button"], a { -webkit-tap-highlight-color:transparent; }
+@media (max-width:1023px) {
+  .navigator-shell { padding-bottom:env(safe-area-inset-bottom); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+  .k-stress { bottom:env(safe-area-inset-bottom); }
+}
+@media (display-mode: standalone) { body { user-select:none; -webkit-user-select:none; } input, textarea { user-select:text; -webkit-user-select:text; } }
+
 /* Touch targets: nothing a thumb must hit is under 40 px on a phone. */
 @media (max-width:640px) {
   .k-seg button, .k-floor, .k-ctl, button[aria-label="Clear route"], .k-step, .k-startbtn { min-height:40px; min-width:40px; }
