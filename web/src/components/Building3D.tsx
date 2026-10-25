@@ -45,7 +45,7 @@ function floorShape(space: Space, plates?: Plates) {
 
 const ZONE_COLORS:Record<string,string>={hazard:"#e5484d",responder:"#3b82c4",crowd1:"#b99a3c",crowd2:"#f2b705",highlight:"#ffd45c"};
 
-function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates}:{plates?:Plates;spaces:Space[];elevation:number;highlights:Set<string>;hazard?:string;zones?:Record<string,string>;onPick?:(s:Space)=>void}) {
+function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates,overlaps}:{plates?:Plates;overlaps?:NonNullable<Geometry["scene"]>["overlaps"];spaces:Space[];elevation:number;highlights:Set<string>;hazard?:string;zones?:Record<string,string>;onPick?:(s:Space)=>void}) {
   const batches = useMemo(() => {
     const groups = new Map<string,Space[]>();
     spaces.forEach(s => {const key=s.id===hazard?"hazard":zones?.[s.id]==="responder"?"responder":highlights.has(s.id)?"highlight":zones?.[s.id]??kindOf(s); groups.set(key,[...(groups.get(key)??[]),s]);});
@@ -58,7 +58,18 @@ function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates}:{plates
     });
   },[spaces,highlights,hazard,zones,plates]);
   useEffect(()=>()=>batches.forEach(b=>b.geometry?.dispose()),[batches]);
-  return <group position={[0,elevation,0]}>{batches.map((b,index)=>b.geometry&&<mesh key={b.zone} geometry={b.geometry} receiveShadow
+  /** Where two rooms overlap in the data, the shared part is drawn once as the mix of both room colours (no flicker, nothing hidden). */
+  const blends=useMemo(()=>{
+    const byId=new Map(spaces.map(s=>[s.id,s]));
+    return (overlaps??[]).filter(o=>byId.has(o.a)&&byId.has(o.b)).map(o=>{
+      const shape=new THREE.Shape();o.polygon.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));
+      const g=new THREE.ShapeGeometry(shape);g.rotateX(-Math.PI/2);
+      return {key:`${o.a}|${o.b}|${o.polygon[0]?.join(",")}`,geometry:g,color:new THREE.Color(kindScene(byId.get(o.a)!)).lerp(new THREE.Color(kindScene(byId.get(o.b)!)),.5)};
+    });
+  },[spaces,overlaps]);
+  useEffect(()=>()=>blends.forEach(b=>b.geometry.dispose()),[blends]);
+  return <group position={[0,elevation,0]}>{blends.map(b=><mesh key={b.key} geometry={b.geometry} raycast={()=>null} renderOrder={1}>
+    <meshStandardMaterial color={b.color} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-60}/></mesh>)}{batches.map((b,index)=>b.geometry&&<mesh key={b.zone} geometry={b.geometry} receiveShadow
     onAfterRender={renderer=>{renderer.domElement.dataset.scenePainted="true";}}
     onClick={(e:ThreeEvent<MouseEvent>)=>{e.stopPropagation();if(e.delta>5)return;const room=b.ranges.find(r=>(e.faceIndex??0)<r.end);if(room)onPick?.(room.space);}}>
     <meshStandardMaterial color={ZONE_COLORS[b.zone]??kindScene(b.ranges[0].space)} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-index-1}/>
@@ -137,7 +148,7 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
   const height=geometry.floors.find(f=>f.id===floorId)?.height_m??3;
   const roomHighlights=highlights;
   return <group>
-        <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} hazard={hazard} zones={zones} onPick={onSpaceClick} plates={geometry.scene?.plates}/>
+        <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} hazard={hazard} zones={zones} onPick={onSpaceClick} plates={geometry.scene?.plates} overlaps={geometry.scene?.overlaps}/>
         {hidden.length>0&&<GhostFloors spaces={hidden} elevation={elevation}/>}
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} relevant={relevant}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening} relevant={relevant}/>
