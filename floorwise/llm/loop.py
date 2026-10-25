@@ -129,8 +129,6 @@ class Conversation:
             uses = [b for b in response.content if b.type == "tool_use"]
             if not uses:
                 return "\n".join(b.text for b in response.content if b.type == "text").strip()
-            if on_event and streamed_chunks:
-                on_event("clear_deltas", {})
             results = []
             for block in uses:
                 if on_event:
