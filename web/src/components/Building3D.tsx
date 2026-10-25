@@ -134,6 +134,14 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors}:{r
 
 function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number}}){
   const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const lastTick=useRef(performance.now());
+  // The Canvas reads its camera props once at creation (overview: near ~0.6 m, fov 40). The walking camera needs its own lens, and
+  // the overview lens must come back afterwards: otherwise everything inside the overview near plane is clipped away, and
+  // the walls of the room you are walking through disappear. (Same fix as Kian's 57bd335.)
+  useLayoutEffect(()=>{
+    const cam=camera as THREE.PerspectiveCamera,saved={near:cam.near,fov:cam.fov,far:cam.far};
+    cam.near=0.05;cam.fov=70;cam.far=Math.max(120,Math.min(saved.far,400));cam.updateProjectionMatrix();invalidate();
+    return()=>{cam.near=saved.near;cam.fov=saved.fov;cam.far=saved.far;cam.updateProjectionMatrix();invalidate();};
+  },[camera,invalidate]);
   useLayoutEffect(()=>{lastTick.current=performance.now();},[playing]);
   useEffect(()=>{first.current=true;invalidate();},[seekVersion,model,invalidate]);
   useEffect(()=>{invalidate();},[lookOffset,invalidate]);
@@ -164,7 +172,7 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       if(camera.quaternion.angleTo(target)>.002)invalidate();
       first.current=false;
     }
-    camera.updateProjectionMatrix();gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;gl.domElement.dataset.cameraQuaternion=JSON.stringify(camera.quaternion.toArray());
+    camera.updateProjectionMatrix();gl.domElement.dataset.cameraNear=String((camera as THREE.PerspectiveCamera).near);gl.domElement.dataset.cameraFov=String((camera as THREE.PerspectiveCamera).fov);gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;gl.domElement.dataset.cameraQuaternion=JSON.stringify(camera.quaternion.toArray());
     if(Math.abs(clock.current-lastReport.current)>.08 || sample.arrived || !playing){lastReport.current=clock.current;onSample(clock.current);}
     if(playing)invalidate();
   });return null;
