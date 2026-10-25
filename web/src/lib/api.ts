@@ -1,4 +1,4 @@
-import type { BuildingRow, Geometry, Route, UiEvent, Audience, ScenarioReport, RobustReport } from "./types";
+import type {Audience, BuildingRow, Geometry, Route, RobustReport, ScenarioReport, UiEvent } from "./types";
 
 export class ApiError extends Error {
   candidates: { id: string; label?: string }[];
@@ -22,14 +22,41 @@ const post = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 type WithEvents<T> = { result: T; events: UiEvent[] };
+export type ScenarioCapacity = { element: string; kind: "total_persons" | "rate_persons_per_s"; value: number };
 
 export const api = {
+  /** A capacity of 0 blocks that element (sent as a hazard); `people` overrides the seat estimate for the given spaces. */
+  scenario: (id: string, hazardSpace: string, audience: Audience, capacities: ScenarioCapacity[] = [], people?: Record<string, number>, onStep?: (s: { id: string; op: string; ok: boolean; summary: string }) => void) => {
+    const blocked = capacities.filter(c => c.value === 0).map(c => c.element), caps = capacities.filter(c => c.value > 0);
+    const body = {template: "evacuation", params: {spec: {
+      hazards: [{spaces: [hazardSpace]}, ...(blocked.length ? [{elements: blocked}] : [])], responders: {auto: true},
+      ...(caps.length ? {capacities: caps} : {}), ...(people ? {occupants: {source: "seats", overrides: people}} : {})}}, audience};
+    if (!onStep) return post(`/api/sessions/${id}/scenario`, body).then(json<ScenarioReport>);
+    // Lines of JSON: each checked step as it finishes, then the report. The panel shows the live step.
+    return post(`/api/sessions/${id}/scenario/stream`, body).then(async response => {
+      if (!response.ok || !response.body) return json<ScenarioReport>(response);
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      let buffer = "", report: ScenarioReport | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+        const lines = buffer.split(String.fromCharCode(10)); buffer = done ? "" : lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const item = JSON.parse(line);
+          if (item.step) onStep(item.step); else if (item.report) report = item.report; else if (item.error) throw new ApiError(String(item.error));
+        }
+        if (done) break;
+      }
+      if (!report) throw new ApiError("The scenario ended without a result");
+      return report;
+    });
+  },
+  scenarioRobust: (id: string, hazardSpace: string) => post(`/api/sessions/${id}/scenario/robust`, {params: {spec: {hazards: [{spaces: [hazardSpace]}]}}}).then(json<RobustReport>),
   resultPage: (session:string,result:string,offset=0,view='default',room='') => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25&view=${view}${room?`&room=${encodeURIComponent(room)}`:""}`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),
   profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
   widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
   closePreview: (sessionId: string, element: string) => post(`/api/sessions/${sessionId}/close/preview`, { element, closed: true }).then(json<WithEvents<any>>),
-  scenario: (id: string, hazardSpace: string, audience: Audience, capacities: { element: string; kind: "total_persons"; value: number }[] = []) => post(`/api/sessions/${id}/scenario`, {template: "evacuation", params: {spec: {hazards: [{spaces: [hazardSpace]}, ...(capacities.some(c => c.value === 0) ? [{elements: capacities.filter(c => c.value === 0).map(c => c.element)}] : [])], responders: {auto: true}, ...(capacities.some(c => c.value > 0) ? {capacities: capacities.filter(c => c.value > 0)} : {})}}, audience}).then(json<ScenarioReport>),
-  scenarioRobust: (id: string, hazardSpace: string) => post(`/api/sessions/${id}/scenario/robust`, {params: {spec: {hazards: [{spaces: [hazardSpace]}]}}}).then(json<RobustReport>),
   weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
   buildings: () => fetch("/api/buildings").then(json<BuildingRow[]>),
   geometry: (building: string) => fetch(`/api/buildings/${building}`).then(json<Geometry>),

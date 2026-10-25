@@ -60,12 +60,26 @@ test('all four speeds are visible and preserve paused progress',async({page})=>{
 });
 
 test('scenario states its assumptions and presents a computed comparison',async({page})=>{
+  test.setTimeout(300_000);
   await page.goto('/?building=proc-campus-dev-000');
   await page.getByLabel('Building tools',{exact:true}).click();
   await page.getByRole('button',{name:'Scenarios',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Fire / evacuation scenario'});
+  await expect(panel.getByRole('group',{name:'Who is this for'}).getByRole('button')).toHaveCount(4);
   await page.getByRole('button',{name:/Quick fire test/}).click();
-  await expect(page.locator('.scenario-headline')).toHaveText(/Everyone is out in \d+ s|of \d+ people get out/,{timeout:60000});
+  const headline=page.locator('.scenario-headline');
+  await expect(headline).toHaveText(/Everyone is out in \d+ s|of \d+ people get out/,{timeout:60000});
+  await expect(panel.getByText(/estimated from seats/)).toBeVisible();
   await expect(page.getByText(/Everyone using their nearest exit instead/)).toBeVisible();
   await page.getByRole('button',{name:'Show more'}).click();
   await expect(page.getByText('What this is built on')).toBeVisible();
+  const before=await headline.innerText();
+  await panel.getByText('Change room, audience or numbers',{exact:true}).click();
+  await panel.getByText('Your numbers',{exact:true}).click();
+  await panel.getByLabel('People in the fire room').fill('20');
+  await panel.getByLabel('Passage rate (people per minute)').fill('20');
+  await panel.getByRole('button',{name:'Run scenario'}).click();
+  await expect(panel.getByText(/Your numbers: \d+ of 20 people get out of the fire room; every door passes 20 people per minute/)).toBeVisible({timeout:200000});
+  await expect(headline).not.toHaveText(before);
+  await page.screenshot({path:'test-results/scenario-your-numbers.png'});
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { preloadBuilding } from "../lib/api";
 import { DroneHud, type GeoBuilding, type Telemetry } from "./DroneHud";
@@ -142,7 +142,7 @@ export default function MapView() {
       pitch: initial.pitch,
       bearing: initial.bearing,
       maxPitch: 85,
-      antialias: true,
+      canvasContextAttributes: { antialias: true },  // maplibre 6: the WebGL flag lives here, not on the map options
       dragRotate: true,
       pitchWithRotate: true,
       touchPitch: true,

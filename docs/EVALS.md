@@ -72,3 +72,9 @@ A percentage gate hides regressions: with a 99 % threshold a new bug can pass as
 ## Independent private corpus
 
 `fw private generate|run|live|retire` adds new geometry, independently computed expectations, disjoint layout/style/language families and a fingerprint-frozen holdout. Initial and expanded sizes are 200/10,000/600 and 2,000/100,000/6,000 buildings/requests/image cases. See [protocol](PRIVATE_VALIDATION.md) and [measured results](RECONSTRUCTION_VALIDATION_RESULTS.md). These campaigns are separate from fast offline correctness gates and retain automatic reconstruction failures.
+
+## Gold bank, connectivity, overlaps, audit (2026-10-25)
+- `uv run python -m eval.gold --split train,dev --per-building 6 [--holdout]`: every supplied warm-up question said five more ways (voice transcript, polite, filler, German lead-in, function-word typos), place names never edited, scored against the original's gold answer, deterministic parser only (`FLOORWISE_OFFLINE`). Holdout = buildings whose id hashes into 20 %; never tune on them. Result when added: dev 480/480, holdout 1530/1530 (before `floorwise/agent/normalize.py` and the squashed-name resolver: 16 % and 17 % of variants).
+- `uv run python -m eval.connectivity`: rooms with no way to the main part, per reason; buildings whose default entrance sits in a small part.
+- `uv run python -m eval.overlaps`: rooms that overlap on one floor (drawn as a colour blend in 3D).
+- `uv run python -m eval.audit_all [--limit N]`: one ranked table over all buildings (connectivity, overlaps, items outside rooms, scene compile, withheld stair flights, openings without walls), written to `docs/AUDIT_<date>.md`.

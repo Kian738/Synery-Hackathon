@@ -56,8 +56,11 @@ def wall_neighbours(building: Building, space_id: str, min_length: float = MIN_S
     return result
 
 
-def wall_midpoint(building: Building, first: str, second: str) -> tuple[float, float] | None:
-    """Middle of the wall two spaces share: midpoint of the shared outline, snapped between both outlines."""
+def wall_midpoint(building: Building, first: str, second: str, avoid=()) -> tuple[float, float] | None:
+    """Middle of the wall two spaces share: midpoint of the shared outline, snapped between both outlines.
+
+    With `avoid` (furniture footprints) the door goes where the wall is clear: the candidate nearest the middle that keeps 0.6 m from every
+    obstacle, else the one with the most room. A door on top of a shower cannot be walked through."""
     shared = shared_boundary(building, first, second)
     if shared is None:
         return None
@@ -67,10 +70,23 @@ def wall_midpoint(building: Building, first: str, second: str) -> tuple[float, f
         if merged.geom_type == "MultiLineString":
             merged = max(merged.geoms, key=lambda line: line.length)
         shared = merged
-    middle = shared.interpolate(0.5, normalized=True)
     other_exterior = building.polygons[second].exterior
-    nearest = other_exterior.interpolate(other_exterior.project(middle))
-    return ((middle.x + nearest.x) / 2, (middle.y + nearest.y) / 2)
+
+    def snapped(fraction: float):
+        middle = shared.interpolate(fraction, normalized=True)
+        nearest = other_exterior.interpolate(other_exterior.project(middle))
+        return ((middle.x + nearest.x) / 2, (middle.y + nearest.y) / 2)
+
+    if not avoid or shared.length < 1.0:
+        return snapped(0.5)
+    from shapely.geometry import Point
+    corners = [Point(c) for sid in (first, second) for c in list(building.polygons[sid].exterior.coords)]
+    scored = []
+    for rank, fraction in enumerate((0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9)):
+        point = snapped(fraction)
+        clearance = min(min(Point(point).distance(o) for o in avoid), min(Point(point).distance(c) for c in corners) * 1.2)  # never in a room corner either
+        scored.append((clearance >= 0.6, -rank if clearance >= 0.6 else clearance, point))
+    return max(scored, key=lambda s: (s[0], s[1]))[2]
 
 
 def stacked(building: Building, space_id: str, direction: str) -> list[tuple[str, float]]:

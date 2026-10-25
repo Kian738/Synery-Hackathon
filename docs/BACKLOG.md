@@ -81,7 +81,7 @@ Still open: refresh every critical live case after the final integration, comple
 
 ## Consolidated UI review
 
-See UX_AUDIT_50_AND_EXPLORATION.md for the fifty repair entries and twenty contextual additions. The concurrent focus-camera prototype was rejected: moving a camera away from the validated walking path and interpolating between unverified landing coordinates does not establish collision-safe navigation. Its source is preserved locally under runs/gemini-review. General exterior views require genuine OSM references. Physical phone tests and browser visual acceptance remain open; earlier checklist entries must not imply these passed.
+See archive/UX_AUDIT_50_AND_EXPLORATION.md for the fifty repair entries and twenty contextual additions. The concurrent focus-camera prototype was rejected: moving a camera away from the validated walking path and interpolating between unverified landing coordinates does not establish collision-safe navigation. Its source is preserved locally under runs/gemini-review. General exterior views require genuine OSM references. Physical phone tests and browser visual acceptance remain open; earlier checklist entries must not imply these passed.
 
 Update 2026-10-25 (later): also done: stairs and lifts that share a space (swiss-921: lift + stairs mapped into one corridor) get separate
 compact fixtures (`slotSpace`), only real stair/lift spaces lose their floor plate, a daylight rig with soft shadows and fog

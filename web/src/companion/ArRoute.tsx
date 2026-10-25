@@ -16,7 +16,7 @@ export function ArRoute({ path, headingDeg, onEnd }: { path: Pt[]; headingDeg: n
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.xr.enabled = true;
         const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.4));
+        (scene as any).add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.4)); // any: @react-three/xr's pointer typings split THREE.Object3D in two
         const { positions, indices } = ribbon(path, { origin: path[0], headingDeg });
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));

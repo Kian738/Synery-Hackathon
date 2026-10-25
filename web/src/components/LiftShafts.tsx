@@ -82,7 +82,8 @@ function LiftCar({ stops, y, target }: { stops: Stop[]; y: { current: number }; 
     if (group.current) group.current.position.y = y.current;
   });
   if (!stop || !r) return null;
-  const cl = Math.min(Math.max(0.9, r.length - 0.5), 2.0), cw = Math.min(Math.max(0.9, r.width - 0.5), 1.6);
+  // The car stays clear of the shaft walls (back 4 cm, sides 6 cm) so its panels never share a plane with a wall (z-fighting).
+  const cl = Math.max(0.6, Math.min(Math.max(0.9, r.length - 0.5), 2.0, r.length - 0.24)), cw = Math.max(0.6, Math.min(Math.max(0.9, r.width - 0.5), 1.6, r.width - 0.12));
   const yaw = Math.atan2(r.uy, r.ux), s = stop.front, off = s * (r.length / 2 - cl / 2 - 0.2);
   return (
     <group ref={group} position={[r.cx + off * r.ux, y.current, -(r.cy + off * r.uy)]} rotation={[0, yaw, 0]}>

@@ -88,9 +88,15 @@ def parse_basic(text: str) -> QuerySpec | None:
         if kind in ("locate", "count"):
             return QuerySpec(kind=kind, item=groups["item"].strip(), floor=groups.get("floor"))
         if kind == "tour":
-            first, rest = re.split(r",\s*visit\s+", groups["stops"], maxsplit=1, flags=re.I)
-            stops = [first] + re.split(r",\s*then\s+|,\s*(?=[A-Z])", rest)
-            return QuerySpec(kind="tour", stops=[stop.strip() for stop in stops if stop.strip()])
+            pieces = re.split(r",\s*visit\s+", groups["stops"], maxsplit=1, flags=re.I)
+            if len(pieces) == 2:
+                stops = [pieces[0]] + re.split(r",\s*then\s+|,\s*(?=[A-Z])", pieces[1])
+            else:  # dictated, no commas: "A (ground floor) visit B (floor 1) then C (floor 4)"
+                stops = re.split(r"\s*,?\s*\b(?:visit|then)\b\s+", groups["stops"], flags=re.I)
+            stops = [stop.strip() for stop in stops if stop.strip()]
+            if len(stops) < 2:
+                continue
+            return QuerySpec(kind="tour", stops=stops)
         return QuerySpec(
             kind="route", start=groups["start"], destination=groups["destination"], closed=groups.get("closed"),
             step_free="step-free" in groups["prefix"].lower(),

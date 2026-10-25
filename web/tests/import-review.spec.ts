@@ -11,7 +11,7 @@ test('import requires a measured dimension and exposes unverified draft fields',
   const dialog=page.getByRole('dialog',{name:'Import floor plans'});
   const width=dialog.getByRole('spinbutton',{name:'First plan width (metres)'});
   await expect(width).toHaveValue('');
-  await dialog.getByLabel('Floor-plan images').setInputFiles(path.resolve('../docs/industrial-agents-hackathon-2026/data/dev/proc-campus-dev-000/floor_0_plain.png'));
+  await dialog.getByLabel('Floor-plan images').setInputFiles(path.resolve(process.env.FLOORWISE_KIT ?? '../docs/industrial-agents-hackathon-2026','data/dev/proc-campus-dev-000/floor_0_plain.png'));
   await expect(dialog.getByRole('button',{name:'Build draft'})).toBeDisabled();
   await width.fill('20');
   await dialog.getByRole('button',{name:'Build draft'}).click();

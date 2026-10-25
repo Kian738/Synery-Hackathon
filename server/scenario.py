@@ -4,7 +4,12 @@ POST /api/sessions/{id}/scenario        run a template ("evacuation", "delivery"
                                         step-by-step trace, findings for the audience, and for evacuation the schedule
 POST /api/sessions/{id}/scenario/ask    the single most important missing input for a partial scenario, or null
 Every number is the output of a checked step; the UI only words and draws it."""
+import json
+import queue
+import threading
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 from server.locks import session_write
 
@@ -70,6 +75,37 @@ def scenario_router(get_session):
             except PlanError as error:
                 raise HTTPException(422, str(error)) from error
         return report
+
+    @router.post("/{session_id}/scenario/stream")
+    def stream(session_id: str, body: ScenarioBody):
+        """Same run as /scenario, as lines of JSON: one {"step": ...} per checked step as it finishes, then {"report": ...}
+        (or {"error": ...}). The panel shows the live step; the reasoning is visible while it happens."""
+        if body.audience not in AUDIENCES:
+            raise HTTPException(422, f"audience must be one of {list(AUDIENCES)}")
+        entry = get_session(session_id)
+        try:
+            instantiate(body.template, **body.params)
+        except TemplateError as error:
+            raise HTTPException(422, {"error": str(error), "templates": list(template_names())}) from error
+        lines: queue.Queue = queue.Queue()
+
+        def work() -> None:
+            try:
+                with entry["lock"]:
+                    report = scenario_report(entry["session"].building, body.template, body.params, body.audience,
+                                             on_step=lambda step: lines.put({"step": step}))
+                lines.put({"report": report})
+            except Exception as error:  # noqa: BLE001  the stream must always end with a result or an error line
+                lines.put({"error": str(error)})
+            lines.put(None)
+
+        threading.Thread(target=work, daemon=True).start()
+
+        def generate():
+            while (item := lines.get()) is not None:
+                yield json.dumps(item, ensure_ascii=False, default=str) + chr(10)
+
+        return StreamingResponse(generate(), media_type="application/x-ndjson")
 
     @router.post("/{session_id}/scenario/robust")
     def robust(session_id: str, body: ScenarioBody):

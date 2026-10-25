@@ -1,18 +1,18 @@
+import { audioStreamQueue } from "../lib/voice";
 import {startAssistantStream,appendAssistantText} from "../lib/chatStream";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
 import { ApiError, api, chat, cancelChat, consumePreloadedBuilding } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
-import { audioStreamQueue } from "../lib/voice";
 import type { Geometry, ScenarioReport, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "agent"; text: string; model?: string; streaming?: boolean; streamId?: string; status?: 'streaming' | 'complete' | 'interrupted' }
-  | { id: number; role: 'result'; text: string; result: VisualResult & { total_rows: number }; query?: string }
-  | { id: number; role: "activity"; text: string; tool?: string; input?: Record<string, unknown>; result?: unknown; failed?: boolean }
-  | { id: number; role: "error"; text: string; query?: string }
+  | { id: number; role: "agent"; text: string; model?: string;streamId?:string;status?:'streaming'|'complete'|'interrupted' }
+  | { id:number;role:'result';text:string;result:VisualResult & {total_rows:number};query?:string }
+  | { id: number; role: "activity"; text: string; tool?:string; input?:Record<string,unknown>;result?:unknown;failed?:boolean }
+  | { id: number; role: "error"; text: string;query?:string }
   | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" | "choice" }
   | { id: number; role: "change"; text: string; first: string; second: string; widenings?: {opening_id:string;to_m:number}[]; kind?: "widen"; openingId?: string; width?: number; start?: string; destination?: string; state: "pending" | "applied" | "discarded" };
 
@@ -36,6 +36,7 @@ const ACTIVITY: Record<string, (i: any) => string> = {
 
 /** The space behind an entrance, preferring lobbies on the floor nearest the ground. */
 export function mainEntrance(g: Geometry): string | null {
+  if (g.main_entrance && g.spaces.some((x) => x.id === g.main_entrance)) return g.main_entrance;
   const levels = new Map(g.floors.map((f) => [f.id, Math.abs(f.level)]));
   const behind = entrances(g);
   const rank = (x: Geometry["spaces"][number]) => (x.room_type === "lobby" ? 0 : 10) + (levels.get(x.floor_id) ?? 0) + (x.type === "room" ? 0.5 : 0);
@@ -162,6 +163,10 @@ export function useNavigator(buildingId: string) {
         setFloorId(e.door.floor_id);
       } else if (e.type === "edit") {
         setVisualResult(null); setPreviewDoor(null);
+        // Show what changed: the rooms of the new or removed door, or the item, pulse with a beacon for a few seconds.
+        const changed=e as unknown as {door?:{space_ids?:string[];floor_id?:string};asset?:{id?:string}};
+        const touched=[...(changed.door?.space_ids??[]).filter(id=>id!=="outside"),...(changed.asset?.id?[changed.asset.id]:[])];
+        if(touched.length){const ids=new Set<string>(touched);setHighlights(ids);if(changed.door?.floor_id)setFloorId(changed.door.floor_id);setTimeout(()=>setHighlights(h=>h===ids?new Set():h),6000);}
         if(sessionIdRef.current){const session=sessionIdRef.current;void api.sessionGeometry(session).then(g=>{if(sessionIdRef.current===session)setGeometry(g);}).catch(e=>{if(sessionIdRef.current===session)setNotice(String(e));});}
       } else if (e.type === "scenario_result") {
         setScenarioIn({ n: nextId++, report: e.report, hazard: e.hazard });
@@ -192,7 +197,8 @@ export function useNavigator(buildingId: string) {
       if (current !== generation.current) return;
       if (result.error) {
         setPreviousRoute(routeRef.current); setRoute(null); apply(events);
-        setNotice(result.error);
+        const apart=(result as {disconnected?:{text:string;nearest_reachable_place?:string;possible_missing_door?:string[]}}).disconnected;
+        setNotice(apart?`${result.error}. ${apart.text}${apart.nearest_reachable_place?` Closest place you can reach: ${apart.nearest_reachable_place}.`:""}${apart.possible_missing_door?` A door may be missing between ${apart.possible_missing_door.join(" and ")}.`:""}`:result.error);
         return;
       }
       setRouteMeta({ from: result.from, to: result.to, alternatives: result.other_matches_further_away });
@@ -285,72 +291,11 @@ export function useNavigator(buildingId: string) {
             const r = event.data.route;
             setRouteMeta({ from: labelOf(g!, r.stops[0]), to: labelOf(g!, r.stops[r.stops.length - 1]) });
           }
-        } else if (event.type === "text_delta" && typeof event.data?.text === "string") {
-          const delta = event.data.text;
-          setMessages((all) => {
-            const last = all[all.length - 1];
-            if (last && last.role === "agent" && last.streamId) {
-              return all;
-            }
-            if (last && last.role === "agent" && (last.streaming || last.status === "streaming")) {
-              return [
-                ...all.slice(0, -1),
-                { ...last, text: last.text + delta },
-              ];
-            }
-            return [
-              ...all,
-              { id: nextId++, role: "agent", text: delta, streaming: true, status: "streaming" },
-            ];
-          });
-        } else if (event.type === "clear_deltas") {
-          audioStreamQueue.reset();
-          setMessages((all) => {
-            const last = all[all.length - 1];
-            if (last && last.role === "agent" && (last.streaming || last.status === "streaming")) {
-              return all.slice(0, -1);
-            }
-            return all;
-          });
-        } else if (event.type === "audio_chunk" && event.data?.audio) {
-          audioStreamQueue.enqueue(event.data.audio, event.data.index ?? 0, event.data.text);
-        } else if (event.type === "reply" && typeof event.data?.text === "string") {
-          setTurnUsage(event.data.usage ?? null);
-          setMessages((all) => {
-            if (event.data.message_id && all.some(m => m.role === "agent" && m.streamId === event.data.message_id)) {
-              return all.map(m => m.role === "agent" && m.streamId === event.data.message_id ? { ...m, text: event.data.text, status: "complete", streaming: false } : m);
-            }
-            const last = all[all.length - 1];
-            if (last && last.role === "agent" && (last.streaming || last.status === "streaming")) {
-              return [
-                ...all.slice(0, -1),
-                {
-                  ...last,
-                  text: event.data.text,
-                  model: event.data.model,
-                  streaming: false,
-                  status: "complete",
-                },
-              ];
-            }
-            return [
-              ...all,
-              {
-                id: nextId++,
-                role: "agent",
-                text: event.data.text,
-                model: event.data.model,
-                streaming: false,
-                status: "complete",
-              },
-            ];
-          });
-        } else if (event.type === "done") {
-          audioStreamQueue.markDone();
-        } else if (event.type === "error") {
-          push({ role: "error", query: text, text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
-        }
-      }, selectedSpace, active.id, active.controller.signal);
+        } else if (event.type === "reply" && typeof event.data?.text === "string") {setTurnUsage(event.data.usage??null);setMessages(all=>event.data.message_id&&all.some(m=>m.role==='agent'&&m.streamId===event.data.message_id)?all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,text:event.data.text,status:'complete'}:m):[...all,{id:nextId++,role:'agent',text:event.data.text,model:event.data.model}]);}
+        else if (event.type === "audio_chunk" && event.data?.audio) audioStreamQueue.enqueue(event.data.audio, event.data.index ?? 0, event.data.text);
+        else if (event.type === "done") audioStreamQueue.markDone();
+        else if (event.type === "error") push({ role: "error",query:text, text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
+      },selectedSpace,active.id,active.controller.signal);
     } catch (e) {
       if (current === generation.current&&!active.controller.signal.aborted) push({ role: "error",query:text, text: String(e) });
     } finally {

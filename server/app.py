@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from floorwise.agent.session import Session
+from floorwise.agent.session import Session, main_entrance
 from floorwise.core.model import Building
 from floorwise.core.resolve import ResolveError
 from floorwise.paths import DATA, ROOT
@@ -143,6 +143,12 @@ from server.campus import router as campus_router  # noqa: E402
 app.include_router(lab_router)
 app.include_router(campus_router)
 app.include_router(create_companion_router())
+from server.voice import router as voice_router
+app.include_router(voice_router)
+from server.stress import create_stress_router
+app.include_router(create_stress_router(lambda sid: session_or_404(sid)))
+from server.scenarios import router as scenario_router
+app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 
 @lru_cache(maxsize=1)
@@ -176,6 +182,7 @@ def geometry_payload(b: Building) -> dict:
     anchors={sid: list(poly.representative_point().coords)[0] for sid,poly in b.polygons.items()}
     return {
         "building": b.info,
+        "main_entrance": main_entrance(b),
         "floors": sorted(b.data["floors"], key=lambda f: f["level"]),
         "spaces": [
             {**{k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")}, "anchor": anchors[s["id"]]} for s in b.spaces.values()
@@ -412,8 +419,8 @@ def search(session_id: str, q: str, floor: str | None = None) -> dict:
 
 from server.insight import insight_router
 app.include_router(insight_router(session_or_404, call))
-from server.scenario import scenario_router  # noqa: E402
-app.include_router(scenario_router(session_or_404))
+from server.scenarios import router as scenario_router  # noqa: E402  (explicit inputs or a template body; wraps server.scenario)
+app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 @app.get("/api/sessions/{session_id}/results/{result_id}")
 def visual_result_page(session_id: str, result_id: str, offset: int = 0, limit: int = 25, view: str = 'default', room: str | None = None) -> dict:
@@ -621,11 +628,8 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
     entry.setdefault('requests', {})[request_id] = cancelled
 
     def push(kind: str, payload) -> None:
-        try:
-            if not loop.is_closed():
-                loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
-        except Exception:
-            pass
+        if not loop.is_closed():
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
 
     def work() -> None:
         if not entry['lock'].acquire(timeout=5):
@@ -687,6 +691,7 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
                 message = ('Request stopped. Computed results remain available.' if cancelled.is_set() or isinstance(error, InterruptedError) else
                            'The language service timed out. Please retry. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else
+                           'The language service has no valid API key: start the server with `uv run --env-file .env uvicorn server.app:app`. Routes, maps and edits still work.' if type(error).__name__ in ('CredentialsError', 'AuthenticationError', 'PermissionDeniedError') else
                            'The language service could not complete this request. Please retry; computed results remain available.')
                 diagnostic=str(getattr(error,'body',{}).get('error',{}).get('message','')) if isinstance(getattr(error,'body',None),dict) else ''
                 for key,value in os.environ.items():
@@ -838,3 +843,13 @@ if WEB_DIST.exists():
     @app.get("/lab/{rest:path}")
     def index(rest: str = "") -> FileResponse:
         return FileResponse(WEB_DIST / "index.html")
+
+    # Files of web/public that must sit at the root: the install manifest and the app icons (a phone installs "Floorwise" to its home screen).
+    _ROOT_FILES = {"manifest.webmanifest": "application/manifest+json", "icon-192.png": "image/png", "icon-512.png": "image/png",
+                   "icon-maskable-512.png": "image/png", "apple-touch-icon.png": "image/png"}
+
+    @app.get("/{name}")
+    def root_file(name: str) -> FileResponse:
+        if name not in _ROOT_FILES or not (WEB_DIST / name).exists():
+            raise HTTPException(404, "Not found")
+        return FileResponse(WEB_DIST / name, media_type=_ROOT_FILES[name], headers={"Cache-Control": "public, max-age=86400"})

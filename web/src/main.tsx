@@ -3,8 +3,12 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import Navigator from "./navigator/Navigator";
+import { ActivityBar } from "./components/ActivityBar";
+import { installActivityTracking } from "./lib/activity";
 import "./styles.css";
 import "./ui/kit.css";
+
+installActivityTracking();
 
 const Lab = lazy(() => import("./lab/Lab"));
 const MapView = lazy(() => import("./map/MapView"));
@@ -19,6 +23,7 @@ for (const name of ["gesturestart", "gesturechange", "gestureend"]) addEventList
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary><BrowserRouter>
+      <ActivityBar />
       <Routes>
         <Route path="/map" element={<Suspense fallback={null}><MapView /></Suspense>} />
         <Route path="/tunnel" element={<Suspense fallback={null}><JourneyTunnel /></Suspense>} />

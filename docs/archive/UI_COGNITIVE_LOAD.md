@@ -26,4 +26,4 @@ step is one sentence with its number. If a step abstains, show only that step, n
 as a single button ("Apply to model") next to its finding, never as a list of alternatives.
 
 ## Not in scope
-Phone and voice flows follow Kian's own guidance in `docs/UX_AUDIT.md`.
+Phone and voice flows follow Kian's own guidance in `docs/archive/UX_AUDIT.md`.

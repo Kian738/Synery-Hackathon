@@ -55,8 +55,8 @@ test("floor scope and linked plan stay usable through preview",async({page},info
   if(await readAloud.getAttribute("aria-pressed")==="true")await readAloud.click();
   await expect(page.locator(".building-tools")).toBeAttached();
   if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
-  await scopeTo(page,"Route floors");
-  await expect(scene).toHaveAttribute("data-visible-floors",/F0.*F1.*F2/);
+  await scopeTo(page,"This floor");
+  await expect(scene).toHaveAttribute("data-visible-floors",/^[^,]+$/);
   await capture(page,"route-floors",info.project.name);
   await expect(page.locator(".building-tools")).toBeAttached();
   if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();

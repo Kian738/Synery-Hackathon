@@ -184,10 +184,23 @@ def best_doors(building: Building, occupants: Occupants, hazard: Hazard | Sequen
         cuts = _cuts(problem, current)
         survivors = [c for c in pool if _crosses(c, graph, problem, cuts, params)]
         total, crossing = total + len(pool), crossing + len(survivors)
-        everyone_out = current.evacuated == problem.total
         best: tuple[tuple[int, int], float, str, Candidate, Quickest] | None = None
+        # The score is (people out, then time). Only candidates that let the most people leave can win, and a cheap count
+        # finds them before any max-flow runs. Among those, the best time so far bounds every later search to one max-flow
+        # (steps + 1, so an equal time still reaches the tie-break on added width and nothing else changes).
+        prepared = []
         for candidate in survivors:
-            after = quickest(problem_of(_apply(graph, candidate)), current.steps if everyone_out else None)
+            candidate_problem = problem_of(_apply(graph, candidate))
+            prepared.append((int(candidate_problem.occ[candidate_problem.evacuable()].sum()), candidate, candidate_problem))
+        most = max([current.evacuated] + [reachable for reachable, _, _ in prepared])
+        for reachable, candidate, candidate_problem in prepared:
+            if reachable < most:
+                continue
+            if best is not None:
+                bound = best[4].steps + 1
+            else:
+                bound = current.steps if reachable == current.evacuated else None
+            after = quickest(candidate_problem, bound)
             evaluated += 1
             if after is None:
                 continue

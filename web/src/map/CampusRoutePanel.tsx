@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import type { GeoBuilding } from "./DroneHud";
 import {
   arrivalLink, clearJourney, clearRoute, fallbackSteps, indoorLink, journeyIndex, loadRoute, nextLeg, saveRoute, setJourneyIndex,

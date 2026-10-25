@@ -17,6 +17,8 @@ No route is needed to use the remote pad: in the overview it turns the model aro
 
 The default `http://<LAN-IP>:8000/phone` address supports touch control. Phone motion sensors require a secure context; enable them only after the phone opens an HTTPS address with a certificate it trusts and the user taps **Turn on motion look**. iOS may ask permission. Denial or missing sensors preserves touch controls. No insecure-browser flags or public tunnel are configured.
 
+**Fast path to https (2026-10-25):** `powershell -File scripts/phone_https.ps1` starts a Cloudflare quick tunnel (`winget install --id Cloudflare.cloudflared` once) and prints a temporary `https://….trycloudflare.com` address; open it on the phone, pair as usual and tap **Turn on motion look**. The address is public while the tunnel runs, so use it for the demo only. There is no bypass on iPhone; on Android Chrome alone, `chrome://flags/#unsafely-treat-insecure-origin-as-secure` with the LAN address also works. Not tried on a physical phone from here.
+
 The package's detailed [HTTPS and device notes](parallel/phone-handoff.md) describe local certificate and Android USB-loopback options. They require on-site setup; this implementation has not installed a root certificate or tested a physical device. Guest-network client isolation and the laptop firewall can prevent LAN connections; rehearse this on the actual network. Keep the laptop alone as the fallback.
 
 ## Twenty-second showcase

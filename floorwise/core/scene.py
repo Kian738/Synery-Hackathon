@@ -101,7 +101,7 @@ def _compile(content: str) -> dict:
     cleared = []
     for fid in floors:
         floor_walls = [w for w in walls if w['floor_id'] == fid]
-        zones, zone_spaces = [], []
+        zones, zone_spaces, zone_wide = [], [], []
         lines = [LineString([w['a'], w['b']]) for w in floor_walls]
         wall_tree = _Tree(lines) if lines else None
         for o in data['openings']:
@@ -119,13 +119,14 @@ def _compile(content: str) -> dict:
             px, py = o['position']
             zones.append(LineString([(px-ux*half, py-uy*half), (px+ux*half, py+uy*half)]).buffer(0.35, cap_style='flat'))
             zone_spaces.append(set(o['space_ids']))
+            zone_wide.append(float(o.get('width_m') or 0.9) >= 1.5)  # a wide opening is open floor: walls of the joined rooms inside it go too
         if not zones:
             cleared += floor_walls
             continue
         tree = _Tree(zones)
         for wall, line in zip(floor_walls, lines):
             # Only walls of spaces the opening does not join: the joined spaces were cut along their own wall above.
-            hits = [i for i in tree.query(line, predicate='intersects') if wall['space_id'] not in zone_spaces[int(i)]]
+            hits = [i for i in tree.query(line, predicate='intersects') if wall['space_id'] not in zone_spaces[int(i)] or zone_wide[int(i)]]
             if not hits:
                 cleared.append(wall)
                 continue
@@ -154,6 +155,10 @@ def _compile(content: str) -> dict:
                 owner=source[int(owners[0])]['space_id'] if len(owners) else None
                 unique.append({'floor_id':fid,'space_id':owner,'a':list(a),'b':list(b),'height_m':source[0]['height_m']})
     walls=unique
+    walls=apply_rails(data, walls)
+    overlap_list=compile_overlaps(data)
+    walls=drop_overlap_walls(data, walls, overlap_list)
+    open_air={w['space_id'] for w in walls if w.get('rail') and w.get('space_id')}  # bridges and stairs in the open: no roof over them
     # Actual upper-floor footprints form ceilings below. Missing coverage stays open.
     from shapely import constrained_delaunay_triangles, make_valid
     from shapely.geometry import Polygon
@@ -170,7 +175,7 @@ def _compile(content: str) -> dict:
     roofs = []
     ordered = sorted(data['floors'], key=lambda f: f.get('level', f.get('elevation_m', 0)))
     indoor = {f['id']: unary_union([make_valid(Polygon(sp['polygon'])) for sp in data['spaces']
-                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and len(sp['polygon']) >= 3]) for f in ordered}
+                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and sp['id'] not in open_air and len(sp['polygon']) >= 3]) for f in ordered}
     for index, floor in enumerate(ordered):
         cover = indoor[floor['id']]
         if cover.is_empty:
@@ -190,7 +195,7 @@ def _compile(content: str) -> dict:
     from floorwise.core.stair_scene import compile_stair_plates, compile_stair_shafts
     shafts=compile_stair_shafts(data)
     plates=compile_stair_plates(data,shafts)
-    return {'stair_shafts':shafts,'plates':plates, 'revision': hashlib.sha256(('scene-v3:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    return {'stair_shafts':shafts,'plates':plates,'overlaps':overlap_list, 'revision': hashlib.sha256(('scene-v5:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
@@ -198,3 +203,120 @@ def _compile(content: str) -> dict:
                             'Stair meshes stay within shared recorded shaft footprints; unfit flights are withheld. Stair internals remain illustrative.',
                             'Slabs use recorded space footprints. Roofs close indoor footprints with no floor above; no atrium is inferred.',
                             'Lintels close the wall above doors and narrow openings at 2.1 m; their height is illustrative.']}
+
+
+def compile_overlaps(data: dict, min_area: float = 0.05) -> list[dict]:
+    """Display only: where two rooms of one floor overlap in the data, the part they share, so the 3D view can draw it as a blend of both
+    floor colours instead of two floors fighting for the same pixels (`eval.overlaps` counts them). Analytical polygons are never touched."""
+    from shapely import make_valid
+    from shapely.geometry import Polygon
+    from shapely.strtree import STRtree
+
+    out: list[dict] = []
+    by_floor: dict[str, list[tuple[str, Polygon]]] = {}
+    for space in data['spaces']:
+        if len(space['polygon']) >= 3:
+            by_floor.setdefault(space['floor_id'], []).append((space['id'], make_valid(Polygon(space['polygon']))))
+    for floor_id, items in by_floor.items():
+        tree = STRtree([poly for _, poly in items])
+        for i, (first, poly) in enumerate(items):
+            for j in sorted(tree.query(poly)):
+                if j <= i:
+                    continue
+                second, other = items[j]
+                shared = poly.intersection(other)
+                for part in getattr(shared, 'geoms', [shared]):
+                    if part.geom_type == 'Polygon' and part.area >= min_area:
+                        out.append({'floor_id': floor_id, 'a': first, 'b': second, 'polygon': [list(p) for p in part.exterior.coords][:-1], 'area_m2': round(part.area, 3)})
+    return out
+
+def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_open: float = 0.6) -> list[dict]:
+    """Open-air walkways (a bridge across an atrium, a stair standing in a void) get a fence, not a room's wall.
+
+    A corridor or stair on an upper floor whose walls mostly face empty air (nothing of that floor within 0.3 m outside) is open to the sky or
+    the atrium: its open edges become railings of 
+ail_height and carry 
+ail: True. Walls toward neighbouring rooms stay full height. Display
+    only; the analytical model is untouched."""
+    from shapely import make_valid
+    from shapely.geometry import Point, Polygon
+    from shapely.ops import unary_union
+
+    ordered = sorted(data['floors'], key=lambda f: f.get('level', f.get('elevation_m', 0)))
+    if len(ordered) < 2:
+        return walls
+    lowest = ordered[0]['id']
+    polygons = {s['id']: make_valid(Polygon(s['polygon'])) for s in data['spaces'] if len(s['polygon']) >= 3}
+    cover = {f['id']: unary_union([polygons[s['id']] for s in data['spaces'] if s['floor_id'] == f['id'] and s['id'] in polygons]) for f in ordered}
+    by_space = {s['id']: s for s in data['spaces']}
+    import shapely.prepared
+    own_buffer: dict[str, object] = {}  # buffered once per space and per floor, not once per wall (the wall loop was the slow part of a cold scene)
+    cover_buffer = {fid: shapely.prepared.prep(c.buffer(0.02)) for fid, c in cover.items()}
+    open_edge: list[bool] = []
+    total: dict[str, float] = {}
+    exposed: dict[str, float] = {}
+    for wall in walls:
+        owner = by_space.get(wall.get('space_id') or '')
+        is_open = False
+        if owner and owner.get('type') in ('corridor', 'stair') and owner['floor_id'] != lowest and owner['id'] in polygons:
+            (ax, ay), (bx, by) = wall['a'], wall['b']
+            length = math.hypot(bx - ax, by - ay)
+            if length > 1e-6:
+                nx, ny = -(by - ay) / length, (bx - ax) / length
+                mx, my = (ax + bx) / 2, (ay + by) / 2
+                sides = [Point(mx + nx * 0.3, my + ny * 0.3), Point(mx - nx * 0.3, my - ny * 0.3)]
+                if owner['id'] not in own_buffer:
+                    own_buffer[owner['id']] = shapely.prepared.prep(polygons[owner['id']].buffer(0.05))
+                outside = [p for p in sides if not own_buffer[owner['id']].contains(p)]
+                is_open = bool(outside) and not any(cover_buffer[owner['floor_id']].contains(p) for p in outside)
+                total[owner['id']] = total.get(owner['id'], 0.0) + length
+                if is_open:
+                    exposed[owner['id']] = exposed.get(owner['id'], 0.0) + length
+        open_edge.append(is_open)
+    def elongated(sid: str) -> bool:
+        edges = list(polygons[sid].minimum_rotated_rectangle.exterior.coords)
+        sides = sorted(math.dist(edges[i], edges[i + 1]) for i in range(2))
+        return sides[0] > 0 and sides[1] / sides[0] >= 3.0
+
+    # A stair standing in the air, or a long narrow walkway open on both sides (a bridge, a gallery): not a hall on the facade.
+    railed = {sid for sid, length in total.items() if length and exposed.get(sid, 0.0) / length >= min_open
+              and (by_space[sid].get('type') == 'stair' or (elongated(sid) and exposed.get(sid, 0.0) / length >= 0.7))}
+    out = []
+    for wall, is_open in zip(walls, open_edge):
+        if is_open and wall.get('space_id') in railed:
+            out.append({**wall, 'height_m': min(wall['height_m'], rail_height), 'rail': True})
+        else:
+            out.append(wall)
+    return out
+
+def drop_overlap_walls(data: dict, walls: list[dict], overlaps: list[dict], inset: float = 0.15, min_area: float = 0.3) -> list[dict]:
+    """Where two rooms overlap only partly (a digitising error, not one room inside another), each one's wall inside the other's floor is an
+    artefact: people would walk "through" it. Those walls are not drawn (display only; the shared floor is drawn as a colour blend).
+
+    Nested rooms (a closet wholly inside a room) are kept: their walls are real."""
+    from shapely import make_valid
+    from shapely.geometry import Point, Polygon
+
+    by_space = {s['id']: make_valid(Polygon(s['polygon'])) for s in data['spaces'] if len(s['polygon']) >= 3}
+    zones: dict[tuple[str, str], list] = {}
+    for o in overlaps:
+        a, b = by_space.get(o['a']), by_space.get(o['b'])
+        if a is None or b is None or o['area_m2'] < min_area:
+            continue
+        shared = o['area_m2']
+        if shared / max(min(a.area, b.area), 1e-9) > 0.8:  # one room is (almost) inside the other: real nesting
+            continue
+        zone = Polygon(o['polygon']).buffer(0).buffer(-inset)
+        if zone.is_empty:
+            continue
+        zones.setdefault((o['floor_id'], o['a']), []).append(zone)
+        zones.setdefault((o['floor_id'], o['b']), []).append(zone)
+    if not zones:
+        return walls
+    kept = []
+    for wall in walls:
+        mid = Point((wall['a'][0] + wall['b'][0]) / 2, (wall['a'][1] + wall['b'][1]) / 2)
+        if any(zone.contains(mid) for zone in zones.get((wall['floor_id'], wall.get('space_id')), [])):
+            continue
+        kept.append(wall)
+    return kept
