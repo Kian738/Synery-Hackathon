@@ -13,6 +13,7 @@ import { BuildDialog } from "../components/BuildDialog";
 import { FloorRail } from "../components/FloorRail";
 import { Dock, IconButton, Popover, Segmented } from "../ui/kit";
 import { Pictogram } from "../components/Pictogram";
+import { BuildingAtlas } from "../components/BuildingAtlas";
 import { PlanView, type Pin } from "../components/PlanView";
 import { api } from "../lib/api";
 import type { ScenarioMark } from "../lib/types";
@@ -314,31 +315,17 @@ function VisualAnswer({result,total,sessionId,onClose,onPick,onFloor,geometry}:{
 
 function BuildingMenu({ buildings, value, onChange, name }: { buildings: BuildingRow[]; value: string; onChange: (b: string) => void; name: string }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const recent = useMemo(() => { try { return JSON.parse(localStorage.getItem("floorwise.recent-buildings") ?? "[]") as string[]; } catch { return []; } }, [open]);
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return buildings.filter(b => !q || `${b.name} ${b.building_id} ${b.source}`.toLowerCase().includes(q));
-  }, [buildings, query]);
   const pick = (id: string) => {
     try { localStorage.setItem("floorwise.recent-buildings", JSON.stringify([id, ...recent.filter(r => r !== id)].slice(0, 5))); } catch { /* storage may be blocked */ }
-    setOpen(false); setQuery(""); onChange(id);
+    setOpen(false); if (id !== value) onChange(id);
   };
-  const recentRows = recent.map(id => buildings.find(b => b.building_id === id)).filter((b): b is BuildingRow => !!b && b.building_id !== value);
-  const groups = useMemo(() => { const out: Record<string, BuildingRow[]> = {}; for (const b of matches) (out[b.split] ??= []).push(b); return out; }, [matches]);
-  const row = (b: BuildingRow) => <button key={b.building_id} role="menuitem" className="k-brow" aria-current={b.building_id === value ? "true" : undefined} onClick={() => pick(b.building_id)}>
-    <span className="k-brow-name">{b.name}</span><span className="k-brow-meta">{b.source} · {b.floors} floor{b.floors === "1" ? "" : "s"}</span></button>;
   return (
-    <Popover label="Change building" icon="chevron" open={open} onOpenChange={o => { setOpen(o); if (!o) setQuery(""); }} left className="k-bmenu"
-      trigger={<button type="button" className="k-ctl k-btrigger" aria-label="Change building" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="k-btitle" title={name}>{name}</span><Pictogram name="chevron" size={16} /></button>}>
-      <label className="k-search"><Pictogram name="search" size={16} /><input autoFocus placeholder="Search buildings" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search buildings" /></label>
-      <div className="k-blist">
-        {!query && recentRows.length > 0 && <><div className="k-pop-title">Recent</div>{recentRows.map(row)}</>}
-        {Object.entries(groups).map(([split, rows]) => <div key={split}><div className="k-pop-title">{split}</div>{rows.map(row)}</div>)}
-        {!matches.length && <p className="k-hint">No building matches “{query}”.</p>}
-      </div>
-    </Popover>
+    <>
+      <button type="button" className="k-ctl k-btrigger" aria-label="Change building" aria-expanded={open} onClick={() => setOpen(true)}>
+        <span className="k-btitle" title={name}>{name}</span><Pictogram name="chevron" size={16} /></button>
+      {open && <BuildingAtlas buildings={buildings} value={value} recent={recent} onPick={pick} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

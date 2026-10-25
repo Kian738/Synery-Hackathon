@@ -175,6 +175,15 @@ def buildings(split: str | None = None) -> list[dict]:
     return [{k: r.get(k) for k in keys} for r in rows] + [c for c in custom if split is None or split == "custom"]
 
 
+@app.get("/api/buildings/{building_id}/thumb.svg")
+def building_thumb(building_id: str):
+    """Isometric floor stack for the Building Atlas (cached on disk, deterministic)."""
+    from fastapi.responses import Response
+    from server.thumb import cached_thumbnail
+    directory = building_dir(building_id)
+    return Response(cached_thumbnail(load(building_id), directory), media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/api/buildings/{building_id}")
 def building(building_id: str) -> dict:
     return geometry_payload(load(building_id))

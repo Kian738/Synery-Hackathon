@@ -135,6 +135,7 @@ export interface BuildingRow {
   source: string;
   name: string;
   floors: string;
+  rooms?: string | number | null;
 }
 
 export interface VisualResult {
