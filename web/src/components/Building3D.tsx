@@ -2,6 +2,7 @@ import { Line, OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
+import { smoothTurn } from "../lib/turn";
 import { SceneAssets } from "./SceneAssets";
 import { Beacons, type BeaconPoint } from "./Beacons";
 import { orientedRect } from "./Connectors3D";
@@ -187,7 +188,7 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors,cas
 
 
 function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number}}){
-  const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const heading=useRef<THREE.Vector3|null>(null);const walkCache=useRef(new Map<string,WalkPoint[]|null>());const lastTick=useRef(performance.now());
+  const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const yawVelocity=useRef(0);const heading=useRef<THREE.Vector3|null>(null);const walkCache=useRef(new Map<string,WalkPoint[]|null>());const lastTick=useRef(performance.now());
   useLayoutEffect(()=>{lastTick.current=performance.now();},[playing]);
   // The Canvas reads its camera props once at creation (overview: near ~0.6 m, fov 40). The walking camera needs its own lens, and the
   // overview lens must come back afterwards: otherwise everything within the overview near plane is clipped away.
@@ -272,13 +273,12 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
     if(target.lengthSq()<1e-6)target.set(sample.heading[0],0,-sample.heading[1]);
     if(rideTan&&rideTan.lengthSq()>1e-8)target.copy(rideTan);
     target.y=0;if(target.lengthSq()<1e-6)target.set(0,0,-1);target.normalize();
-    if(first.current||!heading.current)heading.current=target.clone();
-    else{ // turn toward the target: eased, but never faster than 80 degrees per second
+    if(first.current||!heading.current){heading.current=target.clone();yawVelocity.current=0;}
+    else{ // a critically damped spring on the heading with a speed limit (lib/turn.ts): velocity is continuous, so turns start and end smoothly
       const cross=heading.current.x*target.z-heading.current.z*target.x,dot=heading.current.dot(target),angle=Math.atan2(cross,dot);
-      // A long frame (a stall, a busy machine) must not buy a long turn: the cap is per real frame, so clamp the frame time.
-      const turnDt=Math.min(dt,0.05);
-      const step=Math.sign(angle)*Math.min(Math.abs(angle)*(1-Math.exp(-turnDt/0.45)),THREE.MathUtils.degToRad(80)*turnDt);
-      heading.current.applyAxisAngle(new THREE.Vector3(0,-1,0),step).normalize();
+      const turned=smoothTurn(angle,yawVelocity.current,Math.min(dt,0.05));
+      yawVelocity.current=turned.velocity;
+      heading.current.applyAxisAngle(new THREE.Vector3(0,-1,0),turned.step).normalize();
     }
     const direction=heading.current.clone();
     direction.y=-(rideDelta<0?.5:rideDelta>0?-.2:.14);

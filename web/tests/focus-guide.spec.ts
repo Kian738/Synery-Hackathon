@@ -190,6 +190,7 @@ test("camera path turns a jagged route into a few straight runs with soft corner
 });
 
 test("Guide me turns smoothly while playing", async ({ page }) => {
+  test.setTimeout(60_000);  // it samples the camera for a fixed 22 s on top of the page load
   const building = "osm-way27917482";
   await page.goto(`/?building=${building}&at=${building}-F3-S069&to=00.05.058`);
   await page.getByRole("button", { name: "Guide me step by step" }).click();
