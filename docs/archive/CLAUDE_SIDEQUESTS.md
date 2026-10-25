@@ -61,8 +61,8 @@ Export a FastAPI router factory and an embeddable React companion screen/control
 ## D — Multihop scenario simulation research, not production fire guidance
 
 Own only:
-- research_notes/scenario-simulation/**
-- docs/parallel/scenario-handoff.md
+- docs/research/scenario-simulation/**
+- docs/archive/scenario-handoff.md
 
 Research an idealized, explicitly parameterized building stress-test scenario: occupant groups, unavailable/hazardous spaces, door/exit capacities, evacuation allocation, responder entries/targets, competing flows and proposed door interventions. Distinguish max flow, min-cost flow, time-expanded flow and genuinely multi-commodity optimization. Explain why independently routing everyone to their nearest exit is insufficient and why two independent shortest paths do not optimize competing flows.
 

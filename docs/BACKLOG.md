@@ -1,5 +1,23 @@
 # Backlog
 
+The long list of open and unverified work. The short, ordered list is [TASKLIST.md](TASKLIST.md), and what already works is in [STATUS.md](STATUS.md).
+
+## Open now (summary, 25 October 2026)
+
+| Area | Open item | Why it is open |
+|---|---|---|
+| Hardware | Phone pairing on a real phone, motion look over HTTPS, AR ribbon on Android, VR Guide me on a headset, real microphone and speakers, projector contrast | Tested only in desktop browser contexts and with stubs |
+| People | Three people who do not know the app find equipment, cross floors and reroute without help | Not done; model grading does not replace it |
+| Import | Real (non-procedural) plans: 64/122 dev floors pass the strict check, 0/40 complete buildings | See [RECONSTRUCTION_VALIDATION_RESULTS.md](RECONSTRUCTION_VALIDATION_RESULTS.md) |
+| Live LLM | Re-run the full 30-conversation pack on the final build (last: 25/30) | Live packs cost tokens; numbers are tied to a source fingerprint |
+| Oracles | Independent oracles for areas, shared walls, stacking and 3D distance written from the README definitions | Today these are checked against gold (655/655) and metamorphic invariance only |
+| Data | Rooms cut off from the main part in 53 of 280 buildings (`eval.connectivity`); deciding whether to add doors at wall gaps under 0.5 m is a data decision | Default start and "separate parts" explanation are done (`tests/test_default_start.py`, `tests/test_disconnection.py`) |
+| 3D | Scene-level z-fighting checked by eye; stair flights where the data has no stacked stair footprint (about 350 flights in 79 buildings) | Guide me shows a stairs or lift overlay at floor changes instead of a ride |
+| UI | A dedicated Undo control for edits (today: the chat card's "Undo" follow-up); plan-view floor colours; Lab and phone companion on the control kit | |
+| Positioning | QR deep links work (`?at=`); BLE, Wi-Fi and camera positioning are not built | See [Knowing where the user is](#knowing-where-the-user-is) |
+
+The sections below are the working notes from the build sessions, oldest first. Items marked done there have tests unless the note says otherwise. Where a note conflicts with the table above, the table wins.
+
 ## Next up: review of 2026-10-24 (everything asked for that is not done yet)
 
 The route-rule change from Synera (kit 1.1.0) took priority, so these are written down instead of half done. Status: **todo** = nobody has started; **codex** = the other agent's working tree already contains a start (RoomText, roomMentions, floor-slab tests); check `git status` before touching the same files.
@@ -69,15 +87,14 @@ The base is in place: `web/src/components/Building3D.tsx` renders the building i
 - **Live map updates:** "this machine is now in 0.21" works through `move_item`. Barcode or RFID input could call the same endpoint.
 - **Forklift / wide loads:** min door width and step-free are in place. Add aisle blocking per hall zone (close a space or opening) from the UI.
 - **Floor plans from real scans:** Raster2Seq (MIT, CubiCasa5K checkpoint) as a fallback for non-generated plans, on a Linux GPU, timeboxed.
-- **Voice:** server-side ElevenLabs TTS, or Groq Whisper for speech-to-text, to replace the browser APIs.
-- **Lovable:** the code you were given (`COMM-INDUSTRIAL-QHYD`) looks like a credit/promo code, not an API key. Redeem it on lovable.dev. Lovable then works on this repo through GitHub sync: prompt in Lovable, then pull. It uses the same stack (Vite + React + Tailwind).
+- **Voice:** done since: ElevenLabs speech-to-text and text-to-speech through `server/voice.py`, browser speech as the fallback. Real audio and latency still unmeasured.
 
 
 ## Current implementation audit (25 October)
 
 Supersedes earlier todo labels where they conflict: normal chat is Claude-first; token-free dispatch is not the product policy. Streaming and result reopening are implemented and covered by offline transport/UI contracts. Speed choices are visible segmented buttons (0.5×/1×/2×/4×). Tools groups secondary controls, including explicit-input scenarios. The Lab tracks raw scores and historical evidence rather than a guessed overall grade.
 
-Still open: refresh every critical live case after the final integration, complete three graded uninterrupted rehearsals, independent general-polygon wall/stacking oracles beyond gold/hand cases, general plan import quality, physical phone/audio/projector validation, and three unfamiliar teammate trials. These must not be marked done from a backend-only test or a different source fingerprint. See TESTING_GUIDE.md for the exact profiles and challenge prompts.
+Still open: refresh every critical live case after the final integration, complete three graded uninterrupted rehearsals, independent general-polygon wall/stacking oracles beyond gold/hand cases, general plan import quality, physical phone/audio/projector validation, and three unfamiliar teammate trials. These must not be marked done from a backend-only test or a different source fingerprint. See [TESTING.md](TESTING.md) for the exact profiles and challenge prompts.
 
 ## Consolidated UI review
 

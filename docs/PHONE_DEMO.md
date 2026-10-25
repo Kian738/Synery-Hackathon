@@ -7,7 +7,7 @@ uv sync
 uv run fw start --lan
 ```
 
-On the laptop, open **Phone**, then **Pair a phone**. Scan the QR with the phone camera on the same network. The address and six-digit code are also available under **Or enter the code manually**. Compare the two-digit confirmation number on both screens and press **Allow** on the laptop. Close setup; pairing remains active. The QR is generated locally, contains the one-use code in the URL fragment, and changes when **New code** is pressed. Codes expire after two minutes.
+On the laptop, open **Building tools → Phone**, then **Pair a phone**. Scan the QR with the phone camera on the same network. The address and six-digit code are also available under **Or enter the code manually**. Compare the two-digit confirmation number on both screens and press **Allow** on the laptop. Close setup; pairing remains active. The QR is generated locally, contains the one-use code in the URL fragment, and changes when **New code** is pressed. Codes expire after two minutes.
 
 Choose a route on the laptop. The phone shows the current computed instruction, Next, Back, Repeat, a touch look pad and Recenter. Next/Back use the laptop's chapter controls and pause preview playback. Turning changes camera orientation only. It does not change the declared location, route, or confirm that someone physically reached a waypoint. Closing or disconnecting the phone leaves desktop navigation available. End pairing from laptop setup when finished.
 
@@ -15,7 +15,7 @@ No route is needed to use the remote pad: in the overview it turns the model aro
 
 ## Motion look readiness
 
-The default `http://<LAN-IP>:8000/phone` address supports touch control. Phone motion sensors require a secure context; enable them only after the phone opens an HTTPS address with a certificate it trusts and the user taps **Turn on motion look**. iOS may ask permission. Denial or missing sensors preserves touch controls. No insecure-browser flags or public tunnel are configured.
+The default `http://<LAN-IP>:8000/phone` address supports touch control. Phone motion sensors require a secure context; enable them only after the phone opens an HTTPS address with a certificate it trusts and the user taps **Turn on motion look**. iOS may ask permission. Denial or missing sensors preserves touch controls. No insecure-browser flags are configured by default.
 
 **Fast path to https (2026-10-25):** `powershell -File scripts/phone_https.ps1` starts a Cloudflare quick tunnel (`winget install --id Cloudflare.cloudflared` once) and prints a temporary `https://….trycloudflare.com` address; open it on the phone, pair as usual and tap **Turn on motion look**. The address is public while the tunnel runs, so use it for the demo only. There is no bypass on iPhone; on Android Chrome alone, `chrome://flags/#unsafely-treat-insecure-origin-as-secure` with the LAN address also works. Not tried on a physical phone from here.
 

@@ -4,7 +4,7 @@ Date: 2026-10-25. Scope: what to implement so the Scenarios module is a defensib
 
 Evidence labels: **[opened]** = the source page or PDF was read in this session. **[search]** = only seen in a search snippet. **[memory]** = background knowledge, no source opened (listed again in the last section). Anything marked [memory] or [search] must be re-checked before it appears in a UI string or a claim to judges.
 
-Framing, as in `research_notes/scenario-simulation/README.md`: the module is an idealised, parameterised stress test, not a validated fire simulator and not a code-compliance check. It can still use the code numbers below as defaults and as "flags".
+Framing, as in `docs/research/scenario-simulation/README.md`: the module is an idealised, parameterised stress test, not a validated fire simulator and not a code-compliance check. It can still use the code numbers below as defaults and as "flags".
 
 ## 0. What the repo already has (so we do not rebuild it)
 
@@ -13,7 +13,7 @@ Framing, as in `research_notes/scenario-simulation/README.md`: the module is an 
 | `floorwise/evacuation/` (`solve.py`, `ten.py`, `adapter.py`, `doors.py`, `responders.py`, `robust.py`) | Exact quickest evacuation on a time-expanded capacity graph (binary search on horizon, min-cut bottleneck), `best_doors` = greedy add/widen of doors pruned by the min cut, re-verified on an edited copy. Params: 1.316 p/s/m, 0.15 m boundary, 1.34 m/s, stairs x0.7, dt 5 s. | Macroscopic only: no density, no queue geometry, no LOS, no per-person times (p50/p95 need a schedule-to-person mapping). `adapter.py` states it deliberately does **not** use `core/graph.py` route costs, so it can disagree with navigation (see section 7). |
 | `floorwise/core/resilience.py` (`chaos_test`) | Single-element closure analysis rooted at exits: rooms lost per element. | Unweighted by occupants; no time dimension. |
 | `floorwise/reason/occupants.py`, `evacuation/types.py::Occupants` | Occupants from seat-type assets (0.5 m seat pitch for rows), user overrides, uniform. | No occupant-load-factor default for rooms without seats (section 6). |
-| `research_notes/scenario-simulation/` | Flow formulations, validation cases V1-V10, baselines. | Not yet tied to the standards below. |
+| `docs/research/scenario-simulation/` | Flow formulations, validation cases V1-V10, baselines. | Not yet tied to the standards below. |
 
 The 1.316 p/s/m and 0.15 m boundary are the SFPE door-flow rule as implemented by Pathfinder: a 1 m door flows at 1.316 x (1.0 - 2 x 0.15) = 0.92 p/s [opened: https://www.thunderheadeng.com/docs/2024-1/pathfinder/verification-validation/]. The repo is therefore already consistent with the IMO door-flow test (below).
 

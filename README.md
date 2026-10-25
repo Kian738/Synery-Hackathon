@@ -1,112 +1,150 @@
 # Floorwise: talk to your building
 
-Synera Track 01, Industrial Agents Hackathon 2026. You give Floorwise a floor plan and it learns the building; after that, anyone can ask it the way, by text or by voice.
+Floorwise is an indoor navigation agent for Synera Track 01 ("Talk to your building") at the Industrial Agents Hackathon 2026. Load a building model, or rebuild one from floor-plan images. Then anyone can ask it, by text or by voice, where things are, how to get somewhere (step-free, avoiding places, several stops), and what changes when a lift closes or a door is added. It answers in words, on a 2D plan and in a 3D model of the building, and can walk you through the route.
 
-## Submission (everything for judging is in this repository)
+**The one design rule: every fact comes from deterministic code.** The language model (Claude) reads the request, picks typed tools and words the answer. Distances, areas, counts, routes, closures and evacuation times all come from `floorwise/core` and the solvers, which contain no model calls. The reasons are recorded in [ADR 001](docs/adr/001-deterministic-facts.md) and the [research summary](reports/Indoor%20wayfinding%20agent%20UX.md).
+
+## For judges
 
 | What | Where |
 |---|---|
-| Answers for the public test set (required package) | [`SUBMISSION/answers.json`](SUBMISSION/answers.json) and [`SUBMISSION/BENCHMARK.md`](SUBMISSION/BENCHMARK.md) |
-| The kit's CSV (`question_id,answer`, last line `Answer: ...`) | [`submissions/team_floorwise_test.csv`](submissions/team_floorwise_test.csv) |
-| Run it on any building (the Sunday command) | `uv run run_benchmark <building_dir> <questions.json> <answers.json or .csv>`; the JSON also carries `route`, `route_elements`, `legs` and `length_m` |
-| Rebuild the public-test package | `uv run fw submit` |
-| The app | `uv sync`, `cd web && npm install && npm run build`, then `uv run fw start` and open http://localhost:8000 |
-| The multi-hop demo in one click | **Run demo** (Welcome panel or top bar), or open `/?demo=fire`: a 35 s narrated fire scenario (exact evacuation flow, minimum-cut doors with the capacity arithmetic, responder route, verified door fix). Chosen by measurement with `uv run python -m eval.demo_pick` |
-| Results and their limits | [Results](#results-offline-no-api-calls), [multi-hop section](#multi-hop-scenarios-fire-evacuation-door-fixes), [`docs/JUDGING.md`](docs/JUDGING.md), [`docs/STATUS.md`](docs/STATUS.md) |
+| Public test answers (the required package) | [`SUBMISSION/answers.json`](SUBMISSION/answers.json) and [`SUBMISSION/BENCHMARK.md`](SUBMISSION/BENCHMARK.md) |
+| The kit's CSV format (`question_id,answer`) | [`submissions/team_floorwise_test.csv`](submissions/team_floorwise_test.csv) |
+| Run on any building (the "Sunday" command) | `uv run run_benchmark <building_dir> <questions.json\|.jsonl\|.csv> <answers.json\|.csv>` ([BENCHMARK.md](BENCHMARK.md)) |
+| Rebuild and validate the package | `uv run fw submit` ([`floorwise/submission.py`](floorwise/submission.py)) |
+| Evidence for each capability | [docs/JUDGING.md](docs/JUDGING.md), current state in [docs/STATUS.md](docs/STATUS.md) |
+| Two-minute demo script | [docs/DEMO.md](docs/DEMO.md) |
 
-Honest limits: the public test set has no gold answers, so the CSV and JSON are predictions; the dev benchmark (138/138 with the organisers' scorer) and the route checks are the evidence. Evacuation uses seat-count occupants, no smoke model, and is a pre-screen, not a compliance check.
+The public test set has no gold answers, so the 145 test answers are predictions. The evidence is the labelled train/dev data and the independent route checks below.
 
-**Design: neurosymbolic.** Claude handles language: parsing questions, linking names to rooms, dialogue, asking back and explaining. A deterministic 3D scene graph handles space: geometry, routing, reachability and what-if simulation. Frontier LLMs are unreliable at raw geometry. FloorplanQA (ICML 2026) shows them breaking physical constraints on JSON floor plans. Graph-grounded agents do much better (Floorplan2Guide, SayPlan, SG-Nav, HOV-SG). So every number Floorwise states comes from the core, and Claude never estimates a distance.
+## What it does
 
-```
- voice/text ─► Claude (parse · link · ask back · explain) ─► Session ─► spatial core ─► answer + map events
-                                                                      │ scene graph: building → floor → space → item
-                                                                      │ door graph (dataset route model v1.1.0)
-                                                                      │ wall adjacency · vertical stacking · constraints
-                                                                      │ what-if edits with impact diff
- floor plan images ─► CV regions + doors + entrances ─► Claude vision labels ─► stacked building.json
-```
-
-## Results (offline, no API calls)
-
-| Gate | What | Score |
+| Capability | How | Code |
 |---|---|---|
-| L0 `routes` | route model v1.1.0 vs 2,130 warm-up answers (to the cm; recomputed by the organisers, 1,314 changed) | 2130/2130 |
-| L1 `solver` | gold inputs → solver → official scorer, train+dev | 655/655 |
-| L2 `parser` | question text → resolved ids vs gold, train+dev / test coverage | 655/655 · 145/145 |
-| L3 `e2e` | full pipeline via the kit's `benchmark.evaluate` on dev | **138/138** |
-| L3 `e2e` | train+dev | 653/655 (2 misses: 9 rooms all named "Büro") |
-| L3b `e2e_basic` | locate/count/route/step-free/closure/tour from text | 2124/2130 (remaining misses: duplicate OSM names) |
-| L4 `robust` | perturbed wording (case, floor synonyms, ref-only rooms, typos) | 630/630 dev |
-| L6 `unseen` | test questions (no gold): rule-parsed, one reading, no errand near-tie, no new kind | 145/145 |
-| L5 `metamorphic` | translate/shuffle/rotate invariance + route properties | 898/898 |
-| L7 `build` | floors rebuilt from plan images (procedural buildings) | rooms 1.00 · IoU 0.98 · doors 1.00 |
+| Find rooms and equipment | Fuzzy entity linking over names, room numbers, room types and item types. It asks back when a name fits several rooms. | [`core/resolve.py`](floorwise/core/resolve.py), [`agent/tools.py`](floorwise/agent/tools.py) |
+| Exact routes | The kit 1.1.0 route model: door to door inside each space, 15 cm off the walls; stairs cost 2 m per metre climbed; a lift costs 15 m per ride plus 1 m per metre climbed; no route round the outside | [`core/spacewalk.py`](floorwise/core/spacewalk.py), [`core/graph.py`](floorwise/core/graph.py) |
+| Route constraints | Step-free, minimum door width, closed places, avoid and soft-avoid, forklift rules, production bays as destinations only, tours | `Constraints` in [`core/graph.py`](floorwise/core/graph.py), [`core/routing.py`](floorwise/core/routing.py) |
+| Directions a person can follow | Decision points, landmarks, each floor change as its own step, a short spoken overview | [`core/instructions.py`](floorwise/core/instructions.py) |
+| Walking line you can see | A taut string around furniture inside each room. Previews that would cross a wall or furniture are withheld, not drawn. | [`core/walk.py`](floorwise/core/walk.py), [`core/preview_check.py`](floorwise/core/preview_check.py) |
+| Edits with undo | Add, remove and widen doors; close and reopen places; add, move and remove items. Routes are recomputed on the edited model. | [`agent/session.py`](floorwise/agent/session.py), [`tests/test_edit_capabilities.py`](tests/test_edit_capabilities.py) |
+| Closure impact and weak points | Which rooms lose exit access when one element closes, for everyone, for step-free users and for a 1.1 m trolley. Fixes are checked by re-running the analysis on the edited building. | [`core/resilience.py`](floorwise/core/resilience.py), [`core/fixes.py`](floorwise/core/fixes.py) |
+| Fire and evacuation scenarios | An exact quickest evacuation (time-expanded flow, minimum cut), a responder route that avoids evacuees, and door changes that are re-solved before they are offered | [`floorwise/evacuation/`](floorwise/evacuation), [`floorwise/reason/`](floorwise/reason) |
+| Evacuation stress test | Per-person queue simulation on the same route graph as navigation, with door flow, pre-movement delay and walking speed spread | [`floorwise/stress/sim.py`](floorwise/stress/sim.py) |
+| Build from floor plans | OpenCV regions, doors and entrances from plan images, one real dimension for scale, optional Claude vision labels. The result is a draft that a person reviews. | [`floorwise/build/`](floorwise/build), [ADR 003](docs/adr/003-reconstruction-is-a-draft.md) |
+| Between buildings | Picks the best exit and entrance pair across 17 OpenStreetMap buildings that have real coordinates, with an outdoor leg | [`core/campus.py`](floorwise/core/campus.py), [`server/georef.py`](server/georef.py) |
+| Voice | ElevenLabs speech-to-text and text-to-speech through the server, so the key never reaches the browser. The browser's own speech is the fallback. One speaker at a time. | [`server/voice.py`](server/voice.py), [`web/src/lib/speaker.ts`](web/src/lib/speaker.ts) |
+| Phone, AR and VR | Pair a phone by QR code as a remote and instruction display (`/phone`); WebXR AR route ribbon on Android Chrome; VR Guide me on a headset | [`server/companion.py`](server/companion.py), [`web/src/companion/`](web/src/companion), [`web/src/components/VrRig.tsx`](web/src/components/VrRig.tsx) |
+| Benchmark Lab | `/lab`: runs, failures with the route drawn on the plan, comparisons, readiness by grading group | [`server/lab.py`](server/lab.py), [`web/src/lab/`](web/src/lab) |
 
-Test submission: `submissions/team_floorwise_test.csv` (145 answers, regenerated under route model v1.1.0, offline, $0 API cost).
+The chat agent works through more than 30 typed tools (for example `find_route`, `set_closed`, `rank_rooms_by_items`, `plan_scenario`, `ask_choice`). A tool error comes back with candidate matches, so the model asks the person instead of guessing.
 
-**Live-LLM status.** Every gate above runs offline and needs no model. Live Claude checks (`rehearse`, `interaction`, parser comparisons) were last run on an earlier key and before the v1.1.0 change; one live call has since been verified on AWS Bedrock (Claude Sonnet 4.6, EU inference profile, 2 requests, about 3.8k tokens): asked about a fire in a named room, Claude called `plan_scenario` and its answer repeated the solver's numbers exactly (358 people, 345 out through 2 exits in 155 s, 13 stranded in the hazard room, door fix 155 s to 145 s). The check script is not part of the gates; the older `rehearse` and `interaction` runs have not been repeated.
+## Architecture
 
-## Run
+```mermaid
+flowchart LR
+    U[Text or voice] --> C[Claude: parse, pick tools, word the answer]
+    C -->|typed tool calls| S[Session: closures, edits, profile, place]
+    S --> K[floorwise/core: geometry, route graph, walk lines, directions]
+    S --> E[evacuation, reason, stress: scenarios]
+    K --> R[Results and UI events]
+    E --> R
+    R --> C
+    R --> W[Web app: plan, 3D, Guide me, phone]
+    P[Floor-plan images] --> B[floorwise/build: CV + scale + optional vision labels] --> J[building.json draft, reviewed]
+    J --> K
+    Q[Benchmark question] --> RP[Rule parser, LLM parser only for unknown wording] --> K
+```
+
+- **Benchmark path:** question text, then the rule parser ([`agent/parse_rules.py`](floorwise/agent/parse_rules.py)), then the solver ([`agent/solve.py`](floorwise/agent/solve.py)), then an answer ending in `Answer: ...`. The test package was generated with zero LLM calls; an LLM parser ([`agent/parse_llm.py`](floorwise/agent/parse_llm.py)) handles wording the rules do not know.
+- **Three meanings of "distance"**, kept apart on purpose ([ADR 002](docs/adr/002-three-routing-semantics.md)): the official benchmark route cost, the walking line drawn for a person, and exit-rooted impact analysis.
+- **Provider layer:** [`floorwise/llm/`](floorwise/llm) runs the same tool loop on Anthropic (production) or an OpenAI-compatible provider (Groq, OpenRouter) for testing. Default Claude models: `claude-sonnet-5-5` for chat, `claude-haiku-5-5` for the parser, `claude-opus-5-5` for vision labels and eval judging. Each role can be overridden with `FLOORWISE_<ROLE>_MODEL`.
+
+Full description: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Results
+
+All of the gates below run offline, with no API key. The numbers are from the last full gate run (25 October 2026, unchanged source tree). Reproduce them with `uv run fw check`.
+
+| Gate | What it checks | Result |
+|---|---|---|
+| `routes` | Our route model against the 2,130 warm-up route answers, to the centimetre | 2130/2130 |
+| `solver` | Gold inputs to answers, train + dev | 655/655 |
+| `parser` | Question text to resolved ids: train + dev, test coverage | 655/655, 145/145 |
+| `e2e` | The full pipeline from question text, train + dev | 653/655 (2 known) |
+| Kit evaluator | `benchmark.evaluate` from the kit on dev, run on 25 October 2026 | **138/138** |
+| `e2e_basic` | Locate, count, route, step-free, closure and tour questions from text | 2122/2130 (8 known) |
+| `sunday` | Routes scored the way the judges describe, measured by the kit's own router | 1329/1338 (9 known) |
+| `generated`, `rules`, `roundtrip` | New questions on any building, every route rule as a property, new wording round trips | 150/150, 661/661, 236/236 |
+| `differential` | Our graph against the kit's `building_map.py`, edge for edge, plus routes under closures | 256/256 (8,960/8,960 on all 280 buildings) |
+| `walls`, `walkability`, `edits` | Previews never cross walls; furniture clearance; routes after each edit equal the kit's | 160/160, 160/160, 72/72 |
+| `robust`, `metamorphic`, `gold` | Reworded questions; translate, rotate and shuffle invariance; five rephrasings of every question (plus a hash holdout) | 630/630, 860/860, 3755/3755 + 1530/1530 |
+
+"Known" misses are listed one by one, with a diagnosis, in [`eval/known_issues.json`](eval/known_issues.json): OpenStreetMap buildings where, for example, 9 offices on one floor are all named "Büro" and the question gives no room number. The gates fail on any other miss, whatever the percentage.
+
+Evacuation, measured with `uv run python -m eval.ccrp_gap 40` (one fire per building, 40 sampled train/dev buildings, run on 25 October 2026): in 26 of the 27 scenarios where everyone gets out, the exact plan takes the same time as the classic CCRP heuristic; in the other it is 4.2 % faster. So the value is not raw speed. The plan names the doors that limit the evacuation, keeps a responder route free, and finds a door change that passes re-solving in 9 of 40 buildings (median 10 % faster, best 14 %). For the other 31 it says that no door change helps.
+
+Tests: 567 Python tests (`uv run python -m pytest -q`) and 39 Playwright spec files for desktop and phone viewports (`uv run fw ui-test`). Details: [docs/TESTING.md](docs/TESTING.md).
+
+## Quick start
+
+You need [uv](https://docs.astral.sh/uv/), Node 22 and the kit data in `docs/industrial-agents-hackathon-2026` (gitignored), or set `FLOORWISE_KIT` to point to it.
 
 ```bash
 uv sync
-cp .env.example .env                      # ANTHROPIC_API_KEY=...
+cp .env.example .env                          # ANTHROPIC_API_KEY=... (voice and outdoor routing keys are optional)
 cd web && npm install && npm run build && cd ..
-uv run --env-file .env uvicorn server.app:app --port 8000     # app at http://localhost:8000
-# dev mode with hot reload: (cd web && npm run dev) -> http://localhost:5173
+uv run fw doctor                              # checks keys, data and the web build
+uv run --env-file .env uvicorn server.app:app --port 8000    # or: uv run fw start
 ```
 
-- Benchmark: see [BENCHMARK.md](BENCHMARK.md) (`uv run run_benchmark <building_dir> <questions.json> <answers.json>`).
-- Terminal chat: `uv run --env-file .env python -m floorwise.agent.chat docs/industrial-agents-hackathon-2026/data/dev/proc-factory-dev-003`
-- Every offline gate: `uv run python -m eval gates`. Runs are logged to `runs/`, with a leaderboard at `runs/report.html`.
-- Claude suites:
-  - `uv run --env-file .env python -m eval parser --parser llm --split dev` (parser model comparison)
-  - `... -m eval robust --variants paraphrase`
-  - `... -m eval interaction` (tricky-user personas graded by an LLM judge)
-- Rebuild from plans: `uv run python -m floorwise.build.builder buildings/new --floor 0=plan0.png --floor 1=plan1.png --width 55.5 [--vision]`
+Open http://localhost:8000. Other entry points:
 
-## Models
+| Command | What |
+|---|---|
+| `uv run fw dev` | Backend with reload on :8000, Vite on :5173 |
+| `uv run fw start --lan` | Same app for a phone on the local network ([docs/PHONE_DEMO.md](docs/PHONE_DEMO.md)) |
+| `uv run fw chat [building_dir]` | Talk to a building in the terminal |
+| `uv run fw check` | All Python tests, then every offline gate |
+| `uv run fw ui-test` | Builds the web app, starts a server, runs Playwright |
+| `uv run fw eval <suite>` | One eval suite (`uv run python -m eval` lists them) |
+| `uv run python -m floorwise.build.builder buildings/new --floor 0=plan0.png --width 55.5 [--vision]` | Rebuild a building from plan images |
 
-| Role | Model | Why |
-|---|---|---|
-| Chat agent | `claude-opus-5-5`, effort `low`, server-side fallbacks | Best at asking back and explaining; the cached building prompt keeps cost down |
-| Parser for unfamiliar wording | `claude-haiku-5-5` (structured output) | Extraction only; known wording is parsed by rules for free |
-| Room labels from plan images | `claude-opus-5-5` vision, set-of-mark prompting | Reads printed room labels at numbered marks |
-| Interaction judge, paraphrases | `claude-opus-5-5`, `claude-sonnet-5-5` | Eval only |
+Useful URLs: `/?building=<id>`, `/?building=<id>&at=<space id>&to=<name>` (open a route directly), `/?demo=fire` (the narrated fire scenario), `/lab`, `/map`, `/phone`.
 
-## Layout
+Hosting the app for others is described in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+## Limitations
+
+- **Plan import is a draft.** On the 40-building dev set (122 floors), 64 floors pass the strict import geometry and topology check, and no complete building passes automatically. All 45 procedural floors pass; real OpenStreetMap, ResPlan and Swiss plans are much weaker. See [docs/RECONSTRUCTION_VALIDATION_RESULTS.md](docs/RECONSTRUCTION_VALIDATION_RESULTS.md).
+- **Evacuation is a pre-screen, not a fire model.** There is no smoke or fire spread. Occupancy and passage rates are explicit inputs or labelled estimates from seat counts. "Verified" fixes are self-consistency: the same engine re-solves the edited building. Nothing is validated against Pathfinder, a real drill, or building codes.
+- **Not tried on hardware.** Phone pairing has run in two browser contexts on one machine. AR, VR and real microphone and speaker quality have not been tried on physical devices.
+- **3D is schematic.** Walls, stair flights and furniture models are illustrative. At a floor change, Guide me shows a short stairs or lift overlay. It does not animate a walk up a flight that the data does not describe.
+- **Live LLM quality is measured, not guaranteed.** The 30-conversation live pack last scored 25/30 (three wording failures, two incomplete on budget). Model wording is checked by an LLM judge, not by people.
+- **Position is declared, not tracked.** The start is the main entrance, a tapped room, or a QR deep link. There is no BLE, Wi-Fi or camera positioning.
+
+Open work is tracked in [docs/TASKLIST.md](docs/TASKLIST.md) and [docs/BACKLOG.md](docs/BACKLOG.md).
+
+## Repository map
 
 ```
-floorwise/core     model, graph (route model + constraints), geometry, ops, routing (directions), resolve (entity linking)
-floorwise/agent    spec (QuerySpec), parse_rules, parse_llm, solve, answer (benchmark entry), session, tools, chat
-floorwise/build    from_image (CV), builder (multi-floor stacking), label (Claude vision), palette (learned)
-floorwise/reason   verified multi-hop: typed operators, plan DAG, per-step checks, abstention, templates, findings (suggestions re-solved)
-floorwise/evacuation  exact evacuation as flows over time, responder routes, door synthesis, N-1 robust doors
-floorwise/llm      provider-neutral tool loop, budget, structured output
-floorwise/cli.py   run_benchmark
-eval/              ledger + suites L0–L7 + report
-server/app.py      FastAPI: geometry, sessions, route/close/door, SSE chat, build-from-plans
-server/scenario.py POST /api/sessions/{id}/scenario (run a scenario) and /scenario/ask (the one missing input)
-web/               React + Vite: 2D plan, 3D floor stack, animated routes, chat with understanding cards, voice
+floorwise/core        building model, route graph (kit 1.1.0 rules), geometry, walking lines, directions, resilience, scene compile
+floorwise/agent       QuerySpec, rule and LLM parsers, solver, benchmark answer(), Session, chat agent and tools
+floorwise/llm         provider-neutral tool loop, structured output, token budget
+floorwise/build       floor-plan images to building.json (CV, learned palette, optional vision labels)
+floorwise/evacuation  exact evacuation as flow over time, responders, door synthesis, CCRP baseline
+floorwise/reason      multi-hop scenario plans: typed operators, per-step checks, findings
+floorwise/stress      per-person evacuation queue simulation on the navigation graph
+floorwise/cli.py      run_benchmark (the Sunday command); fw.py is the project CLI
+server/               FastAPI: sessions, routes, edits, SSE chat, scenarios, voice, phone relay, Lab
+web/                  React + Vite + three.js: Navigator, 3D scene, Guide me, phone companion, Lab
+eval/                 eval suites, ledger, gates, known-issues list
+tests/                pytest suite
+docs/                 documentation (start at docs/README.md); the kit lives in docs/industrial-agents-hackathon-2026
+SUBMISSION/, submissions/   the benchmark package and the kit's CSV
 ```
+
+Contributors and coding agents: read [AGENTS.md](AGENTS.md) first.
 
 ## Licences
 
-Data under `docs/` is from the kit. OSM-derived buildings are ODbL 1.0 (© OpenStreetMap contributors). Swiss Dwellings and ResPlan are CC BY 4.0. Procedural buildings are CC0. See the kit's `ATTRIBUTION.md`.
-
-
-## Verified building demo
-
-The cinematic Navigator includes schematic 3D, first-person route preview, profile-aware closure impact, and verified hypothetical door-width repairs. See [judging evidence](docs/JUDGING.md), [demo script](docs/DEMO.md), [product brief](PRODUCT.md), and [design direction](DESIGN.md). Run `uv run fw eval differential` for the independent official-router comparison and `uv run fw eval rehearse` for bounded live Claude checks. Image-derived buildings require review; voice hardware is not yet verified.
-
-## Multi-hop scenarios (fire, evacuation, door fixes)
-
-Ask "fire in room X: who gets out how fast, how do responders get in without meeting evacuees, which door should we add?" and Floorwise plans a chain of typed steps (hazard, people, exits, evacuation, bottleneck, responders, door candidates, best door), checks each step's postcondition and names the step that fails instead of guessing. Claude plans and words; the numbers come from the solver, and a suggested fix is only shown after the engine re-solved the edited building. The chat tool is `plan_scenario`; the UI endpoint is `/api/sessions/{id}/scenario`.
-
-- Re-solved means the engine re-ran its own model on the edited building. It is self-consistency, not validation against Pathfinder, PyroSim or a real drill.
-- Interactive capacity scenarios and the chat tool require explicit occupancy and assumed passage rates. Legacy template diagnostics can use a seat-count estimate; that is not measured occupancy. There is no fire or smoke model, and this is not a compliance check.
-- People already inside the hazard room get `escape_s` seconds to leave (default 30 s, an assumption you can set per hazard; 0 means none, and then they are reported as stranded).
-- Sensitivity: `uv run python -m eval.sensitivity` re-runs one scenario at specific flow 1.0, 1.316 and 1.6 persons/s/m and occupancy x0.5, x1, x1.5. On campus-dev-000 (Canteen 0.28, 358 people, 30 s escape window) the same door is the top fix in all 6 cases up to the estimated occupancy; at x1.5 occupancy it is a different door at flow 1.0, none at 1.316, and the first door again at 1.6. Absolute seconds move (145 to 175 s at x1), so the fix ranking is only stable up to the estimated headcount.
-- How good is the plan: on campus-dev-000 the exact plan takes 155 s (110 s walking plus 45 s queueing). Against the classic CCRP heuristic (165 s) it is about 6% faster; against everyone using their nearest exit (260 s) it is 40% faster. The second figure compares to a naive baseline, so quote the first for state-of-the-art claims.
-- Across the dataset (`uv run python -m eval.ccrp_gap 40`, one fire per building, 40 sampled train/dev buildings): the exact plan matches CCRP in 26 of 27 comparable scenarios (best 4.2% faster), so the value is not raw speed. It is that the plan names the doors that limit the evacuation, reserves a responder route, and finds a verified door change in 9 of 40 buildings (median 8% faster evacuation, best 14%) and says so plainly when nothing helps in the other 31. Times are in 5 s steps.
-- Stress test across the dataset: `uv run python -m eval scenarios` (determinism, people conserved, exact never slower than the CCRP heuristic, every suggested fix verified and better). It tests robustness on generated and inferred kit data, not real buildings.
+The building data comes from the hackathon kit. OSM-derived buildings are ODbL 1.0 (© OpenStreetMap contributors). Swiss Dwellings and ResPlan are CC BY 4.0. Procedural buildings are CC0. See the kit's `ATTRIBUTION.md`.

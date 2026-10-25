@@ -1,8 +1,8 @@
 # Package D: multihop scenario simulation research — READY (research only)
 
-Status: **READY.** The research is actionable; the follow-on is blocked on one user decision (capacity units). No production solver, API or UI code was written, and no file outside `research_notes/scenario-simulation/**` and this handoff was touched.
+Status: **READY.** The research is actionable; the follow-on is blocked on one user decision (capacity units). No production solver, API or UI code was written, and no file outside `docs/research/scenario-simulation/**` and this handoff was touched.
 
-Read in this order: `research_notes/scenario-simulation/README.md`, then files 01 to 05 there.
+Read in this order: `docs/research/scenario-simulation/README.md`, then files 01 to 05 there.
 
 ## The seven deliverables
 

@@ -1,35 +1,45 @@
-# Strictly two-minute demo and fallback
+# Demo script (two minutes)
 
-Before starting: `uv run fw doctor`, `uv run fw check`, `uv run fw ui-test`. Launch with `uv run fw start`; use `uv run fw start --lan` for the paired-phone showcase and follow `docs/PHONE_DEMO.md`. Pair and test before the timed pitch. Use a local screen recording if network or model latency interferes. Do not claim live positioning or certification.
+The video must be **120 seconds**, titles and end card included. Check the real media duration before uploading. Show the product in the first minute and how it works in the second. Do not spend the timed pitch waiting for model replies; cut or speed up waits in the edit.
 
-Latest organizer announcement supersedes the earlier three-minute plan: the final
-export must be **120 seconds**. Record and edit the product in the first minute and
-architecture in the second. Do not spend the timed pitch waiting for model responses.
+## Before recording
 
-1. 0:00–0:10: “Floor plans are drawings. Floorwise lets a visitor ask the building where to go, and a facilities team ask what changes when a lift closes.” Show the preloaded campus.
-2. 0:10–0:35: “I use a wheelchair. How do I get from Lab 2.17 to Lab 4.26?” Show the understood endpoints and step-free constraint. Open Tools → Route floors; start Guide me and advance one decision. “These are recorded rooms and computed directions. The start is set manually.”
-3. 0:35–1:00: “Lift 3 is closed for maintenance. What changes for my route?” Show the closure and reroute via Lift 2. “The agent remembers step-free access and computes another route.” Cut to the verified widening preview: “Changes are reviewed before applying them to the model.”
-4. 1:00–1:25: Show a simple architecture graphic or code: image/data → Building → deterministic geometry and route graph → tools → language/UI. “The model parses language and explains tool results. It never estimates distances or invents routes. We use the challenge's door-to-door walking and vertical travel rules.”
-5. 1:25–1:45: Show the latest raw benchmark results and two-file SUBMISSION folder. “Tests check exact geometry, route validity, text parsing and interaction recovery. Public test answers are generated from the supplied data. The unseen building remains unseen.” Use only results actually measured for the current revision.
-6. 1:45–2:00: Show a brief plan import draft and paired-phone control if already recorded. “Plans can be rebuilt with a real dimension and reviewed. A paired phone controls the view and instructions. This is a model-based guide; live positioning and physical-device validation remain future work.” End on Floorwise at exactly 2:00.
+1. `uv run fw doctor` (keys, kit data, web build), then `uv run fw check`.
+2. Build the web app (`cd web && npm run build`) and start the server with the keys loaded: `uv run --env-file .env uvicorn server.app:app --port 8000`. Without `--env-file`, chat turns fail with a credentials error.
+3. For the phone beat, start with `uv run fw start --lan` and pair before recording ([PHONE_DEMO.md](PHONE_DEMO.md)).
+4. Open the building once and send one chat message. This warms the walk cache and the model client.
 
-Keep the master export at 120 seconds, including titles and end card. Verify the
-actual media duration with a media inspector before uploading; the automated fallback
-below is raw footage, not an edited two-minute submission. The form also needs the
-GitHub repository link and [technical explanation](SUBMISSION_TECHNICAL.md).
+## Script
 
-Shock shot alternative: factory-dev-003, Office lift closure, 29/56 rooms lose step-free exit access.
+| Time | Say | Show |
+|---|---|---|
+| 0:00–0:10 | "Floor plans are drawings. Floorwise lets a visitor ask the building the way, and a facilities team ask what changes when something closes." | The 3D building turning, then the chat. |
+| 0:10–0:35 | "I use a wheelchair. How do I get from Lab 2.17 to Lab 4.26?" | `proc-campus-dev-000`. The understood start, destination and step-free constraint, the route across floors, then **Guide me** with one decision card. |
+| 0:35–0:55 | "Lift 3 is closed for maintenance. What changes?" | The closure and the new route via Lift 2. The agent keeps step-free without being told again. Recorded figures: 60.15 m via Lift 3, 73.00 m via Lift 2 ([JUDGING.md](JUDGING.md#demo)). |
+| 0:55–1:20 | "Fire in an office, 502 people inside." | Open `/?demo=fire`. It switches to the prepared building and plays five narrated beats: the fire and the headcount, the evacuation flow, the bottleneck door, the responder route, and a door change that is solved again before it is shown. |
+| 1:20–1:45 | "The model reads the request and explains. It never estimates a distance. Every number comes from deterministic code that follows the challenge's walking and stair rules." | An architecture slide (the diagram in the [README](../README.md#architecture)), then the gate table and the two files in `SUBMISSION/`. |
+| 1:45–2:00 | "Plans can be rebuilt with one real dimension and reviewed. A paired phone shows the next step." | A short plan-import draft and the phone remote, if recorded beforehand. End on the building at 2:00. |
 
-## Capture
+Use only results measured on the current revision. Say "computed", not "certified". Do not claim live positioning, hardware validation or fire modelling.
 
-PowerShell: `$env:FLOORWISE_CAPTURE_DEMO='1'; uv run fw ui-test --project=desktop demo.capture.spec.ts`.
+### The fire beat
 
-Output: runs/demo/fallback.webm and overview/first-person/closure/fix PNGs. This is a scripted deterministic fallback with real backend operations and no live model audio. Reset the environment variable afterwards. Rehearse live language separately with `uv run fw eval rehearse`.
+- `/?demo=fire` starts the scenario by itself. The scenario lives in [`floorwise/demo_scenario.json`](../floorwise/demo_scenario.json): building `osm-way61408163`, fire in Office 0371 (ground floor), 502 people from seat counts, 3 floors. Everyone is out in 115 s with the exact plan, 245 s if everyone takes the nearest exit, and the checked door change brings it to 75 s. These numbers were chosen and measured by `uv run python -m eval.demo_pick`.
+- To run it by hand on any building, open **Building tools → Fire test** and pick a room. **Building tools → Evacuation test** opens the per-person queue simulation with a time scrubber and a crowding heat map.
+- Occupancy here comes from seat counts and is labelled as an estimate. The interactive Fire test asks for explicit occupancy and passage rates.
+
+### Other strong shots
+
+- **Closure impact:** `proc-factory-dev-003`, close the Office lift: 29 of 56 rooms lose step-free exit access, while 0 rooms are cut off for everyone (`tests/test_insights.py`).
+- **Verified widening:** `proc-campus-dev-000`, Main lobby to Print room 0.16 for a step-free 1.1 m trolley. A hypothetical widening of door O0015 from 0.9 to 1.1 m is previewed without changing the model, and is only applied on request.
+- **Counts without guessing:** "Which room has the most chairs?" gives the full ranking with ties. Counts are recorded items, not seat capacity.
+
+## Fallback recording
+
+PowerShell: `$env:FLOORWISE_CAPTURE_DEMO='1'; uv run fw ui-test --project=desktop demo.capture.spec.ts`, then reset the variable.
+
+This writes `runs/demo/fallback.webm` and still images. The chat is scripted at the transport boundary, while the backend operations are real. It is not evidence of live Claude latency or voice. Rehearse live wording separately with `uv run fw test demo`.
 
 ## On-site checks
 
-Check the laptop microphone and speakers, browser permission, 1080p projector contrast, local app availability, and API credits. Have one unfamiliar teammate follow the directions. Never describe these checks as passed before doing them. Recheck Sunday input schema when released; `fw bench BUILDING QUESTIONS OUT` handles JSON, JSONL and CSV.
-
-## Visual-answer beat after the route demonstration
-
-Ask “Which room has the most chairs?” Show the complete deterministic ranking, click the leading room to link it to the model and inset, and point out “Computed locally · no model tokens.” Counts reflect recorded assets; lecture seating rows are not inferred seat capacities. The updated opt-in recording captures this real deterministic chat answer after the route, closure and verified-fix sequence.
+Check the laptop microphone and speakers, the browser permissions, projector contrast at 1080p, the local app and the API credits. Have one teammate who does not know the app follow the directions. Do not describe any of these checks as passed before doing them.

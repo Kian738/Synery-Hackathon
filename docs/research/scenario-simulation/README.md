@@ -13,4 +13,4 @@ Research only: no solver, API or UI code. Everything describes an **idealised, e
 
 **Open decision (blocks implementation, not research):** capacity units. "20 people per minute", "20 per simulation step" and "20 in total" are three different problems with different answers (see `01-flow-formulations.md`). The proposed input makes the basis mandatory and never guesses it.
 
-Handoff: `docs/parallel/scenario-handoff.md`.
+Handoff: `docs/archive/scenario-handoff.md`.

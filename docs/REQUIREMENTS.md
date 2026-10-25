@@ -45,7 +45,7 @@ Sources: the kit README and CHANGELOG at **v1.1.0** (branch `patch/fix-answers-r
 | D1 | Nine benchmark kinds, answered from the text with the official scorer | `e2e` 653/655 (the two misses are diagnosed ambiguous names); kit `benchmark.evaluate` 138/138 on dev | verified |
 | D2 | Tolerances: area ±5 %, distance ±1 % (min 1 m), 3D ±2 %, counts exact; room before runner-up | official `benchmark/score.py` used unchanged | verified |
 | D3 | Reply ends with an `Answer:` line, exactly one number for numeric answers | solver replies; `eval.e2e` | verified |
-| D4 | Latest organizer message: `SUBMISSION` contains exactly `BENCHMARK.md` and `answers.json`; retain earlier CSV for compatibility | `fw submit` validates unique complete IDs and structured answers, packages two files and writes legacy CSV | implemented; fresh release evidence in `docs/UX_COGNITIVE_LOAD_AUDIT.md` |
+| D4 | Latest organizer message: `SUBMISSION` contains exactly `BENCHMARK.md` and `answers.json`; retain earlier CSV for compatibility | `fw submit` validates unique complete IDs and structured answers, packages two files and writes legacy CSV | implemented; fresh release evidence in `docs/archive/UX_COGNITIVE_LOAD_AUDIT.md` |
 | D5 | No hand-labelling, no building-specific code, the Sunday building is unseen | no ids or names in `floorwise/`; `eval.generated` writes questions for all 280 buildings from code | verified |
 | D6 | Questions with a repeated name: do not guess silently | every reading is solved and the vote reported as a best guess (`docs/parallel/benchmark-handoff.md`) | verified (11 diagnosed unanswerable) |
 

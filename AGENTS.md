@@ -47,7 +47,7 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/cli.py` | `run_benchmark` (Sunday command) | verified offline |
 | `floorwise/submission.py` | validates complete public-test predictions and packages exactly `SUBMISSION/BENCHMARK.md` and `SUBMISSION/answers.json`, plus legacy CSV | unit-tested |
 | `floorwise/fw.py` | `fw`: the one command | verified |
-| `eval/` | eval suites L0–L7, ledger, report | see `docs/EVALS.md` |
+| `eval/` | eval suites L0–L7, ledger, report | see `docs/TESTING.md` |
 | `server/app.py` | FastAPI: geometry, sessions, route/close/door, SSE chat, build | tested; chat live on Groq |
 | `server/companion.py`, `web/src/companion/` | confirmed paired-phone relay and controller; `/phone`, touch/optional secure-context gyro | protocol + two-browser tested; physical hardware pending |
 | `web/src/scene-assets/` | bounded illustrative procedural visuals for all supplied asset types | catalogue + footprint tests |
@@ -57,8 +57,8 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `floorwise/core/campus.py`, `server/campus.py`, `web/src/map/CampusRoutePanel.tsx`, `web/src/journey/` | routes between buildings: joint choice of exit and entrance (one Dijkstra per building, pruned pairs, pluggable outdoor provider), `POST /api/campus/route`, agent tool `campus_route` (not in benchmark mode), route card and guided trip on `/map`, trip banner in the Navigator, `/tunnel` teleport screen | `tests/test_campus.py`; UI build-checked only |
 | `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | desktop + phone regression coverage; see docs/STATUS.md |
 | `web/src/lab/` | Benchmark Lab UI (overview, launcher, runs, drill-down on plan, compare, dataset) | Playwright |
-| `docs/` | our docs plus the kit (`docs/industrial-agents-hackathon-2026`, read-only) | |
-| `research_notes/`, `reports/` | sourced research behind the decisions | |
+| `docs/` | our docs (index: `docs/README.md`; architecture: `docs/ARCHITECTURE.md`) plus the kit (`docs/industrial-agents-hackathon-2026`, read-only) | |
+| `docs/research/`, `reports/` | sourced research behind the decisions (index: `docs/research/README.md`) | |
 
 The full status matrix is in `docs/STATUS.md`. Update it whenever you change what works.
 
@@ -79,7 +79,7 @@ uv run fw test live          # 30 real-browser conversations, three bounded batc
 uv run fw test demo          # three continuous live showcase rehearsals
 uv run fw submit             # validate SUBMISSION/{BENCHMARK.md,answers.json} + legacy CSV
 uv run fw bench B Q OUT      # Sunday run (see BENCHMARK.md)
-uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
+uv run fw eval <suite> ...   # one suite (docs/TESTING.md)
 ```
 
 ## Rules for changes
@@ -119,4 +119,4 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 
 `fw eval build --mode both` separates assisted geometry, actual import floors and complete-building exit/topology assessments. `fw private generate|run|live|retire` manages ignored independent corpora and frozen holdout lifecycle. Protocol: `docs/PRIVATE_VALIDATION.md`; current evidence: `docs/RECONSTRUCTION_VALIDATION_RESULTS.md`. Never tune against an opened holdout and then reuse its success as unseen evidence. Review-required imports and missing-scale clarification are not automatic reconstruction successes.
 
-Consolidation note: `server/exterior.py` resolves only recorded OSM way references; never infer a geographic placement. `web/src/components/ExploreTools.tsx` holds contextual exploration/share controls. `uv run --env-file .env fw eval chat_regressions` is an explicitly paid five-turn provider regression; it is not the full live readiness pack. New browser acceptance remains pending the saved localhost permission gate.
+Consolidation note: `server/exterior.py` resolves only recorded OSM way references; never infer a geographic placement. `uv run --env-file .env fw eval chat_regressions` is an explicitly paid five-turn provider regression; it is not the full live readiness pack. New browser acceptance remains pending the saved localhost permission gate.

@@ -80,7 +80,7 @@ and exactly two package files (`ux-submission-final.log`, `ux-doctor-final.log`)
   connections, so 22/122 strict floor passes must not be presented as a predicted
   multi-floor grading score. The low door recall is independently a material limitation.
 - The old three-minute demo plan was replaced with a 120-second product/architecture
-  script in docs/DEMO.md. docs/SUBMISSION_TECHNICAL.md contains form-ready technical
+  script in docs/DEMO.md. docs/archive/SUBMISSION_TECHNICAL.md contains form-ready technical
   copy. The edited video, measured 120-second export, repository push and final Hack
   and More form submission are not performed by this audit.
 - Physical phone/microphone/projector checks and uncoached human navigation remain

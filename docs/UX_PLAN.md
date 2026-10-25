@@ -128,7 +128,7 @@ The linked plan focuses on the current decision or preview avatar instead of fit
 
 ### Third-pass corrections
 
-Ceilings now come from actual recorded upper-floor footprints, rather than every current-floor room. Upper slabs and walls remain visible in guidance to provide atrium context; no top roof is inferred. The media rail is smaller, and secondary mobile tools live in a menu. Gesture zoom is scoped to the scene while deliberate document zoom remains available. Unique room names/references in assistant replies link to room inspection and explicit model focus. Phone drag controls the overview without requiring a route; motion/connection settings are collapsed and a link opens the current building in the phone's own expanded 3D workspace. See `research_notes/PHONE_XR_POSITIONING_REVIEW.md` for technical sources and the VR/AR positioning roadmap.
+Ceilings now come from actual recorded upper-floor footprints, rather than every current-floor room. Upper slabs and walls remain visible in guidance to provide atrium context; no top roof is inferred. The media rail is smaller, and secondary mobile tools live in a menu. Gesture zoom is scoped to the scene while deliberate document zoom remains available. Unique room names/references in assistant replies link to room inspection and explicit model focus. Phone drag controls the overview without requiring a route; motion/connection settings are collapsed and a link opens the current building in the phone's own expanded 3D workspace. See `docs/research/phone-xr-positioning.md` for technical sources and the VR/AR positioning roadmap.
 
 ### Cognitive-load audit (25 October 2026)
 
@@ -138,5 +138,5 @@ supplied by a link and a user-declared start are explicitly distinguished; marke
 say Start. Room search includes floors and reveals omitted matches. On phones the
 first-use stage uses 34vh and compact labelled shortcuts, keeping all six destinations
 above the composer at 390 × 844; established route/guidance layouts are retained.
-See `docs/UX_COGNITIVE_LOAD_AUDIT.md` and `docs/RELEASE_AUDIT_2026-10-25.md` for
+See `docs/archive/UX_COGNITIVE_LOAD_AUDIT.md` and `docs/archive/RELEASE_AUDIT_2026-10-25.md` for
 the inspection, screenshots, tests and remaining submission risks.
