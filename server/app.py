@@ -833,7 +833,7 @@ async def build_from_plans(
 
 # ---------- static web app (after `npm run build` in web/) ----------
 
-WEB_DIST = ROOT / "web" / "dist"
+WEB_DIST = Path(os.environ["FLOORWISE_WEB_DIST"]) if os.environ.get("FLOORWISE_WEB_DIST") else ROOT / "web" / "dist"  # parallel workers build to their own folder
 if WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
