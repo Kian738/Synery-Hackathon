@@ -262,7 +262,7 @@ export default function Navigator() {
             {following&&vrOk&&<IconButton label="Enter VR" icon="cube" text="VR" onClick={()=>void xrStore.enterVR()}/>}
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={voice.toggleReadAloud}/>}
             <IconButton label="Voice only" icon="mic" pressed={voice.voiceMode} onClick={voice.toggleVoiceMode}/>
-            <IconButton label="Show map" icon="map" pressed={view!=="2d"&&planExpanded} disabled={view==="2d"} onClick={toggleMap}/>
+            {view!=="2d"&&<IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>}
             {!following&&!compact&&nav.sessionId&&<IconButton accent label="Fire test: run the evacuation scenario in one click" text="Fire test" icon="focus" onClick={()=>{setScenarioOpen(true);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setQuickRun(n=>n+1);}}/>}
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
