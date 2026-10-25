@@ -278,3 +278,15 @@ test("Guide me projection keeps the near plane tight and the field of view modes
   expect(Number(await canvas.getAttribute("data-camera-near"))).toBeLessThanOrEqual(0.06);
   expect(Number(await canvas.getAttribute("data-camera-fov"))).toBeLessThanOrEqual(72);
 });
+
+test("a multi-floor route opens as Route floors with focus on; a one-floor route stays on This floor", async ({ page }) => {
+  const building = "osm-way27917482";
+  await page.goto(`/?building=${building}&at=${building}-F3-S069&to=00.05.058`);
+  await expect(page.getByTestId("focus-toggle")).toContainText(/dimmed/, { timeout: 25_000 });
+  await page.getByRole("button", { name: "Layers" }).click();
+  const group = page.getByRole("group", { name: "Visible floors" });
+  await expect(group.getByRole("button", { name: "Route floors" })).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/?building=proc-campus-test-013&to=Lift");
+  await page.getByRole("button", { name: "Layers" }).click();
+  await expect(page.getByRole("group", { name: "Visible floors" }).getByRole("button", { name: "This floor" })).toHaveAttribute("aria-pressed", "true", { timeout: 25_000 });
+});

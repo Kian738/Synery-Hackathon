@@ -51,7 +51,11 @@ export default function Navigator() {
   const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow" | "exterior">(params.get("view") === "2d" ? "2d" : "3d");
-  const [scope, setScope] = useState<"current"|"route"|"building">("current");
+  const savedScope = (() => { try { const v = sessionStorage.getItem("floorwise.scope"); return v === "current" || v === "route" || v === "building" ? v : null; } catch { return null; } })();
+  const [scope, setScope] = useState<"current"|"route"|"building">(savedScope ?? "current");
+  const scopeTouched = useRef(savedScope !== null);
+  /** The person's own choice always wins and is remembered for the session; until then a multi-floor route opens as "Route floors" with focus on. */
+  const chooseScope = (v: "current"|"route"|"building") => { scopeTouched.current = true; try { sessionStorage.setItem("floorwise.scope", v); } catch { /* storage blocked */ } setScope(v); };
   const [exploded,setExploded]=useState(true);
   const [focusOn,setFocusOn]=useState(true),[guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
@@ -59,6 +63,7 @@ export default function Navigator() {
   const [seekRequest,setSeekRequest]=useState(0);
   const [previewPosition,setPreviewPosition]=useState<{x:number;y:number;floor_id:string;heading?:number}|null>(null);
   const following=view==="follow"||view==="guide";
+  useEffect(() => { if (!nav.route || scopeTouched.current) return; setScope(nav.route.floors.length > 1 ? "route" : "current"); }, [nav.route]);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [buildingImport, setBuildingImport] = useState(false);
@@ -223,7 +228,7 @@ export default function Navigator() {
             <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
-              <Segmented ariaLabel="Visible floors" value={scope} onChange={setScope} options={[
+              <Segmented ariaLabel="Visible floors" value={scope} onChange={chooseScope} options={[
                 {value:"current",label:"This floor",ariaLabel:"This floor"},
                 {value:"route",label:"Route",ariaLabel:"Route floors",disabled:!nav.route},
                 {value:"building",label:"Building",ariaLabel:"Whole building"}]}/>
