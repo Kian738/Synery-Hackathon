@@ -128,6 +128,7 @@ export function table(o: { h: number; top?: string; leg?: string; topT?: number;
     }
     for (const x of [-1, 1]) for (const z of [-1, 1]) b.box(x * (b.hw - inset - 0.025), 0, z * (b.hd - inset - 0.025), 0.05, h - topT, 0.05, leg);
     b.box(0, h - topT - 0.08, 0, b.w - 2 * inset, 0.05, 0.03, leg);
+    for (const z of [-1, 1]) b.box(0, h - topT - 0.07, z * (b.hd - inset - 0.025), b.w - 2 * inset - 0.1, 0.07, 0.02, leg); // long-side aprons under the top
   };
 }
 
@@ -301,7 +302,7 @@ export function wasteBasket(): Build {
     const dm = Math.min(b.w, b.d) * 0.82;
     b.cyl(0, 0, 0, dm, 0.7, P.metal);
     b.cyl(0, 0.7, 0, dm * 1.0, 0.04, P.metalDark);
-    if (b.interior) b.cyl(0, 0.74, 0, dm * 0.8, 0.01, P.black);
+    if (b.interior) { b.cyl(0, 0.74, 0, dm * 0.8, 0.01, P.black); b.cyl(0, 0.62, 0, dm * 0.86, 0.025, P.charcoal); }
   };
 }
 
@@ -586,7 +587,7 @@ export function handDryer(): Build {
   return b => {
     b.box(0, 1.0, b.hd - 0.075, b.w, 0.3, 0.15, P.steelLight);
     b.cyl(0, 0.9, b.hd - 0.075, Math.min(0.1, b.w * 0.6), 0.1, P.metal);
-    if (b.interior) b.box(0, 1.15, -b.hd * 0.1, b.w * 0.5, 0.02, 0.02, P.led);
+    if (b.interior) { b.box(0, 1.15, -b.hd * 0.1, b.w * 0.5, 0.02, 0.02, P.led); b.box(b.w * 0.3, 1.22, b.hd - 0.16, 0.04, 0.04, 0.02, P.red); }
   };
 }
 
@@ -640,7 +641,7 @@ export function projectorScreen(): Build {
     b.box(0, 2.28, 0, b.w, 0.1, b.d, P.metal);
     b.box(0, 1.0, b.hd - 0.01, b.w * 0.97, 1.28, 0.012, P.white);
     b.box(0, 0.94, b.hd - 0.015, b.w * 0.97, 0.06, 0.03, P.charcoal);
-    if (b.interior) for (const x of [-1, 1]) b.box(x * (b.hw * 0.98), 0.95, b.hd - 0.01, 0.01, 1.34, 0.012, P.black);
+    if (b.interior) { for (const x of [-1, 1]) b.box(x * (b.hw * 0.98), 0.95, b.hd - 0.01, 0.01, 1.34, 0.012, P.black); b.box(0, 0.86, b.hd - 0.02, 0.1, 0.08, 0.02, P.steelLight); }
   };
 }
 
@@ -659,7 +660,7 @@ export function whiteboard(): Build {
     b.box(0, 0.95, b.hd - 0.02, b.w, 1.2, 0.04, P.steelLight);
     b.box(0, 0.99, b.hd - 0.045, b.w - 0.08, 1.12, 0.012, P.white);
     b.box(0, 0.9, b.hd - 0.06, b.w * 0.9, 0.05, 0.05, P.steel);
-    if (b.interior) spread(3, b.w * 0.4).forEach((x, i) => b.box(x, 0.955, b.hd - 0.08, 0.1, 0.02, 0.025, [P.black, P.red, P.blue][i]));
+    if (b.interior) { spread(3, b.w * 0.4).forEach((x, i) => b.box(x, 0.955, b.hd - 0.08, 0.1, 0.02, 0.025, [P.black, P.red, P.blue][i])); b.box(b.w * 0.36, 0.955, b.hd - 0.08, 0.1, 0.035, 0.05, P.fabric); }
   };
 }
 
