@@ -140,8 +140,8 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} relevant={relevant}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening} relevant={relevant}/>
 
-        <SceneAssets interior={follow} near={near} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false}/>
-        <SceneAssets interior={follow} near={near} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
+        <SceneAssets interior={follow} near={near} context={assets} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false}/>
+        <SceneAssets interior={follow} near={near} context={assets} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
   </group>;
 });
 
