@@ -167,6 +167,13 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors,cas
 function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number}}){
   const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const heading=useRef<THREE.Vector3|null>(null);const walkCache=useRef(new Map<string,WalkPoint[]|null>());const lastTick=useRef(performance.now());
   useLayoutEffect(()=>{lastTick.current=performance.now();},[playing]);
+  // The Canvas reads its camera props once at creation (overview: near ~0.6 m, fov 40). The walking camera needs its own lens, and the
+  // overview lens must come back afterwards: otherwise everything within the overview near plane is clipped away.
+  useLayoutEffect(()=>{
+    const cam=camera as THREE.PerspectiveCamera,saved={near:cam.near,fov:cam.fov,far:cam.far};
+    cam.near=0.05;cam.fov=70;cam.far=Math.max(120,Math.min(saved.far,400));cam.updateProjectionMatrix();invalidate();
+    return()=>{cam.near=saved.near;cam.fov=saved.fov;cam.far=saved.far;cam.updateProjectionMatrix();invalidate();};
+  },[camera,invalidate]);
   useEffect(()=>{first.current=true;invalidate();},[seekVersion,model,invalidate]);
   useEffect(()=>{invalidate();},[lookOffset,invalidate]);
   useFrame((_,dt)=>{
@@ -230,7 +237,7 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
     camera.quaternion.copy(aim);
     if(heading.current.angleTo(target)>.01)invalidate();
     first.current=false;
-    camera.updateProjectionMatrix();gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;gl.domElement.dataset.cameraQuaternion=JSON.stringify(camera.quaternion.toArray());
+    camera.updateProjectionMatrix();gl.domElement.dataset.cameraNear=String((camera as THREE.PerspectiveCamera).near);gl.domElement.dataset.cameraFov=String((camera as THREE.PerspectiveCamera).fov);gl.domElement.dataset.cameraPosition=JSON.stringify(camera.position.toArray());gl.domElement.dataset.cameraFloor=p.floor_id;gl.domElement.dataset.cameraQuaternion=JSON.stringify(camera.quaternion.toArray());
     if(Math.abs(clock.current-lastReport.current)>.08 || sample.arrived || !playing){lastReport.current=clock.current;onSample(clock.current);}
     if(playing)invalidate();
   });return null;
@@ -315,7 +322,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode]);
 
   return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
-    <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,1.5]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?74:40,near:follow?.12:Math.max(.5,span*.012),far:Math.max(200,span*6)}} shadows gl={{antialias:true}}
+    <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,1.5]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:true,logarithmicDepthBuffer:true}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
       <SceneLighting cx={cx} cz={cz} span={span} interior={follow}/>
       {follow&&<Roofs geometry={geometry}/>}
