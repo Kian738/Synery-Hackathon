@@ -342,7 +342,7 @@ export default function Navigator() {
     }
     const lastMsg = nav.messages[nav.messages.length - 1];
     if (lastMsg && lastMsg.role === "agent" && lastMsg.id !== lastSpokenMessageId.current) {
-      if (lastMsg.streaming) {
+      if (lastMsg.streaming || nav.busy) {
         if (audioStreamQueue.active) {
           setCurrentlySpeakingId(lastMsg.id);
         }
@@ -363,7 +363,7 @@ export default function Navigator() {
         });
       }
     }
-  }, [nav.messages, voiceOut, voiceMode]);
+  }, [nav.messages, nav.busy, voiceOut, voiceMode]);
 
   useEffect(() => {
     if (!voiceOut && !voiceMode) { spokenFor.current = null; return; }
@@ -371,8 +371,10 @@ export default function Navigator() {
     const key = `${nav.route.length_m}-${nav.route.stops.join()}`;
     if (spokenFor.current === key) return;
     spokenFor.current = key;
+    // When a route is computed during an agent turn, the agent's reply already speaks the directions.
+    if (nav.busy || audioStreamQueue.hadChunks || audioStreamQueue.active) return;
     speak(nav.route.guide.spoken);
-  }, [nav.route, voiceOut, voiceMode, following]);
+  }, [nav.route, voiceOut, voiceMode, following, nav.busy]);
 
   useEffect(() => {
     if ((voiceOut || voiceMode) && following && steps[nav.activeStep]) {
@@ -1113,7 +1115,6 @@ function RoomCard({ space, building, onClose, onHere, onGo, closed, onToggleClos
 function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const i = Math.max(1, index);
   const step = steps[i];
-  useEffect(() => { if (step) speak(step.text); }, [step]);
   if (!step) return null;
   return (
     <div className="absolute inset-0 flex flex-col bg-ink/95 p-6 text-white" role="dialog" aria-label="Step by step">
