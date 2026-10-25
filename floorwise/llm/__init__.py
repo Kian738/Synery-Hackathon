@@ -74,8 +74,10 @@ def client(provider: str | None = None):
 
         key = os.environ.get("ANTHROPIC_API_KEY")
         token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
-        if not key and not token:
+        if not key and not token and not os.environ.get("FLOORWISE_ANTHROPIC_PROFILE"):
             raise KeyError("no API key for anthropic in .env (set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN)")
+        if not key and not token:  # the SDK finds the logged-in Claude profile on its own
+            return anthropic.Anthropic(timeout=timeout_s(), max_retries=retries())
         return anthropic.Anthropic(api_key=key, auth_token=None if key else token, timeout=timeout_s(), max_retries=retries())
     import openai
 

@@ -125,7 +125,7 @@ def test_configured_pricing_and_per_turn_zero_usage(session,monkeypatch):
 
 
 def test_chat_without_key_reports_error_and_completes_stream(monkeypatch):
-    for name in ('ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','GROQ_API_KEY','OPENROUTER_API_KEY'):
+    for name in ('ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','GROQ_API_KEY','OPENROUTER_API_KEY','FLOORWISE_ANTHROPIC_PROFILE','FLOORWISE_PROVIDER'):
         monkeypatch.delenv(name,raising=False)
     client=TestClient(app)
     sid=client.post('/api/sessions',json={'building_id':'proc-campus-dev-000'}).json()['session_id']
