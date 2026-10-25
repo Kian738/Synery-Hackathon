@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import {alignStairFrame} from "../lib/stairFrame";
 import type { Connector, Geometry, Space, XY } from "../lib/types";
 
 /** Real-size stairwells and lift shafts, built from the supplied stair and lift spaces and floor elevations.
@@ -37,8 +38,8 @@ export function orientedRect(points: XY[]): OrientedRect {
 const RISER = 0.175, MIN_TREAD = 0.24, WALL = 0.18, GAP = 0.16, TREAD_THICK = 0.05;
 
 /** Dog-leg stair (or a straight flight in a long thin space) rising `rise` metres from `base`. */
-export function stairBoxes(space: Space, base: number, rise: number, lit: boolean): Box[] {
-  const r = orientedRect(space.polygon), L = Math.max(0.8, r.length - 2 * WALL), W = Math.max(0.7, r.width - 2 * WALL);
+export function stairBoxes(space: Space, base: number, rise: number, lit: boolean, alignment: XY | OrientedRect | null = null): Box[] {
+  const r = alignment&&!Array.isArray(alignment)?alignment:orientedRect(space.polygon), L = Math.max(0.8, r.length - 2 * WALL), W = Math.max(0.7, r.width - 2 * WALL);
   const yaw = Math.atan2(r.uy, r.ux), vx = -r.uy, vy = r.ux; // v: across the flight, to the left of u
   const at = (s: number, t: number) => ({ x: r.cx + s * r.ux + t * vx, z: -(r.cy + s * r.uy + t * vy) });
   const boxes: Box[] = [];
@@ -160,8 +161,11 @@ export function Connectors3D({ geometry, elevations, visibleFloors, activeFloor,
           if (!next) return;
           const realRise = next.floor.elevation_m - stop.floor.elevation_m;
           const shownRise = visibleFloors.has(next.floor.id) ? elevation(next.floor.id) - elevation(stop.floor.id) : realRise;
-          const storeys = Math.max(1, Math.round(realRise / Math.max(2.4, stop.floor.height_m || 3)));
-          for (let k = 0; k < storeys; k++) out.push(...stairBoxes(stop.space!, base + (k * shownRise) / storeys, shownRise / storeys, lit));
+          const modelSpace = stop.space!;
+          const lower = geometry.openings.filter(o=>o.floor_id===stop.floor.id&&o.space_ids.includes(stop.space!.id)).map(o=>o.position);
+          const upper = geometry.openings.filter(o=>o.floor_id===next.floor.id&&o.space_ids.includes(next.space!.id)).map(o=>o.position);
+          const frame = alignStairFrame(orientedRect(modelSpace.polygon),lower,upper);
+          out.push(...stairBoxes(modelSpace,base,shownRise,lit,frame));
         } else {
           const opening = geometry.openings.find(o => o.floor_id === stop.floor.id && o.space_ids.includes(stop.space!.id));
           out.push(...liftBoxes(stop.space!, base, opening?.position ?? null, stop.floor.id === activeFloor, lit));

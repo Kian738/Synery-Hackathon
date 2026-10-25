@@ -13,6 +13,7 @@ from floorwise.core import geometry, ops
 from floorwise.core import resolve as R
 from floorwise.core.graph import Constraints
 from floorwise.core.model import Building
+from floorwise.core.connectors import inventory as connector_inventory_data, connector_kind
 from floorwise.core.routing import NoRoute, Route, plan_route
 
 NEW_DOOR_WIDTH_M = 0.9
@@ -247,7 +248,15 @@ class Session:
                 'next_offset': offset+limit if offset+limit<len(rows) else None,
                 'grouped_by_room': [{'id': sid, 'label': b.label(sid), 'count': n} for sid,n in grouped.most_common(12)]}
 
+    def connector_inventory(self, kind='stairs', floor=None, room=None):
+        result=connector_inventory_data(self.building,kind,floor,room)
+        visual=self.publish_visual('matches',f"{result['count']} mapped {result['kind']} connections",result['ids'],
+                                   {k:v for k,v in result.items() if k not in ('ids','rows')},result['rows'])
+        return {k:v for k,v in result.items() if k not in ('ids','rows')} | {'result_id':visual['id'],'connectors':result['rows'][:25],
+                'rows_are_examples':len(result['rows'])>25,'total_connectors':len(result['rows'])}
+
     def count_items(self, item_type: str, floor: str | None = None, room: str | None = None, *, exact: bool = False) -> dict:
+        if not exact and connector_kind(item_type):return self.connector_inventory(item_type,floor,room)
         from floorwise.core.analytics import count_items
         result = count_items(self.building, item_type, floor, room, inclusive=not exact)
         self.last_item_type=item_type
@@ -319,7 +328,8 @@ class Session:
         return {
             "id": space_id, "name": s["name"], "type": s["room_type"], "floor": b.floor_name(s["floor_id"]),
             "area_m2": round(geometry.area(b, space_id), 2), "centre": [round(x, 2), round(y, 2), round(z, 2)],
-            "doors": doors[:MAX_RESULTS], "contents": contents,
+            "doors": doors[:MAX_RESULTS], "door_count":len(doors), "door_examples_only":len(doors)>MAX_RESULTS,
+            "connector_access":connector_inventory_data(b,room=space_id), "contents": contents,
             "shares_walls_with": [b.spaces[n]["name"] for n, _ in geometry.wall_neighbours(b, space_id)][:MAX_RESULTS],
             "above": b.label(above[0][0]) if above else None, "below": b.label(below[0][0]) if below else None,
         }

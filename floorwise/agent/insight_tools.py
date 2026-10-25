@@ -42,6 +42,11 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         return guarded(compute)()
 
     @tool
+    def inspect_connectors(kind: str = 'stairs', floor: str | None = None, room: str | None = None) -> str:
+        """Count and highlight mapped stairs/lifts, optionally in or directly serving a room on its floor. Counts complete distinct connector records, not stair treads. Use this for staircases/stairwells/elevators, not furniture search. Missing room scope never means building-wide counts answer a room question."""
+        return guarded(session.connector_inventory)(kind,floor,room)
+
+    @tool
     def count_items(item_type: str, floor: str | None = None, room: str | None = None) -> str:
         """Complete computed count, optionally restricted to a floor or room, with per-floor breakdown. Matching item types and scope are returned explicitly."""
         return guarded(session.count_items)(item_type, floor, room, exact=exact_items)
@@ -171,4 +176,4 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
             return report
         return guarded(run)()
 
-    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, compare_item_leaders, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario] + ([apply_fix] if allow_edits else [])
+    return [find_places, inspect_connectors, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, compare_item_leaders, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario] + ([apply_fix] if allow_edits else [])

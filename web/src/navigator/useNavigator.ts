@@ -1,3 +1,4 @@
+import {startAssistantStream,appendAssistantText} from "../lib/chatStream";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
@@ -240,8 +241,8 @@ export function useNavigator(buildingId: string) {
         if (current !== generation.current || !event || typeof event !== "object") return;
         if(active.controller.signal.aborted)return;
         if(event.type==='progress'){setBusyLabel(event.data.message+'…');return;}
-        if(event.type==='assistant_start'){active.streams.add(event.data.message_id);setMessages(all=>[...all,{id:nextId++,role:'agent',text:'',model:event.data.model,streamId:event.data.message_id,status:'streaming'}]);return;}
-        if(event.type==='assistant_delta'){setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,text:m.text+event.data.text}:m));return;}
+        if(event.type==='assistant_start'){active.streams.add(event.data.message_id);setMessages(all=>startAssistantStream(all,event.data.message_id,event.data.model,()=>nextId++));return;}
+        if(event.type==='assistant_delta'){setMessages(all=>appendAssistantText(all,event.data.message_id,event.data.text,()=>nextId++));return;}
         if(event.type==='assistant_end'){setMessages(all=>all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,status:'complete'}:m));return;}
         if (event.type === "tool") push({ role: "activity",tool:event.data.name,input:event.data.input, text: (ACTIVITY[event.data.name] ?? (() => event.data.name))(event.data.input) });
         else if(event.type==="tool_result"){

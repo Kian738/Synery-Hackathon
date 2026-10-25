@@ -1,0 +1,161 @@
+{
+  "scope": "Stair orientation, connector counts and incremental chat rendering. Concurrent Claude changes excluded.",
+  "fingerprint": {
+    "version": 1,
+    "git": "a260851095f897b1e6de776f52bb509612118898",
+    "source": "4bcd8764c01c424afa5a",
+    "kit_git": "6a2cdec5bb96b06914429e96d42c5486715f1ebc",
+    "dataset": "fa7b71e429b52786b57a",
+    "frontend": "4e60b2abbbc5ee4d3a4d",
+    "provider": "anthropic",
+    "models": {
+      "chat": "claude-opus-5-5",
+      "parser": "claude-haiku-5-5",
+      "judge": "claude-opus-5-5"
+    },
+    "effort": "low"
+  },
+  "unit_tests_passed": 444,
+  "fw_check": "passed",
+  "production_build": "passed",
+  "staged_source_files_match_runtime": 246,
+  "offline_gates": [
+    {
+      "run": "20261025-021708_routes_f0cbbc7b",
+      "suite": "routes",
+      "correct": 2130,
+      "total": 2130,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-021717_solver_c92e28f4",
+      "suite": "solver",
+      "correct": 655,
+      "total": 655,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-021720_parser_rules_aa9dd6e0",
+      "suite": "parser",
+      "correct": 655,
+      "total": 655,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-021722_parser_rules_8317644b",
+      "suite": "parser",
+      "correct": 145,
+      "total": 145,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-021723_e2e_3c657c36",
+      "suite": "e2e",
+      "correct": 653,
+      "total": 655,
+      "known_failures": 2
+    },
+    {
+      "run": "20261025-021727_e2e_basic_f2568946",
+      "suite": "e2e_basic",
+      "correct": 2122,
+      "total": 2130,
+      "known_failures": 8
+    },
+    {
+      "run": "20261025-021734_sunday_f14e4720",
+      "suite": "sunday",
+      "correct": 1329,
+      "total": 1338,
+      "known_failures": 9
+    },
+    {
+      "run": "20261025-021913_generated_fe2e518d",
+      "suite": "generated",
+      "correct": 150,
+      "total": 150,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022008_rules_5ba6c0b9",
+      "suite": "rules",
+      "correct": 661,
+      "total": 661,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022239_roundtrip_c962dd52",
+      "suite": "roundtrip",
+      "correct": 236,
+      "total": 236,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022240_walls_98c14534",
+      "suite": "walls",
+      "correct": 160,
+      "total": 160,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022310_robust_perturb_dc868f63",
+      "suite": "robust",
+      "correct": 630,
+      "total": 630,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022315_metamorphic_973e03be",
+      "suite": "metamorphic",
+      "correct": 860,
+      "total": 860,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022649_walkability_fb07ac1c",
+      "suite": "walkability",
+      "correct": 160,
+      "total": 160,
+      "known_failures": 0
+    },
+    {
+      "run": "20261025-022718_differential_00e3ae45",
+      "suite": "differential",
+      "correct": 256,
+      "total": 256,
+      "known_failures": 0
+    }
+  ],
+  "live_cases": [
+    {
+      "prompt": "How many stairs are in this buildings main hall?",
+      "reply": "The main hall is recorded as the **MI Magistrale** on the ground floor. It has **2** mapped staircases opening directly into it:\n\n- **Stairs 20**\n- **Stairs 21**\n\nBoth go between the **ground floor and Floor 1**. This counts staircases on the map, not individual steps. The number of steps wasn't recorded.",
+      "chunks": 29,
+      "first_text_ms": 1010,
+      "last_text_ms": 5240,
+      "done_ms": 5244,
+      "errors": []
+    },
+    {
+      "prompt": "Hello claude, I have a question: How many stairs are in this buildings main hall?",
+      "reply": "The main hall is recorded as the **MI Magistrale** on the ground floor. It has **2** mapped staircases opening directly into it:\n\n- **Stairs 20**\n- **Stairs 21**\n\nBoth go between the **ground floor and Floor 1**. This counts staircases on the map, not individual steps. The number of steps wasn't recorded.",
+      "chunks": 15,
+      "first_text_ms": 929,
+      "last_text_ms": 1827,
+      "done_ms": 1836,
+      "errors": []
+    },
+    {
+      "prompt": "staircases",
+      "reply": "The main hall (**MI Magistrale**, ground floor) has **2 staircases**: **Stairs 20** and **Stairs 21**. Both go between the ground floor and Floor 1.\n\nThe whole building has **25** staircases on the map, across all floors.",
+      "chunks": 17,
+      "first_text_ms": 1437,
+      "last_text_ms": 2124,
+      "done_ms": 2129,
+      "errors": []
+    }
+  ],
+  "geometry_contract": "All six CIT atrium flights face the mapped upper landing, remain invariant under reversed polygon winding, and have support-frame axes parallel to their tread ascent. Unknown landing arrangements retain schematic orientation.",
+  "stream_contract": "Controlled response remains open while first text is reduced into state and rendered; early/missing/duplicate start notifications do not drop or duplicate text.",
+  "browser_visual_acceptance": "Blocked by saved localhost permission setting; no alternate browser path used."
+}

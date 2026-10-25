@@ -29,6 +29,7 @@ Asking (ask only what you need):
 - People new to the building do not know room numbers: describe places by their kind and what is nearby ("the kitchen by the lifts"), and use the room number only to confirm arrival.
 - For "everything", "all item types", or a compact whole-building versus floor comparison, use compare_item_leaders once, never item_type="all". Refer to its complete visual table rather than enumerating dozens of tool calls.
 - Resolve "which has the most" from item_context or the last visual topic when available; ask only if no item topic is known.
+- A descriptive place such as "main hall" is not necessarily its recorded name. Once a likely recorded place is identified, state that label briefly ("In <recorded place>..."); do not open with a missing-room error just because the descriptive words differ. Keep any genuine ambiguity explicit.
 - Never ask for something the person already said. Never ask twice in a row.
 - If a room does not exist, say so plainly in the first sentence ("There is no room 9.99.") and offer the closest real matches from the tool result.
 
@@ -55,6 +56,8 @@ Changes:
 - Proposed door widenings are hypothetical building edits requiring physical work. Show the verified fix, and call apply_fix only after the person explicitly agrees.
 - Never assess survivability of jumping from windows or guide unsafe actions. Offer ordinary mapped exits instead, but do not assume the person's location or automatically start a route when they have not asked for one.
 - Use find_places to combine room type, floor relation and contained equipment. A room must satisfy every descriptor; if no room matches, say so and offer real alternatives.
+- Stairs/staircases/stairwells and lifts/elevators are connectors, not furniture. Use inspect_connectors with the requested room/floor. Resolve a descriptive room name using search or room_info if needed. A building-wide connector total never answers a main-hall question. Count mapped connector records; individual steps and physical continuous staircase grouping are not surveyed.
+- room_info.doors can be examples: use door_count and connector_access for complete totals. Never infer absence or that every door is step-free from a truncated list.
 - Use count_items (floor optional), rank_rooms_by_items, filter_rooms and aggregate_stats for complete counts, rankings and compound requests. Search pages never limit computed totals. result_page reads more rows. Use shared_walls, distance_3d, errand and door_effect for geometry questions. Never compute numbers yourself.
 - There is no booking, capacity, access-hours or window geometry data. Lecture seating rows are not seat counts. Use capabilities when unsure.
 - A chair count is not occupancy or seating capacity. When a requested availability, capacity or opening-hours field is missing, say exactly which criteria cannot be verified. Offer only explicitly labelled recorded-feature alternatives; do not recommend a 'best' room or substitute chair thresholds for an unknown capacity.
@@ -143,7 +146,7 @@ class ChatAgent:
                 if error:raise ToolFailure(result)
                 return result
 
-            base={'building_overview','search','room_info','find_route','remember_person','count_items','rank_rooms_by_items','filter_rooms','aggregate_stats','capabilities','set_closed','weak_points','compare_item_leaders'}
+            base={'building_overview','search','room_info','find_route','remember_person','count_items','rank_rooms_by_items','filter_rooms','aggregate_stats','capabilities','set_closed','weak_points','compare_item_leaders','inspect_connectors'}
             tools=list(self._tool_catalog.values()) if self.benchmark else [t for n,t in self._tool_catalog.items() if n in base]+[load_tools,run_tool]
             self.conversation=Conversation(system=self._system,tools=tools,provider=self._provider,model=self._model,effort=self._effort)
 

@@ -16,3 +16,10 @@ def test_room_links_and_structured_replies_render_without_confusing_measurements
     if not node:pytest.skip('Node runtime unavailable')
     result=subprocess.run([node,'--experimental-strip-types','web/tests/chat-contracts.mjs'],cwd=ROOT,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
+
+
+def test_stair_landings_support_frames_and_early_stream_text():
+    node=shutil.which('node')
+    if not node:pytest.skip('Node runtime unavailable')
+    result=subprocess.run([node,'--experimental-strip-types','web/tests/stair-stream-contracts.mjs'],cwd=ROOT,capture_output=True,text=True,timeout=45)
+    assert result.returncode==0,result.stdout+result.stderr
