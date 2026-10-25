@@ -1,6 +1,6 @@
 import { Line, OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { SceneAssets } from "./SceneAssets";
 import { Beacons, type BeaconPoint } from "./Beacons";
@@ -55,10 +55,13 @@ function floorShape(space: Space, plates?: Plates) {
 
 const ZONE_COLORS:Record<string,string>={hazard:"#e5484d",responder:"#3b82c4",crowd1:"#b99a3c",crowd2:"#f2b705",highlight:"#ffd45c"};
 
+/** Density heat map from the evacuation test: space id to a hex colour; read by every floor so it needs no prop drilling. */
+const HeatContext=createContext<Record<string,string>|undefined>(undefined);
 function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates,overlaps}:{plates?:Plates;overlaps?:NonNullable<Geometry["scene"]>["overlaps"];spaces:Space[];elevation:number;highlights:Set<string>;hazard?:string;zones?:Record<string,string>;onPick?:(s:Space)=>void}) {
+  const heat=useContext(HeatContext);
   const batches = useMemo(() => {
     const groups = new Map<string,Space[]>();
-    spaces.forEach(s => {const key=s.id===hazard?"hazard":zones?.[s.id]==="responder"?"responder":highlights.has(s.id)?"highlight":zones?.[s.id]??kindOf(s); groups.set(key,[...(groups.get(key)??[]),s]);});
+    spaces.forEach(s => {const key=heat?.[s.id]??(s.id===hazard?"hazard":zones?.[s.id]==="responder"?"responder":highlights.has(s.id)?"highlight":zones?.[s.id]??kindOf(s)); groups.set(key,[...(groups.get(key)??[]),s]);});
     return [...groups].map(([zone,rooms]) => {
       let triangles=0;
       const ranges:{end:number;space:Space}[]=[];
@@ -66,7 +69,7 @@ function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates,overlaps
       const geometry=mergeGeometries(pieces); pieces.forEach(p=>p.dispose());
       return {zone,geometry,ranges};
     });
-  },[spaces,highlights,hazard,zones,plates]);
+  },[spaces,highlights,hazard,zones,plates,heat]);
   useEffect(()=>()=>batches.forEach(b=>b.geometry?.dispose()),[batches]);
   /** Where two rooms overlap in the data, the shared part is drawn once as the mix of both room colours (no flicker, nothing hidden). */
   const blends=useMemo(()=>{
@@ -82,7 +85,7 @@ function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates,overlaps
     <meshStandardMaterial color={b.color} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-60}/></mesh>)}{batches.map((b,index)=>b.geometry&&<mesh key={b.zone} geometry={b.geometry} receiveShadow
     onAfterRender={renderer=>{renderer.domElement.dataset.scenePainted="true";}}
     onClick={(e:ThreeEvent<MouseEvent>)=>{e.stopPropagation();if(e.delta>5)return;const room=b.ranges.find(r=>(e.faceIndex??0)<r.end);if(room)onPick?.(room.space);}}>
-    <meshStandardMaterial color={ZONE_COLORS[b.zone]??kindScene(b.ranges[0].space)} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-index-1}/>
+    <meshStandardMaterial color={b.zone.startsWith("#")?b.zone:ZONE_COLORS[b.zone]??kindScene(b.ranges[0].space)} roughness={0.94} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-index-1}/>
   </mesh>)}</group>;
 }
 
@@ -287,7 +290,8 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
   });return null;
 }
 
-export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,zones,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset,focus:focusProp=true,onFocus}: {
+export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,zones,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset,focus:focusProp=true,onFocus,heat,pins}: {
+  heat?:Record<string,string>;pins?:{id:string;floor_id:string;x:number;y:number}[];
  onFocus?:(v:boolean)=>void;
  focus?:boolean;
  hazard?:string;zones?:Record<string,string>;
@@ -371,12 +375,13 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   ],[geometry,follow,floorId,visibleFloors,connectorSpaces,emphasis,highlights,visualResult,explode]);
   /** Found items and highlighted rooms get a pulsing beacon (at most 12, so a "show all chairs" answer stays readable). */
   const beaconPoints=useMemo(()=>{
-    if(follow||!highlights.size)return [] as BeaconPoint[];
+    if(follow||(!highlights.size&&!pins?.length))return [] as BeaconPoint[];
     const out:BeaconPoint[]=[];
-    for(const a of geometry.assets){if(out.length>=12)break;if(highlights.has(a.id)&&visibleFloors.has(a.floor_id))out.push({id:a.id,x:a.position[0],y:elevation(a.floor_id)+.05,z:-a.position[1]});}
+    if(highlights.size)for(const a of geometry.assets){if(out.length>=12)break;if(highlights.has(a.id)&&visibleFloors.has(a.floor_id))out.push({id:a.id,x:a.position[0],y:elevation(a.floor_id)+.05,z:-a.position[1]});}
     if(out.length<12)for(const s of geometry.spaces){if(out.length>=12)break;if(highlights.has(s.id)&&visibleFloors.has(s.floor_id)){const p=s.anchor??s.polygon[0];out.push({id:s.id,x:p[0],y:elevation(s.floor_id)+.05,z:-p[1]});}}
+    for(const p of pins??[])if(visibleFloors.has(p.floor_id))out.push({id:`pin-${p.id}`,x:p.x,y:elevation(p.floor_id)+.05,z:-p.y,color:"#ff5a5f"});
     return out;
-  },[geometry,follow,highlights,visibleFloors,explode]);
+  },[geometry,follow,highlights,visibleFloors,explode,pins]);
 
   return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
     <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
@@ -386,7 +391,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       <PerformanceMonitor onDecline={()=>setDpr(1)} onIncline={()=>setDpr(maxDpr)} flipflops={3} onFallback={()=>setDpr(1)}/>
       {!follow&&<DetailWatcher span={span} onChange={setDetail}/>}
       {follow&&<Roofs geometry={geometry}/>}
-      {floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} hazard={hazard} zones={zones} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening} relevant={relevant} voids={voids} bare={follow&&f.id!==activeFloor} near={detail.near&&(Math.abs(elevation(f.id)-detail.y)<=4.5||span<60)}/>)}
+      <HeatContext.Provider value={heat}>{floors.map(f=><FloorScene key={f.id} geometry={geometry} floorId={f.id} elevation={elevation(f.id)} highlights={roomHighlights} hazard={hazard} zones={zones} onSpaceClick={pick} follow={follow} ceiling={ceiling} span={span} connectorSpaces={connectorSpaces} labelFloor={floorId} activeOpening={activeOpening} relevant={relevant} voids={voids} bare={follow&&f.id!==activeFloor} near={detail.near&&(Math.abs(elevation(f.id)-detail.y)<=4.5||span<60)}/>)}</HeatContext.Provider>
       <Connectors3D geometry={connectorGeometry} elevations={elevations} visibleFloors={visibleFloors} activeFloor={activeFloor} used={usedConnectors}/>
       <LiftShafts geometry={connectorGeometry} elevations={elevations} visibleFloors={visibleFloors} activeFloor={activeFloor} used={usedConnectors}/>
       {geometry.spaces.filter(s=>visibleFloors.has(s.floor_id)&&(s.id===emphasis||(highlights.size<=4&&highlights.has(s.id)))).map(s=>{
