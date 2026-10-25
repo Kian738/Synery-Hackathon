@@ -1,3 +1,4 @@
+import { audioStreamQueue } from "../lib/voice";
 import {startAssistantStream,appendAssistantText} from "../lib/chatStream";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
@@ -251,6 +252,7 @@ export function useNavigator(buildingId: string) {
     push({ role: "user", text });
     setBusy(true);
     setBusyLabel("Starting your request…");
+    audioStreamQueue.reset();
     const current = generation.current;
     const g = geometryRef.current;
 
@@ -278,6 +280,8 @@ export function useNavigator(buildingId: string) {
             setRouteMeta({ from: labelOf(g!, r.stops[0]), to: labelOf(g!, r.stops[r.stops.length - 1]) });
           }
         } else if (event.type === "reply" && typeof event.data?.text === "string") {setTurnUsage(event.data.usage??null);setMessages(all=>event.data.message_id&&all.some(m=>m.role==='agent'&&m.streamId===event.data.message_id)?all.map(m=>m.role==='agent'&&m.streamId===event.data.message_id?{...m,text:event.data.text,status:'complete'}:m):[...all,{id:nextId++,role:'agent',text:event.data.text,model:event.data.model}]);}
+        else if (event.type === "audio_chunk" && event.data?.audio) audioStreamQueue.enqueue(event.data.audio, event.data.index ?? 0, event.data.text);
+        else if (event.type === "done") audioStreamQueue.markDone();
         else if (event.type === "error") push({ role: "error",query:text, text: typeof event.data?.message === "string" ? event.data.message : "Chat failed. Please retry." });
       },selectedSpace,active.id,active.controller.signal);
     } catch (e) {
