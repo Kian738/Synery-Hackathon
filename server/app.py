@@ -18,11 +18,13 @@ import httpx
 import re
 import tempfile
 
+from server.locks import session_write
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from floorwise.agent.session import Session
 from floorwise.core.model import Building
@@ -65,6 +67,7 @@ def _load_env_if_present() -> None:
 _load_env_if_present()
 
 app = FastAPI(title="floorwise")
+app.add_middleware(GZipMiddleware, minimum_size=1024)  # building geometry is large JSON: compresses about 10x
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SESSIONS: dict[str, dict] = {}
@@ -72,6 +75,14 @@ SESSIONS: dict[str, dict] = {}
 
 @app.on_event('startup')
 def record_build():
+    from floorwise import llm
+    import time
+    started=time.perf_counter()
+    print('Preparing language runtime (no model request)…',flush=True)
+    try:llm.warm_provider()
+    except Exception as error:
+        print(f'Language runtime preparation unavailable: {type(error).__name__}',flush=True)
+    app.state.provider_warmup_seconds=round(time.perf_counter()-started,2)
     from eval.evidence import fingerprint
     app.state.boot_fingerprint = fingerprint()
 
@@ -81,7 +92,17 @@ def version():
     from eval.evidence import fingerprint
     current = fingerprint()
     boot = getattr(app.state, 'boot_fingerprint', current)
-    return {'boot': boot, 'current': current, 'restart_required': boot != current}
+    from eval.evidence import compatible
+    return {'boot': boot, 'current': current, 'restart_required': not compatible(boot,current),
+            'provider_warmup_seconds':getattr(app.state,'provider_warmup_seconds',None)}
+
+
+@app.get('/api/buildings/{building_id}/exterior')
+def building_exterior(building_id: str):
+    from server.exterior import exterior
+    try:return exterior(load(building_id))
+    except ValueError as error:raise HTTPException(422,str(error)) from error
+    except (OSError,TimeoutError) as error:raise HTTPException(503,'Exterior map is unavailable. Retry or continue indoors.') from error
 
 
 @app.get('/api/sessions/{session_id}/state')
@@ -173,12 +194,32 @@ def geometry_payload(b: Building) -> dict:
 @app.get("/api/buildings")
 def buildings(split: str | None = None) -> list[dict]:
     rows = [r for r in manifest() if split is None or r["split"] == split]
-    custom = [
-        {"building_id": p.name, "split": "custom", "source": "built", "name": p.name, "floors": "?"}
-        for p in sorted((ROOT / "buildings").glob("*")) if (p / "building.json").exists()
-    ] if (ROOT / "buildings").exists() else []
+    custom = []
+    if (ROOT / "buildings").exists():
+        for p in sorted((ROOT / "buildings").glob("*")):
+            b_json = p / "building.json"
+            if b_json.is_file():
+                b_name = p.name
+                b_floors = "?"
+                try:
+                    with b_json.open(encoding="utf-8") as f_in:
+                        meta = json.load(f_in)
+                        b_name = meta.get("building", {}).get("name") or p.name
+                        b_floors = str(len(meta.get("floors", []))) or "?"
+                except Exception:
+                    pass
+                custom.append({"building_id": p.name, "split": "custom", "source": "built", "name": b_name, "floors": b_floors})
     keys = ("building_id", "split", "source", "name", "floors", "rooms", "assets", "has_lift")
-    return [{k: r.get(k) for k in keys} for r in rows] + custom
+    return [{k: r.get(k) for k in keys} for r in rows] + [c for c in custom if split is None or split == "custom"]
+
+
+@app.get("/api/buildings/{building_id}/thumb.svg")
+def building_thumb(building_id: str):
+    """Isometric floor stack for the Building Atlas (cached on disk, deterministic)."""
+    from fastapi.responses import Response
+    from server.thumb import cached_thumbnail
+    directory = building_dir(building_id)
+    return Response(cached_thumbnail(load(building_id), directory), media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/buildings/{building_id}")
@@ -244,7 +285,7 @@ def call(session: Session, method: str, *args, **kwargs) -> dict:
 @app.post("/api/sessions/{session_id}/route")
 def route(session_id: str, body: RouteBody) -> dict:
     entry = session_or_404(session_id)
-    with entry["lock"]:
+    with session_write(entry):
         return call(entry["session"], "route", body.start, body.destination, body.via, step_free=body.step_free,
                     min_door_width_m=body.min_door_width_m, avoid=body.avoid, prefer_avoid=body.prefer_avoid,
                     avoid_stairs=body.avoid_stairs)
@@ -255,10 +296,17 @@ class CloseBody(BaseModel):
     closed: bool = True
 
 
+@app.post("/api/sessions/{session_id}/close/preview")
+def close_preview(session_id: str, body: CloseBody) -> dict:
+    entry = session_or_404(session_id)
+    with session_write(entry):
+        return call(entry["session"], "closure_preview", body.element)
+
+
 @app.post("/api/sessions/{session_id}/close")
 def close(session_id: str, body: CloseBody) -> dict:
     entry = session_or_404(session_id)
-    with entry["lock"]:
+    with session_write(entry):
         return call(entry["session"], "set_closed", body.element, body.closed)
 
 
@@ -272,6 +320,20 @@ class DoorBody(BaseModel):
 def door(session_id: str, body: DoorBody) -> dict:
     s = session_or_404(session_id)["session"]
     return call(s, "add_door" if body.confirm else "door_preview", body.first, body.second)
+
+
+@app.post("/api/sessions/{session_id}/door/remove")
+def door_remove(session_id: str, body: DoorBody) -> dict:
+    entry = session_or_404(session_id)
+    with session_write(entry):
+        return call(entry["session"], "remove_door", body.first, body.second)
+
+
+@app.post("/api/sessions/{session_id}/undo")
+def undo_edit(session_id: str) -> dict:
+    entry = session_or_404(session_id)
+    with session_write(entry):
+        return call(entry["session"], "undo")
 
 
 @app.get("/api/sessions/{session_id}/search")
@@ -439,9 +501,15 @@ class TtsStreamer:
 
 
 class ChatBody(BaseModel):
-    text: str
+    text: str = Field(min_length=1,max_length=12000)
     selected_space: str | None = None
-    request_id: str | None = None
+    request_id: str | None = Field(default=None,max_length=100)
+
+    @field_validator('text')
+    @classmethod
+    def nonempty(cls,value):
+        if not value.strip():raise ValueError('Type a question before sending')
+        return value.strip()
 
 
 class AnalysisBody(BaseModel):
@@ -455,9 +523,10 @@ class AnalysisBody(BaseModel):
 def analysis(session_id: str, body: AnalysisBody):
     """Structured map actions; natural-language chat always goes through Claude."""
     operations={'count':'count_items','ranking':'rank_by_items','area':'room_info'}
-    if body.kind not in operations: raise HTTPException(422,'Unknown analysis kind')
+    if body.kind not in operations and body.kind!='comparison': raise HTTPException(422,'Unknown analysis kind')
     entry=session_or_404(session_id)
-    with entry['lock']:
+    with session_write(entry):
+        if body.kind=='comparison':return call(entry['session'],'compare_item_leaders',None,body.floor)
         if body.kind=='area':return call(entry['session'],'room_info',body.room or body.item)
         return call(entry['session'],operations[body.kind],body.item,body.floor)
 
@@ -466,7 +535,10 @@ def analysis(session_id: str, body: AnalysisBody):
 def cancel_chat(session_id: str, body: dict):
     entry = session_or_404(session_id)
     event = entry.get('requests', {}).get(body.get('request_id'))
-    if event: event.set()
+    if event:
+        event.set()
+        agent=entry.get('agent')
+        if agent and agent.conversation:agent.conversation.cancel()
     return {'stopped': event is not None}
 
 
@@ -481,7 +553,8 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
 
     def push(kind: str, payload) -> None:
         try:
-            loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(queue.put_nowait, {"type": kind, "data": payload, 'request_id': request_id})
         except Exception:
             pass
 
@@ -543,7 +616,7 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                     "message_id": getattr(getattr(agent, "conversation", None), "last_message_id", None),
                 })
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
-                message = ('Request stopped. Computed results remain available.' if isinstance(error, InterruptedError) else
+                message = ('Request stopped. Computed results remain available.' if cancelled.is_set() or isinstance(error, InterruptedError) else
                            'The language service timed out. Please retry. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else
                            'The language service could not complete this request. Please retry; computed results remain available.')
                 diagnostic=str(getattr(error,'body',{}).get('error',{}).get('message','')) if isinstance(getattr(error,'body',None),dict) else ''
@@ -562,13 +635,16 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
     async def stream():
         try:
             while True:
-                item = await queue.get()
+                try:item = await asyncio.wait_for(queue.get(),timeout=10)
+                except asyncio.TimeoutError:
+                    yield ': keepalive\n\n'
+                    continue
                 yield f"data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n"
                 if item["type"] == "done": break
         finally:
             cancelled.set()
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(stream(), media_type="text/event-stream",headers={'Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'})
 
 
 # ---------- text to speech (ElevenLabs / OpenAI / Browser fallback) ----------

@@ -1,4 +1,4 @@
-import type { Audience, ScenarioReport, BuildingRow, Geometry, Route, UiEvent, RobustReport } from "./types";
+import type { BuildingRow, Geometry, Route, UiEvent, Audience, ScenarioReport, RobustReport } from "./types";
 
 export class ApiError extends Error {
   candidates: { id: string; label?: string }[];
@@ -27,6 +27,7 @@ export const api = {
   resultPage: (session:string,result:string,offset=0,view='default',room='') => fetch(`/api/sessions/${session}/results/${result}?offset=${offset}&limit=25&view=${view}${room?`&room=${encodeURIComponent(room)}`:""}`).then(json<{rows:Record<string,unknown>[];total:number;next_offset:number|null}>),
   profile: (id: string, body: Record<string, unknown>) => post(`/api/sessions/${id}/profile`, body).then(json<{profile: unknown; events: UiEvent[]; route_update?: any}>),
   widen: (id: string, opening_id: string, width_m: number) => post(`/api/sessions/${id}/widen`, {opening_id, width_m}).then(json<WithEvents<any>>),
+  closePreview: (sessionId: string, element: string) => post(`/api/sessions/${sessionId}/close/preview`, { element, closed: true }).then(json<WithEvents<any>>),
   scenario: (id: string, hazardSpace: string, audience: Audience, capacities: { element: string; kind: "total_persons"; value: number }[] = []) => post(`/api/sessions/${id}/scenario`, {template: "evacuation", params: {spec: {hazards: [{spaces: [hazardSpace]}, ...(capacities.some(c => c.value === 0) ? [{elements: capacities.filter(c => c.value === 0).map(c => c.element)}] : [])], responders: {auto: true}, ...(capacities.some(c => c.value > 0) ? {capacities: capacities.filter(c => c.value > 0)} : {})}}, audience}).then(json<ScenarioReport>),
   scenarioRobust: (id: string, hazardSpace: string) => post(`/api/sessions/${id}/scenario/robust`, {params: {spec: {hazards: [{spaces: [hazardSpace]}]}}}).then(json<RobustReport>),
   weakPoints: (id: string) => fetch(`/api/sessions/${id}/weak-points`).then(json<WithEvents<any>>),
@@ -69,7 +70,8 @@ export async function readEvents<T>(response: Response, onEvent: (e: T) => void)
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
+  let ended=false;
+  try { for (;;) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
     buffer = buffer.replace(/\r\n/g, "\n");
@@ -85,12 +87,16 @@ export async function readEvents<T>(response: Response, onEvent: (e: T) => void)
         onEvent(event);
       }
     }
-    if (done) break;
-  }
+    if (done) {ended=true;break;}
+  }} finally {if(!ended)await reader.cancel().catch(()=>{});reader.releaseLock();}
 }
 
-export const chat = (sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null,requestId?:string,signal?:AbortSignal) =>
-  fetch(`/api/sessions/${sessionId}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,selected_space:selectedSpace??null,request_id:requestId}),signal}).then((r) => readEvents(r, onEvent));
+export const chat = async(sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null,requestId?:string,signal?:AbortSignal) => {
+  let finished=false;
+  const response=await fetch(`/api/sessions/${sessionId}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,selected_space:selectedSpace??null,request_id:requestId}),signal});
+  await readEvents<ChatEvent>(response,e=>{if(e.type==='done')finished=true;onEvent(e);});
+  if(!finished)throw new ApiError('Connection ended before the answer completed. Your partial answer and computed results remain available.');
+};
 
 export const cancelChat=(session:string,request_id:string)=>post(`/api/sessions/${session}/chat/cancel`,{request_id});
 

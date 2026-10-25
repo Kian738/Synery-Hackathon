@@ -22,6 +22,8 @@ export interface RouteState {
   next?: Instruction;
   /** Laptop camera heading in degrees clockwise from the plan's +Y axis, informational only. */
   heading_deg?: number;
+  /** Walked line on the current floor as [x, y] metres (plan frame), at most 400 points: the phone draws it in AR. */
+  path?: [number, number][];
 }
 
 /** What the laptop publishes: a snapshot, never a command to the phone. */
@@ -107,7 +109,7 @@ export function splitDelta(dyaw: number, dpitch: number): [number, number][] {
 export const wrapDeg = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
 
 /** Laptop helper: the Navigator's GuideStep list to a route_state snapshot. The index is the laptop's, not the phone's. */
-export function routeStateFromGuide(steps: GuideStep[], index: number, opts: { routeId?: string; headingDeg?: number } = {}): RouteState {
+export function routeStateFromGuide(steps: GuideStep[], index: number, opts: { routeId?: string; headingDeg?: number; path?: [number, number][] } = {}): RouteState {
   if (!steps.length) return { status: "idle", route_id: opts.routeId ?? null };
   const i = Math.min(Math.max(0, Math.floor(index)), steps.length - 1);
   const toInstruction = (s: GuideStep): Instruction => ({ text: s.text.slice(0, 240), short: s.short.slice(0, 240), icon: s.icon, ...(Number.isFinite(s.metres) && s.metres >= 0 ? { metres: Math.round(s.metres * 10) / 10 } : {}) });
@@ -119,5 +121,6 @@ export function routeStateFromGuide(steps: GuideStep[], index: number, opts: { r
     instruction: toInstruction(steps[i]),
     ...(steps[i + 1] ? { next: toInstruction(steps[i + 1]) } : {}),
     ...(opts.headingDeg !== undefined && Number.isFinite(opts.headingDeg) ? { heading_deg: opts.headingDeg } : {}),
+    ...(opts.path?.length ? { path: opts.path.slice(0, 400) } : {}),
   };
 }

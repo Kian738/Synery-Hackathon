@@ -56,3 +56,5 @@
 .cmp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: no-preference) { .cmp-btn { transition: background 0.12s; } }
 .pairing-qr{display:block;width:228px;height:228px;max-width:100%;margin:12px auto;background:white;border-radius:8px;image-rendering:pixelated}.pairing-qr-placeholder{height:228px}.cmp-panel details summary{cursor:pointer;color:var(--cmp-muted);padding:8px 0}
+.cmp-ar { position:fixed; inset:auto 0 0 0; z-index:50; padding:16px; display:flex; flex-direction:column; gap:8px; background:linear-gradient(transparent,#0008); color:#fff; }
+.cmp-turn { margin:6px 0 0; font:600 18px var(--font-sans, sans-serif); }

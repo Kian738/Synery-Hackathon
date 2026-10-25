@@ -18,7 +18,7 @@ Goal: measure everything the jury measures, without overfitting to buildings we 
 | L4 | `robust` | Same questions reworded (`--variants perturb\|paraphrase`) | yes | perturb free | 100 % perturb |
 | L5 | `metamorphic` | Invariance (translate, shuffle, rotate) and route properties | no | free | 100 % |
 | L6 | `interaction` | Scripted tricky users: rule checks plus an LLM judge | no | LLM | trend |
-| L7 | `build` | Rebuild floors from images vs the true plan; calibration uses supplied true bounds | yes | free | latest strict check 22/122 floors; room recall 93.8%, door recall 81.7%, exit-connected share 30.4% |
+| L7 | `build` | Actual image import with one supplied dimension; separate assisted floors, pipeline floors and complete-building precision/topology/exit metrics | source geometry for scoring only | free | strict failures remain visible; see PRIVATE_VALIDATION.md |
 
 `uv run fw check` runs pytest, then L0–L5 and the report, all offline.
 
@@ -68,3 +68,7 @@ A percentage gate hides regressions: with a 99 % threshold a new bug can pass as
 - `eval.sunday`, `eval.generated` and `eval.rules` measure our routes with that same implementation (`eval/judge.py`), so a bug in our own graph cannot hide itself.
 - The kit's official evaluator also runs on our agent: `PYTHONPATH=docs/industrial-agents-hackathon-2026 uv run python -m benchmark.evaluate docs/industrial-agents-hackathon-2026/data/dev --agent floorwise.agent.answer:answer` (138/138 on dev).
 - Full-coverage runs that are too slow for `fw check`: `fw eval generated --split train,dev,test --per-building 6` (1,573 questions) and `fw eval differential --split train,dev,test` (7,280 comparisons).
+
+## Independent private corpus
+
+`fw private generate|run|live|retire` adds new geometry, independently computed expectations, disjoint layout/style/language families and a fingerprint-frozen holdout. Initial and expanded sizes are 200/10,000/600 and 2,000/100,000/6,000 buildings/requests/image cases. See [protocol](PRIVATE_VALIDATION.md) and [measured results](RECONSTRUCTION_VALIDATION_RESULTS.md). These campaigns are separate from fast offline correctness gates and retain automatic reconstruction failures.

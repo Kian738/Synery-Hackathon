@@ -501,6 +501,12 @@ class Hub:
             if not _finite(message["heading_deg"]):
                 raise ValueError("heading_deg must be a number.")
             clean["heading_deg"] = round(float(message["heading_deg"]) % 360, 1)
+        if message.get("path") is not None:  # the walked line of the current floor, for the phone's AR overlay (metres in the plan frame)
+            points = message["path"]
+            if not isinstance(points, list) or len(points) > 400 or any(
+                    not (isinstance(p, list) and len(p) == 2 and all(_finite(c) and abs(c) < 20000 for c in p)) for p in points):
+                raise ValueError("path must be at most 400 [x, y] points in metres.")
+            clean["path"] = [[round(float(p[0]), 2), round(float(p[1]), 2)] for p in points]
         session.state, session.state_seq = clean, message["seq"]
         return clean
 

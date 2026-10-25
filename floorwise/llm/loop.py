@@ -3,7 +3,7 @@
 The conversation history is kept in the provider's own message format inside Conversation."""
 
 import json
-import re
+import copy
 import uuid
 from types import SimpleNamespace
 from collections import Counter
@@ -36,6 +36,60 @@ class Conversation:
         self.model = self.model or llm.model_for("chat", self.provider)
         self.client = llm.client(self.provider)
         self.by_name = {t.name: t for t in self.tools}
+        self._anthropic_tools = copy.deepcopy([t.anthropic() for t in self.tools])
+
+    def _discard_invalid_thinking(self) -> int:
+        """Recover a rejected prefix without losing words, tool evidence or user context."""
+        removed=0
+        for message in self.messages:
+            content=message.get('content')
+            if not isinstance(content,list):continue
+            kept=[]
+            for block in content:
+                kind=block.get('type') if isinstance(block,dict) else getattr(block,'type',None)
+                if kind in ('thinking','redacted_thinking'):removed+=1
+                else:kept.append(block)
+            message['content']=kept
+        self.messages[:]=[m for m in self.messages if not (m.get('role')=='assistant' and m.get('content')==[])]
+        return removed
+
+    def cancel(self):
+        stream=getattr(self,'_active_stream',None)
+        if stream is not None:
+            try:stream.close()
+            except Exception:pass
+
+    def _claude_request(self, arguments, on_event):
+        # Only a pre-generation signature rejection can be retried. Tools never replay.
+        for attempt in range(2):
+            emitted=False
+            try:
+                if not on_event:return self.client.beta.messages.create(**arguments)
+                message_id=uuid.uuid4().hex;self.last_message_id=message_id
+                on_event('assistant_start',{'message_id':message_id,'model':self.model})
+                with self.client.beta.messages.stream(**arguments) as stream:
+                    self._active_stream=stream
+                    for event in stream:
+                        budget.check()
+                        on_event('checkpoint',{})
+                        if event.type=='content_block_start' and getattr(getattr(event,'content_block',None),'type',None)=='thinking':
+                            on_event('progress',{'stage':'reasoning','message':'Checking the details before answering'})
+                        if event.type=='content_block_delta' and event.delta.type=='text_delta':
+                            emitted=True
+                            on_event('assistant_delta',{'message_id':message_id,'text':event.delta.text})
+                            on_event('text_delta',{'text':event.delta.text})
+                    response=stream.get_final_message()
+                self._active_stream=None
+                on_event('assistant_end',{'message_id':message_id,'stop_reason':response.stop_reason})
+                self._streamed_text=emitted
+                return response
+            except Exception as error:
+                self._active_stream=None
+                detail=str(getattr(error,'body',error)).lower()
+                rejected=getattr(error,'status_code',None)==400 and 'signature' in detail and 'thinking' in detail
+                if attempt or emitted or not rejected or not self._discard_invalid_thinking():raise
+                self.thinking_recoveries=getattr(self,'thinking_recoveries',0)+1
+                if on_event:on_event('progress',{'stage':'recovering','message':'Restoring conversation context'})
 
     def ask(self, text: str, on_event: OnEvent = None) -> str:
         checkpoint = len(self.messages)
@@ -57,7 +111,7 @@ class Conversation:
         for _ in range(MAX_STEPS):
             budget.check()
             if on_event:on_event('progress',{'stage':'model','message':'Waiting for Claude'})
-            tools = [t.anthropic() for t in self.tools]
+            tools = copy.deepcopy(self._anthropic_tools)
             arguments = dict(model=self.model, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=self.messages,
                              output_config={"effort": self.effort}, betas=[FALLBACK_BETA, THINKING_BINDING_BETA],
                              # Loading specialized tools changes the prefix that old thinking
@@ -65,22 +119,7 @@ class Conversation:
                              # preserve assistant messages and tool results verbatim.
                              thinking={"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}},
                              fallbacks="default", timeout=budget.timeout_s())
-            streamed_chunks = []
-            if on_event:
-                message_id = uuid.uuid4().hex
-                self.last_message_id = message_id
-                on_event('assistant_start', {'message_id': message_id, 'model': self.model})
-                with self.client.beta.messages.stream(**arguments) as stream:
-                    for event in stream:
-                        on_event('checkpoint', {})
-                        if event.type == 'content_block_delta' and event.delta.type == 'text_delta':
-                            streamed_chunks.append(event.delta.text)
-                            on_event('assistant_delta', {'message_id': message_id, 'text': event.delta.text})
-                            on_event('text_delta', {'text': event.delta.text})
-                    response = stream.get_final_message()
-                on_event('assistant_end', {'message_id': message_id, 'stop_reason': response.stop_reason})
-            else:
-                response = self.client.beta.messages.create(**arguments)
+            response = self._claude_request(arguments,on_event)
             usage = response.usage
             budget.add(usage.input_tokens+(usage.cache_read_input_tokens or 0)+(usage.cache_creation_input_tokens or 0), usage.output_tokens)
             self.usage.update({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
@@ -92,7 +131,7 @@ class Conversation:
             uses = [b for b in response.content if b.type == "tool_use"]
             if not uses:
                 return "\n".join(b.text for b in response.content if b.type == "text").strip()
-            if on_event and streamed_chunks:
+            if on_event and getattr(self,'_streamed_text',False):
                 on_event("clear_deltas", {})
             results = []
             for block in uses:
@@ -123,6 +162,7 @@ class Conversation:
                 fragments = {}; text = ''; usage = None
                 with self.client.chat.completions.create(**arguments, stream=True, stream_options={'include_usage': True}) as stream:
                     for chunk in stream:
+                        budget.check()
                         on_event('checkpoint', {})
                         if chunk.usage: usage = chunk.usage
                         if not chunk.choices: continue

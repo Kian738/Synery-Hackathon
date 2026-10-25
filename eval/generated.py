@@ -18,7 +18,7 @@ import copy
 import random
 
 from eval import judge
-from eval.common import SPLITS, source_of
+from eval.common import SPLITS, source_of, building_paths
 from eval.ledger import Ledger
 from floorwise.agent.answer import answer_with_trace, committed
 from floorwise.core.model import Building
@@ -72,8 +72,12 @@ def oracle(bm, question: dict) -> float | None:
     stops = question["stops"]
     try:
         route = bm.route(stops[0], stops[-1], step_free=question.get("step_free", False), via=stops[1:-1])
-    except Exception:  # noqa: BLE001 - the kit raises MapError when there is no route
-        return None
+    except Exception as error:
+        # Only a documented no-path exception establishes unreachability.
+        from starter_agent.building_map import MapError
+        if isinstance(error, MapError) and isinstance(error.__cause__, (__import__("networkx").NetworkXNoPath, __import__("networkx").NodeNotFound)):
+            return None
+        raise
     return route.length_m
 
 
@@ -85,7 +89,7 @@ def main() -> None:
     cli.add_argument("--limit", type=int, default=None, help="only the first N buildings")
     args = cli.parse_args()
     ledger = Ledger("generated", {"splits": args.split, "per_building": args.per_building, "seed": args.seed})
-    paths = sorted(p for split in args.split.split(",") if split in SPLITS for p in (DATA / split).glob("*/building.json"))[: args.limit]
+    paths = building_paths(args.split.split(","))[: args.limit]
     for path in paths:
         directory = path.parent
         building = Building.load(directory)
@@ -109,7 +113,9 @@ def main() -> None:
                 reason=(verdict.reason if verdict else "said no route" if sequence is None else ""),
                 parser=trace.get("parser"), fallback=trace.get("fallback"), question=question["question"], answer_line=committed(reply)[:240],
             )
-    ledger.finish()
+    summary = ledger.finish()
+    if not summary["total"] or summary["correct"] != summary["total"] or summary.get("source_changed"):
+        raise SystemExit("Generated-route quality or source-integrity check failed")
 
 
 if __name__ == "__main__":

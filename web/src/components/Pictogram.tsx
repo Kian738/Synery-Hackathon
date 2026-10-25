@@ -3,6 +3,21 @@ import type React from "react";
 // Signage-style pictograms (ISO 7001/7010-inspired), drawn as simple strokes so they read at 20 px.
 
 const PATHS: Record<string, React.ReactNode> = {
+  machine: <><path d="M3 20V9l5 3V9l5 3V6h4v14z"/><path d="M7 20v-3M12 20v-3"/></>,
+  bed: <><path d="M3 18V7M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="11" r="1.5"/></>,
+  chevron: <path d="M6 9l6 6 6-6"/>,
+  upload: <path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>,
+  search: <><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></>,
+  jump: <path d="M12 5v14M6 13l6 6 6-6"/>,
+  cube: <><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></>,
+  plan: <><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 10h8M11 3v7M15 21v-6h6M11 14h4"/></>,
+  walk: <><circle cx="13" cy="4.5" r="2"/><path d="M12 9l-3 3-2 5M12 9l3 3v4l2 4M9 12l-1 3-3 2"/></>,
+  layers: <><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/></>,
+  spread: <path d="M12 4l7 3-7 3-7-3zM5 12l7 3 7-3M5 17l7 3 7-3"/>,
+  focus: <><circle cx="12" cy="12" r="3"/><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></>,
+  tools: <path d="M14 6a4 4 0 0 0 5 5l-9 9a2.2 2.2 0 0 1-3-3l9-9a4 4 0 0 0-2-2z"/>,
+  expand: <path d="M4 10V4h6M20 14v6h-6M4 4l6 6M20 20l-6-6"/>,
+  roof: <path d="M3 12l9-8 9 8M6 11v9h12v-9"/>,
   phone: <><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 5h4M11 19h2"/></>,
   play: <path d="M8 4l12 8-12 8z" fill="currentColor" stroke="none" />,
   pause: <path d="M7 4h4v16H7zM15 4h4v16h-4z" fill="currentColor" stroke="none" />,
