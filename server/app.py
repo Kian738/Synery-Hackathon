@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from floorwise.agent.session import Session
+from floorwise.agent.session import Session, main_entrance
 from floorwise.core.model import Building
 from floorwise.core.resolve import ResolveError
 from floorwise.paths import DATA, ROOT
@@ -140,6 +140,10 @@ from server.companion import create_companion_router  # noqa: E402
 
 app.include_router(lab_router)
 app.include_router(create_companion_router())
+from server.voice import router as voice_router
+app.include_router(voice_router)
+from server.scenarios import router as scenario_router
+app.include_router(scenario_router(lambda sid: session_or_404(sid), None))
 
 
 @lru_cache(maxsize=1)
@@ -173,6 +177,7 @@ def geometry_payload(b: Building) -> dict:
     anchors={sid: list(poly.representative_point().coords)[0] for sid,poly in b.polygons.items()}
     return {
         "building": b.info,
+        "main_entrance": main_entrance(b),
         "floors": sorted(b.data["floors"], key=lambda f: f["level"]),
         "spaces": [
             {**{k: s.get(k) for k in ("id", "floor_id", "type", "room_type", "name", "ref", "polygon", "synthetic")}, "anchor": anchors[s["id"]]} for s in b.spaces.values()

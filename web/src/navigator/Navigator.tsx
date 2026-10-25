@@ -14,6 +14,7 @@ import { FloorRail } from "../components/FloorRail";
 import { Dock, IconButton, Popover, Segmented } from "../ui/kit";
 import { Pictogram } from "../components/Pictogram";
 import { BuildingAtlas } from "../components/BuildingAtlas";
+import { RoomCard, StartPicker as StartPickerPanel, Welcome } from "./kitPanels";
 import { PlanView, type Pin } from "../components/PlanView";
 import { api } from "../lib/api";
 import type { ScenarioMark } from "../lib/types";
@@ -179,7 +180,7 @@ export default function Navigator() {
           </button>
           {nav.here && <p className="k-hint">{nav.hereSource === "default" ? "Entrance used as start. Change it if you’re elsewhere." : nav.hereSource === "link" ? "Start supplied by link. Change it if you’re elsewhere." : "Start set by you. Location is not tracked."}</p>}
           {picking && (
-            <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
+            <StartPickerPanel geometry={g} entrances={entrances} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
           )}
         </div>
 
@@ -192,7 +193,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} currentlySpeakingId={voice.currentlySpeakingId} onSpeak={voice.speakMessage} busy={nav.busy} onOption={(id,purpose)=>purpose==="choice"?nav.ask(id):nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} understood={[nav.here?`From ${labelOf(g,nav.here)}`:"",nav.route&&nav.routeMeta?.to?`To ${nav.routeMeta.to}`:"",nav.stepFree?"Step-free":"",nav.closed.size?`${nav.closed.size} closed`:""].filter(Boolean)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} currentlySpeakingId={voice.currentlySpeakingId} onSpeak={voice.speakMessage} busy={nav.busy} onOption={(id,purpose)=>purpose==="choice"?nav.ask(id):nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -335,37 +336,6 @@ function BuildingMenu({ buildings, value, onChange, name }: { buildings: Buildin
 }
 
 
-function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examples }: {
-  categories: { key: string; label: string; query: string; icon: string }[];
-  onPick: (q: string) => void; onAsk: (t: string) => void; hasHere: boolean; buildingName: string; examples: string[];
-}) {
-  return (
-    <section className="welcome-panel px-5 pb-2 pt-7">
-      <h1 className="font-sign text-[34px] font-bold leading-[1.05]">Know your building.<br />Find your way.</h1>
-      <p className="mt-2 max-w-[34ch] text-[15px] text-ink-4">
-        {hasHere ? "Pick a place, or just ask." : `Explore ${buildingName}, or describe where you want to go.`}
-      </p>
-      {cats.length > 0 && (
-        <div className="destination-shortcuts mt-5 grid grid-cols-3 gap-px bg-ink-2">
-          {cats.slice(0, 6).map((c) => (
-            <button key={c.key} onClick={() => onPick(c.query)}
-              className="flex flex-col items-start gap-3 bg-ink px-3 py-3 text-left hover:bg-ink-2">
-              <Pictogram name={c.icon} size={26} className="text-mark" />
-              <span className="font-sign text-[16px] font-semibold">{c.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <details className="example-requests mt-5"><summary className="cursor-pointer font-sign text-sm text-ink-4">Things you can say</summary>
-      <ul className="mt-2 space-y-1.5">
-        {examples.map((t) => (
-          <li key={t}><button onClick={() => onAsk(t)} className="text-left text-[15px] text-concrete underline decoration-ink-3 underline-offset-4 hover:decoration-mark">“{t}”</button></li>
-        ))}
-      </ul></details>
-    </section>
-  );
-}
-
 function RouteSign({ route, meta, stepFree, active, onStep, onClear, onStepMode, floors }: {
   route: NonNullable<ReturnType<typeof useNavigator>["route"]>; meta: ReturnType<typeof useNavigator>["routeMeta"]; stepFree: boolean;
   active: number; onStep: (i: number) => void; onClear: () => void; onStepMode: () => void; floors: { id: string; name: string }[];
@@ -422,15 +392,12 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   const isFloor = step.kind === "floor";
   return (
     <li>
-      <button onClick={onClick} aria-current={active ? "step" : undefined}
-        className={`flex w-full gap-3 px-4 py-3 text-left ${active ? "bg-ink-2" : "hover:bg-ink-2/60"} ${isFloor ? "border-l-4 border-mark" : "border-l-4 border-transparent"}`}>
-        <span className={`grid h-9 w-9 shrink-0 place-items-center ${step.kind === "arrive" ? "bg-mark text-ink" : isFloor ? "bg-white text-ink" : "border border-ink-3 text-white"}`}>
-          <Pictogram name={step.icon} size={20} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15.5px] leading-snug">{step.text}</span>
+      <button type="button" onClick={onClick} aria-current={active ? "step" : undefined} className="k-step" data-kind={step.kind} data-active={active}>
+        <span className="k-step-icon"><Pictogram name={step.icon} size={18} /></span>
+        <span className="k-step-body">
+          <span className="k-step-text">{step.text}</span>
           {(step.metres > 0 || isFloor) && (
-            <span className="mt-0.5 block text-[13px] text-ink-4">{index > 0 && step.metres > 0 ? `${Math.round(step.metres)} m` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
+            <span className="k-step-meta">{index > 0 && step.metres > 0 ? `${Math.round(step.metres)} m` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
           )}
         </span>
       </button>
@@ -438,9 +405,9 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk }: {
+function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk,understood=[] }: {
   currentlySpeakingId?:number|null;onSpeak?:(id:number,text:string)=>void;
-  suggest?:string[];onAsk?:(q:string)=>void;
+  suggest?:string[];onAsk?:(q:string)=>void;understood?:string[];
   busyLabel:string;onResult:(r:VisualResult & {total_rows:number})=>void;onRerun:(q:string)=>void;
   geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string, purpose?: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
@@ -507,6 +474,7 @@ function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, on
         );
       })}
       {busy&&<RequestStatus label={busyLabel}/>}
+      {!busy&&understood.length>0&&messages.at(-1)?.role==="agent"&&<p className="k-understood" aria-label="How this was understood"><span>Understood as</span>{understood.map(u=><b key={u}>{u}</b>)}</p>}
       {!busy&&onAsk&&suggest.length>0&&messages.at(-1)?.role==="agent"&&<div className="k-next" aria-label="Ask next">{suggest.filter(q=>q!==(messages.filter(m=>m.role==="user").at(-1) as {text?:string}|undefined)?.text).slice(0,3).map(q=><button key={q} className="k-ctl" onClick={()=>onAsk(q)}>{q}</button>)}</div>}
       <p className="sr-only" aria-live="polite">{!busy&&messages.some(m=>m.role==='agent'&&m.status!=='streaming')?'New answer available in the conversation.':''}</p>
       <div ref={end} />
@@ -549,41 +517,6 @@ function Composer({ busy, onSend,onStop }: { busy: boolean; onSend: (t: string) 
   );
 }
 
-function RoomCard({ space, building, onClose, onHere, onGo, closed, onToggleClosed,onFocus }: {
-  space: Space; building: NonNullable<ReturnType<typeof useNavigator>["geometry"]>; onClose: () => void; onHere: () => void; onGo: () => void;
-  closed: Set<string>; onToggleClosed: (id: string) => void;onFocus:()=>void;
-}) {
-  const items = building.assets.filter((a) => a.space_id === space.id);
-  const counts = Object.entries(items.reduce<Record<string, number>>((m, a) => ({ ...m, [a.type]: (m[a.type] ?? 0) + 1 }), {}));
-  const connector = building.connectors.find((c) => c.space_ids.includes(space.id));
-  const floor = building.floors.find((f) => f.id === space.floor_id);
-  return (
-    <div className="room-inspector absolute inset-x-3 bottom-3 border border-ink bg-white p-4 shadow-[4px_4px_0_var(--color-ink)] sm:left-auto sm:right-16 sm:w-[340px]" role="dialog" aria-label={space.name}>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] text-ink-3">{floor?.name} · {area(space.polygon).toFixed(1)} m²</p>
-          <h3 className="font-sign text-[22px] font-bold leading-tight">{space.name}</h3>
-        </div>
-        <button onClick={onClose} aria-label="Close"><Pictogram name="close" size={20} /></button>
-      </div>
-      <details className="room-card-details"><summary>Room details</summary><p>{ZONE_LABEL[zoneOf(space)]}</p>
-      <button className="focus-room" onClick={onFocus}><Pictogram name="fit" size={16}/>Focus room</button>
-      {counts.length > 0 && <p className="mt-2 text-[14px] text-ink-2">{counts.slice(0,6).map(([t, n]) => `${n} ${t.replace(/_/g, " ")}`).join(" · ")}</p>}
-      {counts.length>6&&<details><summary>All {counts.length} item types</summary>{counts.map(([t,n])=><p key={t}>{n} {t.replaceAll("_"," ")}</p>)}</details>}
-      </details>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <button onClick={onGo} className="bg-ink py-2.5 font-sign text-[16px] font-bold text-white hover:bg-ink-2">Go here</button>
-        <button onClick={onHere} className="border-2 border-escape py-2 font-sign text-[16px] font-bold text-escape hover:bg-escape hover:text-white">I'm here</button>
-      </div>
-      {connector && (
-        <button onClick={() => onToggleClosed(connector.id)} className={`mt-2 w-full border py-2 font-sign text-[15px] ${closed.has(connector.id) ? "border-escape text-escape" : "border-signal text-signal"}`}>
-          {closed.has(connector.id) ? `Reopen ${connector.name}` : `Close ${connector.name} for maintenance`}
-        </button>
-      )}
-    </div>
-  );
-}
-
 function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const i = Math.max(0,Math.min(steps.length-1,index));
   const step = steps[i];
@@ -603,30 +536,6 @@ function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; inde
         <button disabled={i <= 1} onClick={() => onIndex(i - 1)} className="border border-ink-3 py-4 font-sign text-xl disabled:opacity-30">Back</button>
         <button onClick={() => speak(step.text)} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
         <button disabled={i >= steps.length - 1} onClick={() => onIndex(i + 1)} className="bg-mark py-4 font-sign text-xl font-bold text-ink disabled:opacity-30">Next</button>
-      </div>
-    </div>
-  );
-}
-
-function StartPicker({ geometry, onPick }: { geometry: NonNullable<ReturnType<typeof useNavigator>["geometry"]>; onPick: (id: string) => void }) {
-  const [query, setQuery] = useState("");
-  const normalized = query.trim().toLocaleLowerCase();
-  const matches = normalized
-    ? geometry.spaces.filter((x) => `${x.name} ${x.ref ?? ""} ${geometry.floors.find(f => f.id === x.floor_id)?.name ?? ""}`.toLocaleLowerCase().includes(normalized))
-    : entrances(geometry);
-  const options = matches.slice(0, 8);
-  return (
-    <div className="mt-2 space-y-1.5">
-      <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Room name or number"
-        aria-label="Search for your room" className="h-10 w-full border border-ink-3 bg-ink-2 px-3 text-white placeholder:text-ink-4 focus:border-white focus:outline-none" />
-      <p role="status" className="text-[13px] text-ink-4">{normalized ? `${matches.length} matching rooms` : "Entrances, or tap your room on the plan"}{matches.length > options.length ? ` · Showing ${options.length} of ${matches.length}. Keep typing to narrow the list.` : ""}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((x) => (
-          <button key={x.id} onClick={() => onPick(x.id)} className="border border-ink-3 px-2.5 py-1 font-sign text-[14.5px] hover:border-white">
-            {x.name}{geometry.floors.length > 1 ? ` (${geometry.floors.find((f) => f.id === x.floor_id)?.name})` : ""}
-          </button>
-        ))}
-        {!options.length && <span className="text-[14px] text-ink-4">No room matches that.</span>}
       </div>
     </div>
   );

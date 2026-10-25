@@ -10,7 +10,7 @@ import { SceneLighting } from "./SceneLighting";
 import { Roofs } from "./Ceilings";
 import { PerfProbe } from "./PerfProbe";
 import { DetailWatcher, type Detail } from "./DetailWatcher";
-import { Dock, IconButton } from "../ui/kit";
+import { Dock, IconButton, Popover } from "../ui/kit";
 import { LiftShafts, rideState } from "./LiftShafts";
 import { Connectors3D, inside as insidePolygon, stairWalkFor, type WalkPoint } from "./Connectors3D";
 import { SceneLabels, type SceneLabel, type ProjectedLabel } from "./SceneLabels";
@@ -126,16 +126,6 @@ function Doorways({geometry,floorId,elevation,follow,activeOpening,relevant}:{ge
     ref.current!.setMatrixAt(i,parent.matrix.clone().multiply(part.matrix));ref.current!.setColorAt(i,new THREE.Color(p.color));
   });ref.current.instanceMatrix.needsUpdate=true;if(ref.current.instanceColor)ref.current.instanceColor.needsUpdate=true;ref.current.computeBoundingSphere();},[parts]);
   return <group position={[0,elevation,0]}><instancedMesh ref={ref} args={[undefined,undefined,parts.length]}><boxGeometry/><meshStandardMaterial roughness={.7} metalness={.15}/></instancedMesh></group>;
-}
-
-function UpperContext({geometry,above}:{geometry:Geometry;above:number}) {
-  const surfaces=useMemo(()=>(geometry.scene?.slabs??[]).flatMap(s=>{
-    const floor=geometry.floors.find(f=>f.id===s.floor_id);if(!floor||floor.elevation_m<=above+.05)return [];
-    const mesh=new THREE.BufferGeometry();mesh.setAttribute("position",new THREE.Float32BufferAttribute(s.vertices.flatMap(p=>[p[0],floor.elevation_m,-p[1]]),3));mesh.computeVertexNormals();
-    return [{floor,mesh}];
-  }),[geometry,above]);
-  useEffect(()=>()=>surfaces.forEach(s=>s.mesh.dispose()),[surfaces]);
-  return <>{surfaces.map(({floor,mesh})=><group key={floor.id}><mesh geometry={mesh}><meshStandardMaterial color="#b2bcb9" roughness={1} side={THREE.DoubleSide}/></mesh><Walls geometry={geometry} floorId={floor.id} elevation={floor.elevation_m} follow/></group>)}</>;
 }
 
 const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,hazard,zones,connectorSpaces,labelFloor,activeOpening,relevant,voids,bare,near}:{near:boolean;hazard?:string;zones?:Record<string,string>;bare?:boolean;relevant?:Set<string>|null;voids:Set<string>;geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
@@ -263,6 +253,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
  lookOffset?:{yaw:number;pitch:number};focusRequest?:{id:string;revision:number}|null;onRepeat?:()=>void;heading?:number;visualResult?:VisualResult|null;onPosition?:(p:{x:number;y:number;floor_id:string;heading?:number})=>void;showAll:boolean;scope?:"current"|"route"|"building";exploded?:boolean;previewMode?:boolean;seekRequest?:number;onFinish?:()=>void;onPreview?:()=>void;here?:string|null;selected?:string|null;follow?:boolean;activeStep?:number;onStep?:(i:number)=>void;onSpaceClick?:(s:Space)=>void;
 }){
   const autoSpeed=true; // Guide me always skips the uneventful stretches and slows at doors, turns and stairs: no switch to maintain
+  const [infoOpen,setInfoOpen]=useState(false);
   const [detail,setDetail]=useState<Detail>({near:true,y:0});
   // Touch devices: no antialiasing and a lower pixel ratio ceiling; every device drops to 1x while frames are slow and recovers at rest.
   const coarse=typeof matchMedia!=="undefined"&&matchMedia("(pointer: coarse)").matches,maxDpr=coarse?1.25:1.5;
@@ -394,7 +385,12 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       <IconButton label="Zoom in" icon="plus" onClick={()=>setAction(v=>({id:v.id+1,kind:"zoom-in"}))}/>
       <IconButton label="Zoom out" icon="minus" onClick={()=>setAction(v=>({id:v.id+1,kind:"zoom-out"}))}/>
     </Dock></div>}
-    {!follow&&<details className="scene-info"><summary aria-label="Model details"><Pictogram name="info" size={18}/></summary><p>Schematic model from supplied footprints and floor elevations. Object appearance is illustrative.{explode?" Floors are separated by 2 m for inspection.":""}</p><p>Drag to move · right-drag to rotate · scroll to zoom.</p></details>}
+    {!follow&&<div className="k-info"><Popover label="About this model" icon="info" open={infoOpen} onOpenChange={setInfoOpen} up>
+      <div className="k-pop-title">About this model</div>
+      <p className="k-note">Schematic model from the supplied footprints and floor elevations. Furniture and equipment shapes are illustrative.{explode?" Floors are pulled 2 m apart for inspection.":""}</p>
+      <div className="k-pop-title">Controls</div>
+      <p className="k-note">Drag to move · right-drag to rotate · scroll to zoom · Space plays Guide me.</p>
+    </Popover></div>}
   </div>;
 
 }

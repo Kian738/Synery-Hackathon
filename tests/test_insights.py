@@ -86,7 +86,7 @@ def test_step_distances_include_connector_approach_and_final_room(campus):
         campus.route('Lab 2.17', 'Lab 4.26', step_free=True)
         route = campus.last_route
         assert abs(sum(step['metres'] for step in route.guide['steps']) - route.walk_m) < 0.3
-        assert 'inside to the marked destination' in route.guide['steps'][-1]['text']
+        assert 'to the marked spot' in route.guide['steps'][-1]['text']
 
 
 def test_profile_toggle_replans_active_route_through_rest():

@@ -320,11 +320,10 @@ export async function speak(text: string, onEnd?: () => void) {
 
   // 1. Try server-side TTS (ElevenLabs / OpenAI)
   try {
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: clean }),
-    });
+    // Kian's ElevenLabs proxy first (cached and budgeted on the server, 503 without a key), then the older /api/tts route.
+    const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: clean }) };
+    let res = await fetch("/api/voice/tts", init).catch(() => null);
+    if (!res || !res.ok) res = await fetch("/api/tts", init);
 
     if (res.ok && res.headers.get("content-type")?.includes("audio")) {
       const blob = await res.blob();
