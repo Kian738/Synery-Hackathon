@@ -153,5 +153,6 @@
       801
     ],
     "scope": "provider/agent transport and computed evidence; not the full 30-case live pack"
-  }
+  },
+  "code_checkpoint_commit": "81e2876"
 }

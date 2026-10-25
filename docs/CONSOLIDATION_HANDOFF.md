@@ -5,7 +5,7 @@ Claude is authorized to keep editing the shared source checkout. The other Codex
 ## Preserve and merge
 
 - Existing active branch: codex/verified-building-demo. Do not create another branch or reset the working tree.
-- A merge from origin/master is in progress. Its reviewed index was exported to runs/reviewed-consolidation-snapshot for stable validation. Compare the index tree with runs/consolidation/index-tree.txt before committing; do not stage another agent's unfinished work indiscriminately.
+- The reviewed default-branch merge was committed and pushed as 81e2876. Its reviewed source was exported to runs/reviewed-consolidation-snapshot and passed the full frozen validation. The merge state is complete. Do not stage another agent's unfinished work indiscriminately; the remaining working-tree changes are separate from that tested checkpoint.
 - The original full working tree is saved in stash 1e8d118b6ec59dadd80e08d0d0d5edae64340781. Pre-consolidation history has a local bundle in runs/consolidation and remote archive/2026-10-25/* tags. Keep these until the final handoff is complete.
 - Preserve current unstaged Claude edits: agent/session.py, agent/tools.py, agent/chat.py, core/spacewalk.py, server/app.py, tests/test_edit_capabilities.py and eval/edits.py. Their changing version has not passed the frozen release gate. Root runs_gates.log is a diagnostic log, not source to commit.
 - Merge source changes, not generated caches, dependency directories or unrelated snapshot files. Integrate the newer default-branch scenario diagnostics before moving the default branch to main. Never force-push or discard branch-only work; keep archived tips recoverable.
