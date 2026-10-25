@@ -36,16 +36,15 @@ interface DroneHudProps {
 }
 
 const CAMPUSES = [
-  { id: "garching", label: "TUM Garching (CIT)", sub: "Campus North" },
-  { id: "munich_center", label: "TUM Main Campus", sub: "Stammgelände" },
-  { id: "weihenstephan", label: "Weihenstephan", sub: "Freising" },
+  { id: "garching", label: "Garching" },
+  { id: "munich_center", label: "Main campus" },
+  { id: "weihenstephan", label: "Weihenstephan" },
 ];
 
-function bearingToDirection(bearing: number): string {
+function heading(bearing: number): string {
   const norm = ((bearing % 360) + 360) % 360;
-  const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
-  const idx = Math.round(norm / 22.5) % 16;
-  return `${Math.round(norm)}° ${dirs[idx]}`;
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return dirs[Math.round(norm / 45) % 8];
 }
 
 export const DroneHud = memo(function DroneHud({
@@ -60,118 +59,60 @@ export const DroneHud = memo(function DroneHud({
 }: DroneHudProps) {
   return (
     <div className="drone-hud">
-      {/* 4 Corner Crosshairs */}
-      <div className="hud-corner hud-corner-tl" />
-      <div className="hud-corner hud-corner-tr" />
-      <div className="hud-corner hud-corner-bl" />
-      <div className="hud-corner hud-corner-br" />
-
-      {/* Top Telemetry Header */}
-      <header className="hud-header">
-        <div className="hud-pill">
-          <span className="hud-rec-dot" />
-          <span>AUTONOMOUS RECON // DRONE-01</span>
-        </div>
-
-        <div className="hud-telemetry-cluster">
-          <div className="hud-stat-item">
-            <span>ALTITUDE</span>
-            <b>{telemetry.altM}M AGL</b>
-          </div>
-          <div className="hud-stat-item">
-            <span>PITCH</span>
-            <b>{Math.round(telemetry.pitchDeg)}° OBLIQUE</b>
-          </div>
-          <div className="hud-stat-item">
-            <span>HEADING</span>
-            <b>{bearingToDirection(telemetry.bearingDeg)}</b>
-          </div>
-          <div className="hud-stat-item">
-            <span>GPS COORDS</span>
-            <b>{telemetry.lat.toFixed(4)}°N, {telemetry.lon.toFixed(4)}°E</b>
-          </div>
-        </div>
-      </header>
-
-      {/* Campus Quick-Switch Bar */}
-      <nav className="hud-campus-switch drone-hud-interactive" aria-label="Campus Selection">
+      <nav className="hud-campus-switch hud-interactive hud-material" aria-label="Campus">
         {CAMPUSES.map((c) => (
           <button
             key={c.id}
             type="button"
-            className={`hud-campus-btn ${activeCampus === c.id ? "active" : ""}`}
+            className="hud-campus-btn"
+            aria-pressed={activeCampus === c.id}
             onClick={() => onSelectCampus(c.id)}
-            title={`Fly drone to ${c.label}`}
           >
-            <span>📍</span>
-            <span>{c.label}</span>
+            {c.label}
           </button>
         ))}
       </nav>
 
-      {/* Bottom-Right Controls */}
-      <div className="hud-camera-controls drone-hud-interactive">
+      <div className="hud-camera-controls hud-interactive">
+        <div className="hud-compass hud-material" role="img" aria-label={`Facing ${heading(telemetry.bearingDeg)}, ${Math.round(telemetry.pitchDeg)}° tilt`}>
+          <svg viewBox="0 0 24 24" width="20" height="20" style={{ transform: `rotate(${-telemetry.bearingDeg}deg)` }} aria-hidden>
+            <path d="M12 3 16 13H8z" fill="var(--k-accent)" />
+            <path d="M12 21 8 13h8z" fill="var(--k-mute)" />
+          </svg>
+          <span>{heading(telemetry.bearingDeg)}</span>
+        </div>
         <button
           type="button"
-          className={`hud-orbit-btn ${orbiting ? "orbiting" : ""}`}
+          className="hud-orbit-btn hud-material"
+          aria-pressed={orbiting}
           onClick={onToggleOrbit}
-          title="Toggle autonomous drone orbit"
         >
-          <span className="hud-radar-spinner" />
-          <span>{orbiting ? "ORBIT ACTIVE" : "ENGAGE ORBIT"}</span>
+          {orbiting ? "Stop turning" : "Turn slowly"}
         </button>
       </div>
 
-      {/* Target Lock Card */}
-      {selectedBuilding && (
-        <aside
-          className="hud-target-card drone-hud-interactive"
-          aria-label={`Target Lock: ${selectedBuilding.name}`}
-        >
-          <div className="hud-target-header">
-            <div className="hud-target-badge">
-              <span>●</span>
-              <span>INDOOR DIGITAL TWIN ONLINE</span>
+      {selectedBuilding ? (
+        <aside className="hud-sheet hud-interactive hud-material" aria-label={selectedBuilding.name}>
+          <header>
+            <div>
+              <small>{selectedBuilding.campus ? selectedBuilding.campus.replace("_", " ") : "Building"}</small>
+              <h2>{selectedBuilding.name}</h2>
             </div>
-            <button
-              type="button"
-              className="hud-target-close"
-              onClick={onClearSelection}
-              aria-label="Deselect building"
-            >
-              ✕
+            <button type="button" className="hud-close" onClick={onClearSelection} aria-label="Close">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
             </button>
-          </div>
-
-          <h2 className="hud-target-title">{selectedBuilding.name}</h2>
-
-          <div className="hud-target-metrics">
-            <div className="hud-metric-box">
-              <span>FLOORS</span>
-              <b>{selectedBuilding.floors}</b>
-            </div>
-            <div className="hud-metric-box">
-              <span>ROOMS</span>
-              <b>{selectedBuilding.rooms ?? selectedBuilding.spaces ?? "—"}</b>
-            </div>
-            <div className="hud-metric-box">
-              <span>3D HEIGHT</span>
-              <b>{selectedBuilding.height_m ?? 20}M</b>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="hud-engage-btn"
-            onClick={() => onEngageIndoor(selectedBuilding)}
-          >
-            <span>DIVE INTO BUILDING ↓</span>
+          </header>
+          <dl className="hud-stats">
+            <div><dt>Floors</dt><dd>{selectedBuilding.floors}</dd></div>
+            <div><dt>Rooms</dt><dd>{selectedBuilding.rooms ?? selectedBuilding.spaces ?? "—"}</dd></div>
+            <div><dt>Height</dt><dd>{selectedBuilding.height_m ?? 20} m</dd></div>
+          </dl>
+          <button type="button" className="hud-engage-btn" onClick={() => onEngageIndoor(selectedBuilding)}>
+            Go inside
           </button>
-
-          <p className="hud-target-subtext">
-            Click to initiate high-speed dive or scroll in to enter.
-          </p>
         </aside>
+      ) : (
+        <p className="hud-hint hud-material" role="status">Tap a building, or zoom in to step inside.</p>
       )}
     </div>
   );

@@ -8,3 +8,14 @@
 @media (max-width: 520px) { .fw-journey-banner { flex-direction: column; align-items: stretch; } .fw-journey-actions { flex-direction: row; } }
 .fw-journey-banner details { margin-top: 4px; font-size: 12px; } .fw-journey-banner details ol { margin: 4px 0 0; padding-left: 18px; max-height: 30vh; overflow: auto; }
 .fw-journey-status { color: var(--k-accent); font-weight: 700; text-align: center; }
+
+/* Outside/inside trip banner: same material as the outside controls, drops in from the top edge. */
+.fw-journey-banner { top: var(--gap-group); border-color: var(--k-line); border-top-color: rgba(255, 255, 255, 0.16); background: rgba(21, 33, 40, 0.78); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); animation: fw-banner-in 320ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes fw-banner-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.fw-journey-banner small { color: var(--k-mute); font: 600 11px var(--font-sans); }
+.fw-journey-actions button { height: var(--ctl); padding: 0 14px; background: var(--k-bg-hi); transition: filter 160ms ease-out, transform 100ms ease-out; }
+.fw-journey-actions button:active { transform: scale(0.97); }
+.fw-journey-actions button.primary { background: var(--k-accent); color: #1c2226; font-weight: 700; }
+.fw-journey-actions button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .fw-journey-banner { animation: none; } }
+@media (prefers-reduced-transparency: reduce) { .fw-journey-banner { background: var(--k-bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }

@@ -1,306 +1,60 @@
-/* Tactical Aerospace Drone HUD Styling */
+/* Outside view controls: the interior control kit (ui/kit.css) on a translucent material.
+   Feedback is instant on press; motion uses transform and opacity only. */
+.drone-hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; font: var(--k-font); color: var(--k-ink); user-select: none; }
+.hud-interactive { pointer-events: auto; }
 
-.drone-hud {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
-  font-family: var(--font-sans);
-  color: var(--k-ink);
-  user-select: none;
-}
-
-/* Enable pointer events only for interactive HUD controls */
-.drone-hud-interactive {
-  pointer-events: auto;
-}
-
-/* Corner Viewfinder Crosshairs */
-.hud-corner {
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  border-color: rgba(255, 212, 92, 0.4);
-  pointer-events: none;
-}
-.hud-corner-tl { top: 16px; left: 16px; border-top: 2px solid; border-left: 2px solid; }
-.hud-corner-tr { top: 16px; right: 16px; border-top: 2px solid; border-right: 2px solid; }
-.hud-corner-bl { bottom: 16px; left: 16px; border-bottom: 2px solid; border-left: 2px solid; }
-.hud-corner-br { bottom: 16px; right: 16px; border-bottom: 2px solid; border-right: 2px solid; }
-
-/* Top Telemetry Header */
-.hud-header {
-  position: absolute;
-  top: 16px;
-  left: 48px;
-  right: 48px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.hud-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: var(--k-bg);
-  border: 1px solid rgba(255, 212, 92, 0.35);
-  border-radius: var(--r-ctl);
-  backdrop-filter: blur(10px);
-  font-size: 11px;
-  box-shadow: 0 18px 40px #000a;
-}
-
-.hud-rec-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--k-danger);
-  border-radius: 50%;
-  box-shadow: none;
-  animation: hud-blink 1.2s infinite ease-in-out;
-}
-
-@keyframes hud-blink {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.25; transform: scale(0.85); }
-}
-
-.hud-telemetry-cluster {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.hud-stat-item {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 10px;
-  background: var(--k-bg);
+.hud-material {
+  background: rgba(21, 33, 40, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--k-line);
-  border-radius: var(--r-ctl);
-  font-size: 10px;
-}
-.hud-stat-item b {
-  color: var(--k-ink);
-  font-size: 12px;
+  border-top-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
-/* Campus Fast-Travel Switcher */
-.hud-campus-switch {
-  position: absolute;
-  top: 68px;
-  left: 48px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  z-index: 12;
-}
+/* Campus switcher: one segmented control */
+.hud-campus-switch { position: absolute; top: var(--gap-group); left: var(--gap-group); display: inline-flex; gap: 2px; padding: 3px; height: var(--ctl); box-sizing: border-box; border-radius: var(--r-ctl); }
+.hud-campus-btn { height: 100%; padding: 0 12px; border: 0; border-radius: calc(var(--r-ctl) - 4px); background: transparent; color: var(--k-ink); font: var(--k-font); cursor: pointer; white-space: nowrap; transition: background 160ms ease-out, transform 100ms ease-out; }
+.hud-campus-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.hud-campus-btn:active { transform: scale(0.97); }
+.hud-campus-btn[aria-pressed="true"] { background: var(--k-accent); color: #1c2226; }
 
-.hud-campus-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--k-bg);
-  border: 1px solid rgba(255, 212, 92, 0.25);
-  border-radius: var(--r-ctl);
-  color: var(--k-mute);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 180ms ease;
-  backdrop-filter: blur(8px);
-}
-.hud-campus-btn:hover {
-  background: rgba(255, 212, 92, 0.15);
-  border-color: var(--k-accent);
-  color: var(--k-ink);
-  box-shadow: 0 18px 40px #000a;
-  transform: translateY(-1px);
-}
-.hud-campus-btn.active {
-  background: rgba(255, 212, 92, 0.25);
-  border-color: var(--k-accent);
-  color: var(--k-accent);
-  box-shadow: 0 18px 40px #000a;
-}
+/* Bottom right: compass + orbit */
+.hud-camera-controls { position: absolute; right: var(--gap-group); bottom: var(--gap-group); display: flex; gap: var(--gap); align-items: center; }
+.hud-compass { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 12px; box-sizing: border-box; border-radius: var(--r-ctl); }
+.hud-compass svg { transition: transform 120ms linear; }
+.hud-orbit-btn { height: var(--ctl); padding: 0 14px; border-radius: var(--r-ctl); color: var(--k-ink); font: var(--k-font); cursor: pointer; transition: background 160ms ease-out, transform 100ms ease-out; }
+.hud-orbit-btn:hover { background: rgba(31, 48, 57, 0.85); }
+.hud-orbit-btn:active { transform: scale(0.97); }
+.hud-orbit-btn[aria-pressed="true"] { background: var(--k-accent); border-color: var(--k-accent); color: #1c2226; }
 
-/* Orbit & Camera Mode Controls */
-.hud-camera-controls {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-end;
-}
+/* Building sheet: rises from the bottom edge where it will leave to */
+.hud-sheet { position: absolute; left: var(--gap-group); bottom: var(--gap-group); width: min(360px, calc(100% - 2 * var(--gap-group))); box-sizing: border-box; padding: 16px; border-radius: var(--r-panel); display: flex; flex-direction: column; gap: 14px; transform-origin: bottom left; animation: hud-rise 320ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes hud-rise { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+.hud-sheet header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.hud-sheet small { color: var(--k-mute); font: 600 11px var(--font-sans); text-transform: capitalize; }
+.hud-sheet h2 { margin: 2px 0 0; font: 700 20px/1.15 var(--font-sign); letter-spacing: -0.01em; }
+.hud-close { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: var(--k-ink); cursor: pointer; transition: background 160ms ease-out, transform 100ms ease-out; }
+.hud-close:hover { background: rgba(255, 255, 255, 0.18); }
+.hud-close:active { transform: scale(0.94); }
+.hud-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 0; overflow: hidden; border-radius: var(--r-ctl); background: var(--k-line); }
+.hud-stats div { padding: 10px 12px; background: rgba(21, 33, 40, 0.85); }
+.hud-stats dt { color: var(--k-mute); font: 500 11px var(--font-sans); }
+.hud-stats dd { margin: 2px 0 0; font: 700 16px var(--font-sans); }
+.hud-engage-btn { height: calc(var(--ctl) + 4px); border: 0; border-radius: var(--r-ctl); background: var(--k-accent); color: #1c2226; font: 700 14px var(--font-sans); cursor: pointer; transition: filter 160ms ease-out, transform 100ms ease-out; }
+.hud-engage-btn:hover { filter: brightness(1.06); }
+.hud-engage-btn:active { transform: scale(0.98); }
 
-.hud-orbit-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: var(--k-bg);
-  border: 1px solid rgba(255, 212, 92, 0.4);
-  border-radius: var(--r-ctl);
-  color: #ffd45c;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 180ms ease;
-  backdrop-filter: blur(10px);
-}
-.hud-orbit-btn:hover {
-  background: rgba(255, 212, 92, 0.2);
-  box-shadow: 0 18px 40px #000a;
-}
-.hud-orbit-btn.orbiting {
-  border-color: var(--k-accent);
-  color: var(--k-accent);
-  box-shadow: 0 18px 40px #000a;
-}
+.hud-hint { position: absolute; left: 50%; bottom: var(--gap-group); transform: translateX(-50%); margin: 0; height: var(--ctl); display: flex; align-items: center; padding: 0 16px; box-sizing: border-box; border-radius: var(--r-pill); color: var(--k-mute); font-weight: 500; white-space: nowrap; }
 
-.hud-radar-spinner {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid transparent;
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: hud-spin 1.5s linear infinite;
-}
-@keyframes hud-spin {
-  to { transform: rotate(360deg); }
-}
+.hud-campus-btn:focus-visible, .hud-orbit-btn:focus-visible, .hud-close:focus-visible, .hud-engage-btn:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 2px; }
 
-/* Target Lock Tactical Card */
-.hud-target-card {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  width: min(380px, calc(100% - 48px));
-  padding: 18px 20px;
-  background: var(--k-bg);
-  border: 1px solid rgba(255, 212, 92, 0.45);
-  border-radius: var(--r-panel);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 18px 40px #000a;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  animation: hud-card-appear 220ms cubic-bezier(0.16, 1, 0.3, 1);
+@media (max-width: 720px) {
+  .hud-campus-switch { right: var(--gap-group); overflow-x: auto; scrollbar-width: none; }
+  .hud-hint { display: none; }
+  .hud-camera-controls { bottom: auto; top: calc(var(--gap-group) + var(--ctl) + var(--gap)); }
+  .hud-sheet { right: var(--gap-group); width: auto; }
 }
-
-@keyframes hud-card-appear {
-  from { opacity: 0; transform: translateY(12px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.hud-target-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.hud-target-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 7px;
-  background: rgba(127, 214, 166, 0.18);
-  border: 1px solid #7fd6a6;
-  border-radius: var(--r-ctl);
-  color: #7fd6a6;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.hud-target-close {
-  background: none;
-  border: none;
-  color: var(--k-mute);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 4px;
-}
-.hud-target-close:hover { color: var(--k-ink); }
-
-.hud-target-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--k-ink);
-  font-family: inherit;
-}
-
-.hud-target-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--k-line);
-  border-radius: var(--r-ctl);
-}
-
-.hud-metric-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-.hud-metric-box span {
-  font-size: 9px;
-  color: var(--k-mute);
-}
-.hud-metric-box b {
-  font-size: 13px;
-  color: var(--k-accent);
-}
-
-.hud-engage-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 12px;
-  background: var(--k-accent);
-  border: none;
-  border-radius: var(--r-ctl);
-  color: #1c2226;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 18px 40px #000a;
-  transition: all 180ms ease;
-}
-.hud-engage-btn:hover {
-  filter: brightness(1.15);
-  box-shadow: 0 18px 40px #000a;
-  transform: translateY(-1px);
-}
-.hud-engage-btn:active {
-  transform: translateY(1px);
-}
-
-.hud-target-subtext {
-  font-size: 10px;
-  color: var(--k-mute);
-  text-align: center;
-  margin: 0;
-}
-
-/* Interior control kit: no viewfinder corners, kit control height */
-.hud-corner { display: none; }
-.hud-campus-btn, .hud-orbit-btn, .hud-engage-btn { min-height: var(--ctl); font: var(--k-font); }
-.hud-campus-btn.active, .hud-orbit-btn.orbiting { background: var(--k-accent); border-color: var(--k-accent); color: #1c2226; }
-.hud-orbit-btn { color: var(--k-ink); border-color: var(--k-line); }
-.hud-orbit-btn:hover, .hud-campus-btn:hover { background: var(--k-bg-hi); color: var(--k-ink); }
-.hud-pill, .hud-stat-item, .hud-target-card { border-color: var(--k-line); }
+@media (prefers-reduced-motion: reduce) { .hud-sheet { animation: opacity-in 160ms ease-out; } .hud-compass svg { transition: none; } @keyframes opacity-in { from { opacity: 0; } } }
+@media (prefers-reduced-transparency: reduce) { .hud-material { background: var(--k-bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (prefers-contrast: more) { .hud-material { background: var(--k-bg); border-color: var(--k-ink); } }

@@ -225,11 +225,8 @@ export default function MapView() {
 
       el.innerHTML = `
         <div class="fw-drone-marker-pin">
-          <span class="fw-marker-radar-dot">
-            <span class="fw-marker-ping"></span>
-          </span>
+          <span class="fw-marker-dot"></span>
           <span class="fw-marker-tag">${truncate(b.name)}</span>
-          <span class="fw-marker-badge">${b.floors}F</span>
         </div>
       `;
 

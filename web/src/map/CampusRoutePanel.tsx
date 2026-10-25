@@ -189,7 +189,7 @@ export function CampusRoutePanel({ mapRef, buildings, selected }: Props) {
   useEffect(() => { if (!guidingOutdoor) { youMarker.current?.remove(); youMarker.current = null; } }, [guidingOutdoor]);
 
   if (!open) {
-    return <button type="button" className="fw-route-toggle" onClick={() => setOpen(true)}>🧭 Route between buildings</button>;
+    return <button type="button" className="fw-route-toggle" onClick={() => setOpen(true)}>Route between buildings</button>;
   }
 
   if (result && journey !== null) {
