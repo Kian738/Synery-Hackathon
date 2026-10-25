@@ -2,6 +2,20 @@
 
 Synera Track 01, Industrial Agents Hackathon 2026. You give Floorwise a floor plan and it learns the building; after that, anyone can ask it the way, by text or by voice.
 
+## Submission (everything for judging is in this repository)
+
+| What | Where |
+|---|---|
+| Answers for the public test set (required package) | [`SUBMISSION/answers.json`](SUBMISSION/answers.json) and [`SUBMISSION/BENCHMARK.md`](SUBMISSION/BENCHMARK.md) |
+| The kit's CSV (`question_id,answer`, last line `Answer: ...`) | [`submissions/team_floorwise_test.csv`](submissions/team_floorwise_test.csv) |
+| Run it on any building (the Sunday command) | `uv run run_benchmark <building_dir> <questions.json> <answers.json or .csv>`; the JSON also carries `route`, `route_elements`, `legs` and `length_m` |
+| Rebuild the public-test package | `uv run fw submit` |
+| The app | `uv sync`, `cd web && npm install && npm run build`, then `uv run fw start` and open http://localhost:8000 |
+| The multi-hop demo in one click | **Run demo** (Welcome panel or top bar), or open `/?demo=fire`: a 35 s narrated fire scenario (exact evacuation flow, minimum-cut doors with the capacity arithmetic, responder route, verified door fix). Chosen by measurement with `uv run python -m eval.demo_pick` |
+| Results and their limits | [Results](#results-offline-no-api-calls), [multi-hop section](#multi-hop-scenarios-fire-evacuation-door-fixes), [`docs/JUDGING.md`](docs/JUDGING.md), [`docs/STATUS.md`](docs/STATUS.md) |
+
+Honest limits: the public test set has no gold answers, so the CSV and JSON are predictions; the dev benchmark (138/138 with the organisers' scorer) and the route checks are the evidence. Evacuation uses seat-count occupants, no smoke model, and is a pre-screen, not a compliance check.
+
 **Design: neurosymbolic.** Claude handles language: parsing questions, linking names to rooms, dialogue, asking back and explaining. A deterministic 3D scene graph handles space: geometry, routing, reachability and what-if simulation. Frontier LLMs are unreliable at raw geometry. FloorplanQA (ICML 2026) shows them breaking physical constraints on JSON floor plans. Graph-grounded agents do much better (Floorplan2Guide, SayPlan, SG-Nav, HOV-SG). So every number Floorwise states comes from the core, and Claude never estimates a distance.
 
 ```
