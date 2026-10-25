@@ -86,7 +86,12 @@ function LiftCar({ stops, y, target }: { stops: Stop[]; y: { current: number }; 
   const yaw = Math.atan2(r.uy, r.ux), s = stop.front, off = s * (r.length / 2 - cl / 2 - 0.2);
   return (
     <group ref={group} position={[r.cx + off * r.ux, y.current, -(r.cy + off * r.uy)]} rotation={[0, yaw, 0]}>
-      <mesh position={[0, 1.15, 0]} castShadow><boxGeometry args={[cl, 2.25, cw]} /><meshStandardMaterial color="#c7d6db" emissive="#5d7f8c" emissiveIntensity={0.35} metalness={0.3} roughness={0.4} /></mesh>
+      {/* hollow car: floor, ceiling, back and side walls; the front (toward the landing door) is open */}
+      <mesh position={[0, 0.05, 0]} receiveShadow><boxGeometry args={[cl, 0.1, cw]} /><meshStandardMaterial color="#8a9aa0" metalness={0.3} roughness={0.5} /></mesh>
+      <mesh position={[0, 2.2, 0]}><boxGeometry args={[cl, 0.1, cw]} /><meshStandardMaterial color="#c7d6db" emissive="#e8f6fa" emissiveIntensity={0.5} /></mesh>
+      <mesh position={[-s * (cl / 2 - 0.025), 1.12, 0]} castShadow><boxGeometry args={[0.05, 2.2, cw]} /><meshStandardMaterial color="#aebcc2" metalness={0.45} roughness={0.4} /></mesh>
+      {[-1, 1].map(z => <mesh key={z} position={[0, 1.12, z * (cw / 2 - 0.025)]} castShadow><boxGeometry args={[cl, 2.2, 0.05]} /><meshStandardMaterial color="#b9c7cc" metalness={0.4} roughness={0.4} /></mesh>)}
+      <mesh position={[-s * (cl / 2 - 0.06), 1.0, 0]}><boxGeometry args={[0.02, 0.9, cw * 0.6]} /><meshStandardMaterial color="#d9e3e6" metalness={0.8} roughness={0.15} /></mesh>
     </group>
   );
 }

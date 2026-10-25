@@ -3,6 +3,10 @@ import type React from "react";
 // Signage-style pictograms (ISO 7001/7010-inspired), drawn as simple strokes so they read at 20 px.
 
 const PATHS: Record<string, React.ReactNode> = {
+  chevron: <path d="M6 9l6 6 6-6"/>,
+  upload: <path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>,
+  search: <><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></>,
+  jump: <path d="M12 5v14M6 13l6 6 6-6"/>,
   cube: <><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></>,
   plan: <><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 10h8M11 3v7M15 21v-6h6M11 14h4"/></>,
   walk: <><circle cx="13" cy="4.5" r="2"/><path d="M12 9l-3 3-2 5M12 9l3 3v4l2 4M9 12l-1 3-3 2"/></>,

@@ -52,17 +52,19 @@ export function officeChair(): Build {
 
 export function sofa(): Build {
   return b => {
-    const arm = clamp(b.w * 0.12, 0.08, 0.2), backT = Math.min(0.2, b.d * 0.28);
-    b.box(0, 0.05, 0, b.w, 0.33, b.d, P.fabric);
-    b.box(0, 0.38, b.hd - backT / 2, b.w, 0.42, backT, P.fabric);
-    for (const x of [-1, 1]) b.box(x * (b.hw - arm / 2), 0.38, 0, arm, 0.22, b.d - backT, "#4a6173");
+    const arm = clamp(b.w * 0.11, 0.1, 0.2), backT = Math.min(0.22, b.d * 0.3), fabric = P.fabric, light = "#617c90", dark = "#4a6173";
+    // plinth, padded seat with a soft crown, tilted back cushions, rounded arms and short legs
+    b.box(0, 0.08, 0, b.w, 0.22, b.d, dark);
+    b.box(0, 0.3, -backT / 2 + 0.01, b.w - 2 * arm, 0.12, b.d - backT, fabric);
+    b.box(0, 0.3, b.hd - backT / 2, b.w, 0.55, backT, fabric);
+    for (const x of [-1, 1]) b.box(x * (b.hw - arm / 2), 0.1, 0, arm, 0.46, b.d, dark);
     if (!b.interior) return;
-    const n = clamp(Math.round((b.w - 2 * arm) / 0.65), 1, 4), cw = (b.w - 2 * arm) / n;
+    const n = clamp(Math.round((b.w - 2 * arm) / 0.7), 1, 4), cw = (b.w - 2 * arm) / n;
     spread(n, b.w - 2 * arm).forEach(x => {
-      b.box(x, 0.38, -backT / 2, cw - 0.02, 0.12, b.d - backT - 0.02, "#617c90");
-      b.box(x, 0.5, b.hd - backT - 0.06, cw - 0.04, 0.3, 0.12, "#617c90");
+      b.sph(x, 0.45, -backT / 2, cw - 0.04, light, 0.16, b.d - backT - 0.06);
+      b.tilt(x, 0.64, b.hd - backT - 0.05, cw - 0.05, 0.4, 0.14, -0.2, light);
     });
-    for (const x of [-1, 1]) b.box(x * (b.hw - 0.05), 0, b.hd - 0.05, 0.05, 0.05, 0.05, P.black);
+    for (const x of [-1, 1]) { b.cylZ(x * (b.hw - arm / 2), 0.57, 0, b.d - 0.04, arm * 0.95, light); b.cyl(x * (b.hw - 0.07), 0, b.hd - 0.07, 0.05, 0.08, P.black); b.cyl(x * (b.hw - 0.07), 0, -b.hd + 0.07, 0.05, 0.08, P.black); }
   };
 }
 
@@ -78,15 +80,18 @@ export function armchair(): Build {
 
 export function bed(single: boolean): Build {
   return b => {
-    b.box(0, 0.1, 0, b.w, 0.22, b.d, P.woodDark);
-    b.box(0, 0.32, -b.d * 0.03, b.w * 0.94, 0.2, b.d * 0.9, P.bed);
-    b.box(0, 0.1, b.hd - 0.04, b.w, 0.8, 0.08, P.woodDark);
-    const n = single || b.w < 1.2 ? 1 : 2, pw = Math.min(0.6, b.w / n * 0.8);
-    if (!b.interior) { b.box(0, 0.52, b.hd - 0.3, b.w * 0.8, 0.1, 0.38, P.pillow); return; }
-    spread(n, b.w).forEach(x => b.box(x, 0.52, b.hd - 0.3, pw, 0.1, 0.38, P.pillow));
-    b.box(0, 0.52, -b.d * 0.14, b.w * 0.92, 0.04, b.d * 0.5, P.blanket);
-    b.box(0, 0.1, -b.hd + 0.03, b.w, 0.4, 0.06, P.woodDark);
-    for (const x of [-1, 1]) for (const z of [-1, 1]) b.box(x * (b.hw - 0.04), 0, z * (b.hd - 0.04), 0.06, 0.1, 0.06, P.black);
+    const frame = P.woodDark;
+    // frame with headboard, mattress, rounded pillows, folded duvet
+    b.box(0, 0.12, 0, b.w, 0.2, b.d, frame);
+    b.box(0, 0.32, -b.d * 0.01, b.w * 0.94, 0.2, b.d * 0.94, "#e6ebee");
+    b.box(0, 0.12, b.hd - 0.04, b.w, 0.85, 0.08, frame);
+    const n = single || b.w < 1.2 ? 1 : 2, pw = Math.min(0.65, b.w / n * 0.85);
+    if (!b.interior) { b.sph(0, 0.58, b.hd - 0.3, b.w * 0.7, P.pillow, 0.14, 0.4); b.box(0, 0.5, -b.d * 0.12, b.w * 0.9, 0.06, b.d * 0.55, P.blanket); return; }
+    spread(n, b.w).forEach(x => b.sph(x, 0.6, b.hd - 0.3, pw, P.pillow, 0.16, 0.42));
+    b.box(0, 0.5, -b.d * 0.12, b.w * 0.92, 0.07, b.d * 0.56, P.blanket);
+    b.sph(0, 0.55, b.d * 0.14, b.w * 0.9, "#8497b3", 0.1, 0.22);
+    b.box(0, 0.12, -b.hd + 0.03, b.w, 0.38, 0.06, frame);
+    for (const x of [-1, 1]) for (const z of [-1, 1]) b.cyl(x * (b.hw - 0.04), 0, z * (b.hd - 0.04), 0.07, 0.12, P.black);
   };
 }
 
@@ -662,15 +667,16 @@ export function whiteboard(): Build {
 
 export function toilet(): Build {
   return b => {
-    const bw = Math.min(b.w, 0.42) * 0.9, bd = Math.min(b.d * 0.7, 0.52), cz = -b.hd + bd / 2 + 0.02;
-    // pedestal, bowl, seat ring, cistern against the wall behind and a flush button
-    b.cyl(0, 0, cz + bd * 0.1, bw * 0.55, 0.28, P.offWhite, bd * 0.6);
-    b.cyl(0, 0.28, cz, bw, 0.14, P.white, bd);
-    b.cyl(0, 0.42, cz, bw * 0.98, 0.03, P.pillow, bd * 0.98);
-    b.box(0, 0.3, b.hd - 0.09, bw * 0.92, 0.5, 0.17, P.white);
+    const bw = Math.min(b.w, 0.42) * 0.9, bd = Math.min(b.d * 0.7, 0.54), cz = -b.hd + bd / 2 + 0.02;
+    // pedestal, rounded bowl, seat ring and lid, cistern against the wall behind and a flush button
+    b.cyl(0, 0, cz + bd * 0.1, bw * 0.55, 0.3, P.offWhite, bd * 0.6);
+    b.sph(0, 0.36, cz, bw, P.white, 0.2, bd);
+    b.cyl(0, 0.44, cz, bw * 0.98, 0.03, P.pillow, bd * 0.98);
+    b.box(0, 0.3, b.hd - 0.09, bw * 0.92, 0.52, 0.17, P.white);
     if (!b.interior) return;
-    b.cyl(0, 0.45, cz, bw * 0.7, 0.008, "#bfd3da", bd * 0.72);
-    b.cyl(0, 0.8, b.hd - 0.09, 0.05, 0.015, P.steel);
+    b.cyl(0, 0.465, cz, bw * 0.68, 0.008, "#bfd3da", bd * 0.7);
+    b.cyl(0, 0.81, b.hd - 0.09, 0.05, 0.015, P.steel);
+    b.tilt(0, 0.58, b.hd - 0.2, bw * 0.8, 0.34, 0.03, -0.12, P.pillow);
   };
 }
 

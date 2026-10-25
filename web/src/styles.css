@@ -411,12 +411,7 @@ body {
 .large-text .agent-reply{font-size:17px!important;line-height:1.5;}
 
 /* floor identity colour on the rail dots; chat surface: calmer, rounder, one visual language */
-.navigation-panel form { border-top:1px solid #2b3c45; padding:10px 12px; gap:8px; }
-.navigation-panel form textarea { border-radius:14px !important; border:1px solid #34464f !important; background:#10191e !important; padding:10px 14px !important; }
-.navigation-panel form button { border-radius:50% !important; }
-.navigation-panel .overflow-x-auto button { border-radius:999px !important; border-color:#34464f !important; background:#1d2c34; }
 .conversation-scroll { gap:10px; }
-.conversation-scroll>p.border-r-4 { margin-left:auto; max-width:88%; padding:9px 14px !important; border:0 !important; border-radius:16px 16px 4px 16px; background:#2a3d47; text-align:left !important; font-size:15px; }
 .conversation-scroll .agent-reply { border:0 !important; padding:2px 2px !important; font-size:15px; line-height:1.5; }
 .turn-usage summary { color:#8fa3ab; font-size:12px; }
 

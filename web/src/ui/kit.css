@@ -103,3 +103,37 @@
 .k-ctl.accent:disabled { opacity:1; background:#3a3320; border-color:#4a4228; color:#c9bd8e; }
 .auto-speed { height:30px; padding:0 12px; border:1px solid var(--k-line); border-radius:var(--r-pill); background:transparent; color:var(--k-mute); font:var(--k-font); cursor:pointer; }
 .auto-speed[aria-pressed="true"] { background:var(--k-accent); border-color:var(--k-accent); color:#1c2226; }
+
+/* ---- left panel: compact header, start chip, conversation chrome, composer ---- */
+.k-head { display:flex; align-items:center; gap:var(--gap); padding:12px var(--gap-group) 8px; }
+.k-head .k-dock { margin-left:auto; flex:none; }
+.k-bmenu { flex:1 1 auto; min-width:0; }
+.k-btrigger { max-width:100%; width:100%; justify-content:space-between; padding:0 12px; }
+.k-btitle { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:700 15px var(--font-sans); text-align:left; }
+.k-bmenu .k-pop-panel { width:min(340px, 90vw); max-height:min(70vh, 520px); }
+.k-search { display:flex; align-items:center; gap:8px; height:var(--ctl); padding:0 12px; box-sizing:border-box; border:1px solid var(--k-line); border-radius:var(--r-ctl); background:#10191e; color:var(--k-mute); }
+.k-search input { flex:1; min-width:0; background:transparent; border:0; outline:0; color:var(--k-ink); font:var(--k-font); }
+.k-blist { overflow-y:auto; display:flex; flex-direction:column; gap:2px; min-height:0; }
+.k-brow { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; padding:8px 12px; border:0; border-radius:var(--r-ctl); background:transparent; color:var(--k-ink); cursor:pointer; text-align:left; }
+.k-brow:hover { background:var(--k-bg-hi); } .k-brow[aria-current="true"] { box-shadow:inset 3px 0 0 var(--k-accent); background:var(--k-bg-hi); }
+.k-brow-name { font:600 14px var(--font-sans); } .k-brow-meta { font:500 12px var(--font-sans); color:var(--k-mute); }
+
+.k-start { padding:0 var(--gap-group) 8px; border-bottom:1px solid var(--k-line); }
+.k-startbtn { display:flex; align-items:center; gap:8px; width:100%; min-height:32px; padding:0 4px; border:0; background:transparent; color:var(--k-ink); font:500 14px var(--font-sans); cursor:pointer; text-align:left; }
+.k-startbtn span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .k-startbtn b { font-weight:700; }
+.k-startbtn u { color:var(--k-mute); text-underline-offset:3px; }
+.k-hint { margin:0; padding:0 4px; color:var(--k-mute); font:500 12px var(--font-sans); }
+
+.k-next { display:flex; flex-wrap:wrap; gap:var(--gap); padding-top:4px; }
+.k-next .k-ctl { height:auto; min-height:34px; padding:6px 12px; white-space:normal; text-align:left; font-weight:500; }
+.k-jump { position:sticky; bottom:10px; margin-left:auto; display:flex; height:34px; padding:0 12px; border:1px solid var(--k-line); border-radius:var(--r-pill); background:var(--k-bg); color:var(--k-ink); font:var(--k-font); align-items:center; gap:6px; cursor:pointer; box-shadow:0 6px 18px #0007; }
+
+.k-composer { position:relative; display:flex; align-items:flex-end; gap:var(--gap); padding:var(--gap) var(--gap-group) var(--gap-group); border-top:1px solid var(--k-line); }
+.k-input { flex:1; min-width:0; height:var(--ctl); box-sizing:border-box; padding:9px 14px; border:1px solid var(--k-line); border-radius:var(--r-ctl); background:#10191e; color:var(--k-ink); font:500 15px var(--font-sans); resize:none; }
+.k-input:focus { outline:2px solid var(--k-accent); outline-offset:1px; }
+.k-ctl[data-live="true"] { background:var(--k-danger); border-color:var(--k-danger); color:#2a1214; }
+.k-voice-error { position:absolute; bottom:100%; left:var(--gap-group); right:var(--gap-group); margin:0 0 var(--gap); padding:var(--gap) 12px; border:1px solid var(--k-line); border-radius:var(--r-ctl); background:var(--k-bg); color:var(--k-ink); font:var(--k-font); }
+.turn-usage { padding:4px var(--gap-group) !important; border-top:0 !important; }
+.turn-usage summary { cursor:pointer; color:var(--k-mute); font:500 12px var(--font-sans); }
+.k-search { flex:none; }
+.k-pop-title { flex:none; }

@@ -118,6 +118,9 @@ test("chat stays usable through multiple replies and promise-returning scrolling
     await expect(page.getByRole("region",{name:"Conversation"})).toContainText(text);
     await expect(page.getByRole("button",{name:"Recover view"})).toHaveCount(0);
   }
+  // only the latest turn is shown; earlier ones sit behind one button
+  await expect(page.getByText("The coffee machine is in the kitchen.")).toHaveCount(1);
+  await page.getByRole("button",{name:/Earlier conversation/}).click();
   await expect(page.getByText("The coffee machine is in the kitchen.")).toHaveCount(2);
 });
 

@@ -160,25 +160,21 @@ export default function Navigator() {
     <div className={`navigator-shell flex h-full flex-col lg:flex-row ${!nav.route && nav.messages.length === 0 ? "first-use" : ""} ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`}>
       {/* ---------- sign column ---------- */}
       <aside className="order-2 flex min-h-0 flex-1 flex-col navigation-panel bg-ink text-white lg:order-1 lg:w-[370px] lg:flex-none">
-        <header className="flex items-center gap-2 border-b border-ink-2 px-4 py-3">
-          <BuildingPicker buildings={buildings} value={buildingId} onChange={(b) => setParams({ building: b })} name={g.building.name} />
-          <button onClick={() => setBuildingImport(true)} className="k-ctl ml-auto">Import plan</button>
+        <header className="k-head">
+          <BuildingMenu buildings={buildings} value={buildingId} onChange={(b) => setParams({ building: b })} name={g.building.name} />
+          <Dock>
+            <IconButton label="Step-free" icon="wheelchair" pressed={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} />
+            <IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} />
+            <IconButton label="Import plan" icon="upload" onClick={() => setBuildingImport(true)} />
+          </Dock>
         </header>
-
-        <div className="flex flex-wrap items-center gap-2 border-b border-ink-2 px-4 py-2.5">
-          <Toggle on={nav.stepFree} onClick={() => nav.setStepFree(!nav.stepFree)} icon="wheelchair" label="Step-free" tone="escape" />
-          <Toggle on={voiceOut} onClick={() => { setVoiceOut(!voiceOut); if (voiceOut) stopSpeaking(); }} icon="speaker" label="Read aloud" tone="mark" />
-        </div>
-        <div className="border-b border-ink-2 px-4 py-2.5">
-          <button onClick={() => setPicking(!picking)} aria-expanded={picking}
-            className="flex w-full items-center gap-2 text-left text-[15px] hover:text-mark">
-            <Pictogram name="here" size={18} className="shrink-0 text-escape" />
-            <span className="min-w-0 flex-1 truncate">
-              {nav.here ? <>Starting from <b className="font-semibold">{labelOf(g, nav.here)}</b></> : "Where are you? Choose a start"}
-            </span>
-            <span className="shrink-0 text-sm text-ink-4 underline underline-offset-4">change</span>
+        <div className="k-start">
+          <button onClick={() => setPicking(!picking)} aria-expanded={picking} className="k-startbtn">
+            <Pictogram name="here" size={16} className="shrink-0 text-escape" />
+            <span>{nav.here ? <>Starting from <b>{labelOf(g, nav.here)}</b></> : "Where are you? Choose a start"}</span>
+            <u>change</u>
           </button>
-          {nav.here && <p className="mt-1 text-[13px] text-ink-4">{nav.hereSource === "default" ? "Entrance used as start. Change it if you’re elsewhere." : nav.hereSource === "link" ? "Start supplied by link. Change it if you’re elsewhere." : "Start set by you. Location is not tracked."}</p>}
+          {nav.here && <p className="k-hint">{nav.hereSource === "default" ? "Entrance used as start. Change it if you’re elsewhere." : nav.hereSource === "link" ? "Start supplied by link. Change it if you’re elsewhere." : "Start set by you. Location is not tracked."}</p>}
           {picking && (
             <StartPicker geometry={g} onPick={(id) => { nav.setHere(id); const room=g.spaces.find(s=>s.id===id);if(room)nav.setFloorId(room.floor_id);setPicking(false); nav.setNotice(`Location set: ${labelOf(g,id)}. Your green marker is set manually.`); }} />
           )}
@@ -193,7 +189,7 @@ export default function Navigator() {
           {!nav.route && nav.messages.length === 0 && (
             <Welcome categories={cats} onPick={(q) => nav.goTo(q)} onAsk={nav.ask} hasHere={!!nav.here} buildingName={g.building.name} examples={examples} />
           )}
-          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
+          <Conversation onResult={result=>{nav.setVisualResult(result);nav.setHighlights(new Set(result.entities.map(e=>e.id)));requestAnimationFrame(()=>chatWorkspace.current?.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"}));}} onRerun={q=>nav.ask(q)} suggest={examples} onAsk={q=>nav.ask(q)} busyLabel={nav.busyLabel} geometry={g} onRoom={id=>{const room=g.spaces.find(s=>s.id===id);if(room){setView("3d");setQuestionOpen(false);focusRoom(room);}}} messages={nav.messages} busy={nav.busy} onOption={(id) => nav.goTo(id)} onDecide={nav.decideChange} />
         </div>
 
         {nav.route && cats.length > 0 && (
@@ -205,7 +201,7 @@ export default function Navigator() {
             ))}
           </div>
         )}
-        {nav.turnUsage&&<details className="turn-usage"><summary>Response details</summary><div>{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}{typeof nav.turnUsage.first_text_ms==="number"?` · first text ${(nav.turnUsage.first_text_ms/1000).toFixed(1)} s`:""}</div></details>}
+        {nav.turnUsage&&<details className="turn-usage"><summary aria-label="Response details">{Number(nav.turnUsage.latency_ms)>0?`${(Number(nav.turnUsage.latency_ms)/1000).toFixed(1)} s`:"Response"} · details</summary><div>{nav.turnUsage.dispatch==="deterministic"?"Computed locally · no model tokens":`${nav.turnUsage.dispatch==="parser"?"Language parsed":"Agent response"} · ${Number(nav.turnUsage.input_tokens??0)+Number(nav.turnUsage.output_tokens??0)+Number(nav.turnUsage.cache_read_input_tokens??0)+Number(nav.turnUsage.cache_creation_input_tokens??0)} model tokens`}{typeof nav.turnUsage.estimated_cost_usd==="number"&&nav.turnUsage.dispatch!=="deterministic"?` · est. $${nav.turnUsage.estimated_cost_usd.toFixed(4)}`:""}{typeof nav.turnUsage.latency_ms==="number"?` · ${(nav.turnUsage.latency_ms/1000).toFixed(1)} s`:""}{typeof nav.turnUsage.first_text_ms==="number"?` · first text ${(nav.turnUsage.first_text_ms/1000).toFixed(1)} s`:""}</div></details>}
         <Composer onStop={nav.stop} busy={nav.busy} onSend={text=>{nav.ask(text,selected?.id);setSelected(null);setWeakOpen(false);setPhoneOpen(false);setToolsOpen(false);}} />
       </aside>
 
@@ -311,37 +307,36 @@ function VisualAnswer({result,total,sessionId,onClose,onPick,onFloor,geometry}:{
   </section>;
 }
 
-function BuildingPicker({ buildings, value, onChange, name }: { buildings: BuildingRow[]; value: string; onChange: (b: string) => void; name: string }) {
-  const groups = useMemo(() => {
-    const out: Record<string, BuildingRow[]> = {};
-    for (const b of buildings) (out[b.split] ??= []).push(b);
-    return out;
-  }, [buildings]);
+function BuildingMenu({ buildings, value, onChange, name }: { buildings: BuildingRow[]; value: string; onChange: (b: string) => void; name: string }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const recent = useMemo(() => { try { return JSON.parse(localStorage.getItem("floorwise.recent-buildings") ?? "[]") as string[]; } catch { return []; } }, [open]);
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return buildings.filter(b => !q || `${b.name} ${b.building_id} ${b.source}`.toLowerCase().includes(q));
+  }, [buildings, query]);
+  const pick = (id: string) => {
+    try { localStorage.setItem("floorwise.recent-buildings", JSON.stringify([id, ...recent.filter(r => r !== id)].slice(0, 5))); } catch { /* storage may be blocked */ }
+    setOpen(false); setQuery(""); onChange(id);
+  };
+  const recentRows = recent.map(id => buildings.find(b => b.building_id === id)).filter((b): b is BuildingRow => !!b && b.building_id !== value);
+  const groups = useMemo(() => { const out: Record<string, BuildingRow[]> = {}; for (const b of matches) (out[b.split] ??= []).push(b); return out; }, [matches]);
+  const row = (b: BuildingRow) => <button key={b.building_id} role="menuitem" className="k-brow" aria-current={b.building_id === value ? "true" : undefined} onClick={() => pick(b.building_id)}>
+    <span className="k-brow-name">{b.name}</span><span className="k-brow-meta">{b.source} · {b.floors} floor{b.floors === "1" ? "" : "s"}</span></button>;
   return (
-    <label className="flex min-w-0 flex-col">
-      <span className="sr-only">Building</span>
-      <span title={name} className="building-title font-sign text-[22px] font-bold leading-tight tracking-tight">{name}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Change building"
-        className="-ml-1 mt-0.5 w-[150px] cursor-pointer appearance-none bg-transparent text-sm text-ink-4 hover:text-white focus:text-white">
-        <option value={value} hidden>Change building ▾</option>
-        {Object.entries(groups).map(([split, rows]) => (
-          <optgroup key={split} label={split}>
-            {rows.map((b) => <option key={b.building_id} value={b.building_id} className="text-ink">{b.name} · {b.building_id}</option>)}
-          </optgroup>
-        ))}
-      </select>
-    </label>
+    <Popover label="Change building" icon="chevron" open={open} onOpenChange={o => { setOpen(o); if (!o) setQuery(""); }} left className="k-bmenu"
+      trigger={<button type="button" className="k-ctl k-btrigger" aria-label="Change building" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="k-btitle" title={name}>{name}</span><Pictogram name="chevron" size={16} /></button>}>
+      <label className="k-search"><Pictogram name="search" size={16} /><input autoFocus placeholder="Search buildings" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search buildings" /></label>
+      <div className="k-blist">
+        {!query && recentRows.length > 0 && <><div className="k-pop-title">Recent</div>{recentRows.map(row)}</>}
+        {Object.entries(groups).map(([split, rows]) => <div key={split}><div className="k-pop-title">{split}</div>{rows.map(row)}</div>)}
+        {!matches.length && <p className="k-hint">No building matches “{query}”.</p>}
+      </div>
+    </Popover>
   );
 }
 
-function Toggle({ on, onClick, icon, label, tone }: { on: boolean; onClick: () => void; icon: string; label: string; tone: "escape" | "mark" }) {
-  const onClass = tone === "escape" ? "bg-escape border-escape text-white" : "bg-mark border-mark text-ink";
-  return (
-    <button type="button" aria-pressed={on} onClick={onClick} className="k-ctl" data-tone={onClass ? tone : undefined}>
-      <Pictogram name={icon} size={17} /> {label}
-    </button>
-  );
-}
 
 function Welcome({ categories: cats, onPick, onAsk, hasHere, buildingName, examples }: {
   categories: { key: string; label: string; query: string; icon: string }[];
@@ -438,7 +433,8 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
   );
 }
 
-function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun }: {
+function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyLabel,onResult,onRerun,suggest=[],onAsk }: {
+  suggest?:string[];onAsk?:(q:string)=>void;
   busyLabel:string;onResult:(r:VisualResult & {total_rows:number})=>void;onRerun:(q:string)=>void;
   geometry:NonNullable<ReturnType<typeof useNavigator>["geometry"]>;onRoom:(id:string)=>void;
   messages: Message[]; busy: boolean; onOption: (id: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
@@ -446,8 +442,9 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
   const [history,setHistory]=useState(false);
   const end = useRef<HTMLDivElement>(null);
   const pinned=useRef(true),lastUser=useRef<number|null>(null);
+  const [atBottom,setAtBottom]=useState(true);
   useEffect(()=>{const user=messages.filter(m=>m.role==='user').at(-1);if(user?.id!==lastUser.current){lastUser.current=user?.id??null;pinned.current=true;}const panel=end.current?.closest<HTMLElement>(".chat-workspace")??end.current?.parentElement;if(panel&&pinned.current)panel.scrollTop=panel.scrollHeight;},[messages,busy]);
-  useEffect(()=>{const panel=end.current?.closest<HTMLElement>(".chat-workspace");if(!panel)return;const update=()=>{pinned.current=panel.scrollHeight-panel.scrollTop-panel.clientHeight<80;};panel.addEventListener('scroll',update,{passive:true});return()=>panel.removeEventListener('scroll',update);},[messages.length,busy]);
+  useEffect(()=>{const panel=end.current?.closest<HTMLElement>(".chat-workspace");if(!panel)return;const update=()=>{pinned.current=panel.scrollHeight-panel.scrollTop-panel.clientHeight<80;setAtBottom(pinned.current);};panel.addEventListener('scroll',update,{passive:true});return()=>panel.removeEventListener('scroll',update);},[messages.length,busy]);
   const turns=useMemo(()=>{
     const turns:Message[][]=[];
     messages.forEach(m=>{if(m.role==="user"||!turns.length)turns.push([]);turns[turns.length-1].push(m);});
@@ -475,7 +472,7 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
               <p className="text-[15.5px]">{m.text}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {m.options.map((o, i) => (
-                  <button key={o.id} onClick={() => onOption(o.id)} className="flex items-center gap-2 border border-white px-3 py-1.5 font-sign text-[15px] hover:bg-white hover:text-ink">
+                  <button key={o.id} onClick={() => onOption(o.id)} className="k-ctl">
                     <span className="grid h-5 w-5 place-items-center bg-mandatory text-[12px] font-bold text-white">{i + 1}</span>{o.label}
                   </button>
                 ))}
@@ -489,8 +486,8 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
               <p className="mt-1 text-[15px]">{m.text}</p>
               {m.state === "pending" ? (
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => onDecide(m, true)} className="bg-white px-3 py-1.5 font-sign font-bold text-ink">Apply to model</button>
-                  <button onClick={() => onDecide(m, false)} className="border border-ink-3 px-3 py-1.5 font-sign">Discard</button>
+                  <button onClick={() => onDecide(m, true)} className="k-ctl accent">Apply to model</button>
+                  <button onClick={() => onDecide(m, false)} className="k-ctl">Discard</button>
                 </div>
               ) : <p className="mt-2 text-sm text-ink-4">{m.state === "applied" ? "Applied." : "Discarded."}</p>}
             </div>
@@ -503,8 +500,10 @@ function Conversation({ messages, busy, onOption, onDecide,geometry,onRoom,busyL
         );
       })}
       {busy&&<RequestStatus label={busyLabel}/>}
+      {!busy&&onAsk&&suggest.length>0&&messages.at(-1)?.role==="agent"&&<div className="k-next" aria-label="Ask next">{suggest.filter(q=>q!==(messages.filter(m=>m.role==="user").at(-1) as {text?:string}|undefined)?.text).slice(0,3).map(q=><button key={q} className="k-ctl" onClick={()=>onAsk(q)}>{q}</button>)}</div>}
       <p className="sr-only" aria-live="polite">{!busy&&messages.some(m=>m.role==='agent'&&m.status!=='streaming')?'New answer available in the conversation.':''}</p>
       <div ref={end} />
+      {!atBottom&&<button type="button" className="k-jump" onClick={()=>end.current?.scrollIntoView({block:"end"})}><Pictogram name="jump" size={16}/>Jump to latest</button>}
     </section>
   );
 }
@@ -524,21 +523,21 @@ function Composer({ busy, onSend,onStop }: { busy: boolean; onSend: (t: string) 
     setText("");
   };
   return (
-    <form onSubmit={(e) => { e.preventDefault(); submit(text); }} className="relative flex gap-2 border-t border-ink-2 p-3">
-      {voiceError && <p role="status" className="absolute bottom-full left-0 right-0 bg-ink-2 p-3 text-sm">{voiceError}</p>}
+    <form onSubmit={(e) => { e.preventDefault(); submit(text); }} className="k-composer">
+      {voiceError && <p role="status" className="k-voice-error">{voiceError}</p>}
       {canListen() && (
         <button type="button" disabled={busy} aria-label={listening ? "Stop listening" : "Speak"} aria-pressed={listening}
           onClick={() => { if (listening) {stopListening.current?.();setListening(false);return;} stopSpeaking();window.dispatchEvent(new Event("floorwise:voice-start"));setVoiceError("");setListening(true);stopListening.current=listen(setText, (t) => { setListening(false); submit(t); }, () => setListening(false), setVoiceError); }}
-          className={`grid h-12 w-12 shrink-0 place-items-center ${listening ? "bg-signal text-white" : "bg-white text-ink hover:bg-concrete"}`}>
-          <Pictogram name="mic" size={22} />
+          className="k-ctl icon" data-live={listening}>
+          <Pictogram name="mic" size={20} />
         </button>
       )}
       <textarea rows={1} maxLength={12000} value={text} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit(text);}}} onChange={(e) => {if(listening){stopListening.current?.();setListening(false);}setText(e.target.value);}} placeholder={listening ? "Listening…" : "Ask the building"}
-        aria-label="Message" aria-describedby="composer-help" className="h-12 min-w-0 flex-1 border border-ink-3 bg-ink-2 px-3 text-[16px] text-white placeholder:text-ink-4 focus:border-white focus:outline-none" />
+        aria-label="Message" aria-describedby="composer-help" className="k-input" />
       <span id="composer-help" className="sr-only">Enter sends; Shift Enter adds a line. Maximum 12000 characters.</span>
-      {busy&&<button type="button" className="border border-ink-3 px-3" onClick={onStop}>Stop</button>}
+      {busy&&<button type="button" className="k-ctl" onClick={onStop}>Stop</button>}
       <button type="submit" disabled={busy || !text.trim()} aria-label="Send"
-        className="grid h-12 w-12 shrink-0 place-items-center bg-mark text-ink disabled:opacity-40"><Pictogram name="send" size={20} /></button>
+        className="k-ctl icon accent"><Pictogram name="send" size={18} /></button>
     </form>
   );
 }

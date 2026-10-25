@@ -30,8 +30,8 @@ export function Segmented<T extends string>({ value, options, onChange, ariaLabe
   );
 }
 
-export function Popover({ label, icon, open, onOpenChange, badge, children, left, className = "" }: {
-  label: string; icon: string; open: boolean; onOpenChange: (v: boolean) => void; badge?: number; children: ReactNode; left?: boolean; className?: string;
+export function Popover({ label, icon, open, onOpenChange, badge, children, left, className = "", trigger }: {
+  trigger?: ReactNode; label: string; icon: string; open: boolean; onOpenChange: (v: boolean) => void; badge?: number; children: ReactNode; left?: boolean; className?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,7 +43,7 @@ export function Popover({ label, icon, open, onOpenChange, badge, children, left
   }, [open, onOpenChange]);
   return (
     <div className={`k-pop ${className}`} ref={root}>
-      <IconButton label={label} icon={icon} pressed={open} badge={badge} onClick={() => onOpenChange(!open)} />
+      {trigger ?? <IconButton label={label} icon={icon} pressed={open} badge={badge} onClick={() => onOpenChange(!open)} />}
       {/* kept mounted so panels owned by menu items (the phone pairing card) survive closing the menu */}
       <div className={`k-pop-panel${left ? " left" : ""}`} role="menu" hidden={!open}>{children}</div>
     </div>
