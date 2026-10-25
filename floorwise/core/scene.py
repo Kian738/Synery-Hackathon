@@ -255,7 +255,7 @@ def apply_rails(data: dict, walls: list[dict], rail_height: float = 1.1, min_ope
     for wall in walls:
         owner = by_space.get(wall.get('space_id') or '')
         is_open = False
-        if owner and owner['type'] in ('corridor', 'stair') and owner['floor_id'] != lowest and owner['id'] in polygons:
+        if owner and owner.get('type') in ('corridor', 'stair') and owner['floor_id'] != lowest and owner['id'] in polygons:
             (ax, ay), (bx, by) = wall['a'], wall['b']
             length = math.hypot(bx - ax, by - ay)
             if length > 1e-6:
