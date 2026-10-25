@@ -181,7 +181,42 @@ def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = F
             """
             return guarded(session.move_asset)(item, to_room)
 
-        tools += [set_closed, add_door, move_item]
+        @beta_tool
+        def remove_door(first_room: str, second_room: str = "") -> str:
+            """Wall up an existing door or opening between two rooms (or by its id). Entrances cannot be removed.
+
+            Args:
+                first_room: Room name/number (or the opening id).
+                second_room: The room on the other side.
+            """
+            return guarded(session.remove_door)(first_room, second_room)
+
+        @beta_tool
+        def add_item(name: str, kind: str, room: str) -> str:
+            """Record a new machine or piece of equipment standing in a room ("put a new 3D printer in 0.21").
+
+            Args:
+                name: Display name, e.g. "3D printer Mk2".
+                kind: Equipment type, e.g. "3d printer", "desk", "cnc mill".
+                room: Room it stands in.
+            """
+            return guarded(session.add_asset)(name, kind, room)
+
+        @beta_tool
+        def remove_item(item: str) -> str:
+            """Remove an item that is no longer there.
+
+            Args:
+                item: Item name or id.
+            """
+            return guarded(session.remove_asset)(item)
+
+        @beta_tool
+        def undo_edit() -> str:
+            """Undo the most recent building edit (door added/removed/widened, item moved/added/removed)."""
+            return guarded(session.undo)()
+
+        tools += [set_closed, add_door, move_item, remove_door, add_item, remove_item, undo_edit]
     from floorwise.agent.insight_tools import make_insight_tools
     from floorwise.agent.scenarios import tools as scenario_tools
     return tools + make_insight_tools(session, allow_edits, exact_items=exact_items) + ([] if exact_items else scenario_tools(session))

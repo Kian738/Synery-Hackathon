@@ -1,0 +1,158 @@
+{
+  "scope": "Frozen reviewed checkpoint only; ongoing Claude working-tree changes excluded",
+  "unit_tests": 440,
+  "fw_check": "passed",
+  "production_build": "passed",
+  "browser_acceptance": "blocked by saved localhost permission rule",
+  "fingerprint": {
+    "version": 1,
+    "git": "02a6aae2ec4bb09bed107e81c402f13340c1386d",
+    "source": "04f32b4f564175fade64",
+    "kit_git": "6a2cdec5bb96b06914429e96d42c5486715f1ebc",
+    "dataset": "fa7b71e429b52786b57a",
+    "frontend": "8cc28dd3615907cf94d4",
+    "provider": "anthropic",
+    "models": {
+      "chat": "claude-opus-5-5",
+      "parser": "claude-haiku-5-5",
+      "judge": "claude-opus-5-5"
+    },
+    "effort": "low"
+  },
+  "suites": [
+    {
+      "suite": "routes",
+      "run": "20261025-021154_routes_963933f9",
+      "correct": 2130,
+      "total": 2130,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "solver",
+      "run": "20261025-021245_solver_705d6a21",
+      "correct": 655,
+      "total": 655,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "parser",
+      "run": "20261025-021253_parser_rules_88766401",
+      "correct": 655,
+      "total": 655,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "parser",
+      "run": "20261025-021255_parser_rules_3c0609c6",
+      "correct": 145,
+      "total": 145,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "e2e",
+      "run": "20261025-021256_e2e_49dec95a",
+      "correct": 653,
+      "total": 655,
+      "known_failures": 2,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "e2e_basic",
+      "run": "20261025-021302_e2e_basic_9275f750",
+      "correct": 2122,
+      "total": 2130,
+      "known_failures": 8,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "sunday",
+      "run": "20261025-021316_sunday_df8f82cc",
+      "correct": 1329,
+      "total": 1338,
+      "known_failures": 9,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "generated",
+      "run": "20261025-021520_generated_7fc5008c",
+      "correct": 150,
+      "total": 150,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "rules",
+      "run": "20261025-021624_rules_58230ef9",
+      "correct": 661,
+      "total": 661,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "roundtrip",
+      "run": "20261025-021859_roundtrip_ef060071",
+      "correct": 236,
+      "total": 236,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "walls",
+      "run": "20261025-021900_walls_030e78c2",
+      "correct": 160,
+      "total": 160,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "robust",
+      "run": "20261025-021933_robust_perturb_d8aaf1c7",
+      "correct": 630,
+      "total": 630,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "metamorphic",
+      "run": "20261025-021938_metamorphic_1052acec",
+      "correct": 860,
+      "total": 860,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "walkability",
+      "run": "20261025-022259_walkability_60432278",
+      "correct": 160,
+      "total": 160,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    },
+    {
+      "suite": "differential",
+      "run": "20261025-022343_differential_d9bf1e10",
+      "correct": 256,
+      "total": 256,
+      "known_failures": 0,
+      "unexplained_failures": 0
+    }
+  ],
+  "live_regression": {
+    "run": "20261025-015702_chat_api_3de72850",
+    "passed": 5,
+    "total": 5,
+    "first_text_ms": [
+      1143,
+      1162,
+      630,
+      690,
+      801
+    ],
+    "scope": "provider/agent transport and computed evidence; not the full 30-case live pack"
+  },
+  "code_checkpoint_commit": "81e2876"
+}

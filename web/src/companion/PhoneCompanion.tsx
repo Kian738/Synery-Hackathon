@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { CompanionClient, REASON_TEXT, type ClientState, type Credentials, type Scheduler, type SocketFactory } from "./client";
 import { Glyph } from "./Glyph";
 import type { RouteState, StepAction } from "./protocol";
+import { ArRoute } from "./ArRoute";
+import { arSupport, turnAngle } from "./ar";
 import { browserSensorEnv, detectSensors, GyroLook, pulse, SENSOR_TEXT, type SensorEnv, type SensorStatus } from "./sensors";
 import "./companion.css";
 
@@ -147,6 +149,16 @@ export function PhoneCompanion(props: PhoneCompanionProps) {
     setState("idle"); setRoute(null); setVerify(null); setEnded(""); gyro.current?.stop();
   };
 
+  const [support, setSupport] = useState({ ar: false, vr: false });
+  const [arOpen, setArOpen] = useState(false);
+  const [compass, setCompass] = useState<number | null>(null);
+  useEffect(() => { void arSupport().then(setSupport); }, []);
+  useEffect(() => { // compass heading for the turn arrow where the browser offers it (iOS needs a permission tap: kept optional)
+    const on = (e: DeviceOrientationEvent & { webkitCompassHeading?: number }) => { const h = e.webkitCompassHeading ?? (e.alpha != null ? (360 - e.alpha) % 360 : null); if (h != null) setCompass(h); };
+    window.addEventListener("deviceorientationabsolute" as never, on as never); window.addEventListener("deviceorientation", on as never);
+    return () => { window.removeEventListener("deviceorientationabsolute" as never, on as never); window.removeEventListener("deviceorientation", on as never); };
+  }, []);
+
   // ---------- views ----------
 
   if (state === "idle" || state === "pairing" || state === "ended") {
@@ -182,10 +194,12 @@ export function PhoneCompanion(props: PhoneCompanionProps) {
   }
 
   const idle = !route || route.status === "idle";
+  const turn = !idle && route?.path && compass != null ? turnAngle(compass, route.path) : null;
   const tone = !connected ? "warn" : laptopOnline ? "ok" : "warn";
   const statusText = state === "reconnecting" || state === "connecting" ? "Reconnecting… the laptop keeps working without the phone" : connected ? (laptopOnline ? "Connected to laptop" : "Laptop offline: waiting for it") : "Connecting…";
   const gyroOn = sensor === "active" || sensor === "starting";
 
+  if (arOpen && route?.path) return <ArRoute path={route.path} headingDeg={compass ?? 0} onEnd={() => setArOpen(false)} />;
   return (
     <main className="cmp" aria-label="Phone companion">
       <div className="cmp-status" data-tone={tone}><span className="cmp-dot" aria-hidden="true" /><span role="status" aria-live="polite">{statusText}</span></div>
@@ -204,6 +218,8 @@ export function PhoneCompanion(props: PhoneCompanionProps) {
               </div>
             </div>
             <p className="cmp-instruction" aria-live="polite">{route!.instruction!.text}</p>
+            {turn != null && <p className="cmp-turn" aria-label={`Turn ${turn > 0 ? "right" : "left"} ${Math.abs(Math.round(turn))} degrees`}><span style={{ display: "inline-block", transform: `rotate(${turn}deg)` }} aria-hidden="true">↑</span> {Math.abs(turn) < 20 ? "Straight ahead" : turn > 0 ? "Turn right" : "Turn left"}</p>}
+            {support.ar && route!.path && route!.path.length > 1 && <button className="cmp-btn" onClick={() => setArOpen(true)}>Show route in AR</button>}
 
           </>
         )}

@@ -50,8 +50,8 @@ export interface Asset {
 }
 
 export interface Geometry {
-  building: { id: string; name: string; source: string };
-  scene?: { revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
+  building: { id: string; name: string; source: string; source_ref?:{osm?:string}; attribution?:string; license?:string };
+  scene?: { plates?: Record<string, { exterior: XY[]; holes: XY[][] }[]>; stair_shafts?: {connector_id:string;from_floor:string;to_floor:string;footprint:XY[]|null;basis:string;warning:string|null}[]; revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];
@@ -136,11 +136,12 @@ export interface BuildingRow {
   source: string;
   name: string;
   floors: string;
+  rooms?: string | number | null;
 }
 
 export interface VisualResult {
   id:string;
-  kind:"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
+  kind:"comparison"|"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
   title:string;
   entities:{id:string;floor_id:string;kind:string}[];
   floor_ids:string[];

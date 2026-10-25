@@ -492,3 +492,13 @@ def test_origin_helper():
     assert C.origin_ok({"host": "192.168.1.5:8000", "origin": "http://192.168.1.5:8000"})
     assert C.origin_ok({"host": "x"})                                   # no Origin: not a browser
     assert not C.origin_ok({"host": "192.168.1.5:8000", "origin": "https://evil.example"})
+
+
+def test_route_path_for_ar_is_validated_and_relayed():
+    hub, _, made, laptop = start()
+    phone = pair_phone(hub, made, laptop)
+    laptop.send('route_state', status='guiding', step_count=2, step_index=0, instruction=STEP, path=[[0, 0], [3.123456, 4]])
+    assert phone.last('route_state')['path'] == [[0.0, 0.0], [3.12, 4.0]]
+    for bad in ([[0, 0, 0]], [[0, "x"]], [[1e9, 0]], "nope", [[0, 0]] * 401):
+        laptop.send('route_state', status='guiding', step_count=2, step_index=0, instruction=STEP, path=bad)
+        assert laptop.errors()

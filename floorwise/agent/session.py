@@ -13,6 +13,7 @@ from floorwise.core import geometry, ops
 from floorwise.core import resolve as R
 from floorwise.core.graph import Constraints
 from floorwise.core.model import Building
+from floorwise.core.connectors import inventory as connector_inventory_data, connector_kind
 from floorwise.core.routing import NoRoute, Route, plan_route
 
 NEW_DOOR_WIDTH_M = 0.9
@@ -47,6 +48,7 @@ class Session:
         return session
 
     default_start: str | None = None
+    _undo: list = field(default_factory=list, repr=False)
 
     # ---------- helpers ----------
 
@@ -188,7 +190,7 @@ class Session:
                                  'kind': 'room' if identifier in b.spaces else 'asset' if identifier in b.assets else 'opening'})
         measurements=dict(measurements or {})
         values={r['id']:r.get('count',r.get('area_m2')) for r in rows or [] if 'id' in r and isinstance(r.get('count',r.get('area_m2')), (int,float))}
-        if values:measurements['entity_values']=values
+        if values and kind!='comparison':measurements['entity_values']=values
         result = {'id': uuid.uuid4().hex[:12], 'kind': kind, 'title': title, 'entities': entities,
                   'floor_ids': sorted({e['floor_id'] for e in entities}), 'measurements': measurements or {},
                   'rows': rows or [], 'lines': lines or [], 'warnings': warnings or [],
@@ -247,14 +249,29 @@ class Session:
                 'next_offset': offset+limit if offset+limit<len(rows) else None,
                 'grouped_by_room': [{'id': sid, 'label': b.label(sid), 'count': n} for sid,n in grouped.most_common(12)]}
 
+    def connector_inventory(self, kind='stairs', floor=None, room=None):
+        result=connector_inventory_data(self.building,kind,floor,room)
+        visual=self.publish_visual('matches',f"{result['count']} mapped {result['kind']} connections",result['ids'],
+                                   {k:v for k,v in result.items() if k not in ('ids','rows')},result['rows'])
+        return {k:v for k,v in result.items() if k not in ('ids','rows')} | {'result_id':visual['id'],'connectors':result['rows'][:25],
+                'rows_are_examples':len(result['rows'])>25,'total_connectors':len(result['rows'])}
+
     def count_items(self, item_type: str, floor: str | None = None, room: str | None = None, *, exact: bool = False) -> dict:
+        if not exact and connector_kind(item_type):return self.connector_inventory(item_type,floor,room)
         from floorwise.core.analytics import count_items
         result = count_items(self.building, item_type, floor, room, inclusive=not exact)
+        self.last_item_type=item_type
+        maximum=max((r['count'] for r in result['per_room']),default=0)
+        leaders=[r for r in result['per_room'] if r['count']==maximum]
+        result.update(maximum_per_room=maximum,top_tie_count=len(leaders),leading_rooms=leaders[:5])
         visual = self.publish_visual('count', f"{result['count']} {item_type}", result['ids'],
                                      {k:v for k,v in result.items() if k not in ('ids','per_room')}, result['per_room'])
         return {k:v for k,v in result.items() if k not in ('ids','per_room')} | {'result_id': visual['id'], 'rooms': result['per_room'][:12]}
 
     def rank_by_items(self, item_type: str, floor: str | None = None, room_type: str | None = None, offset: int = 0, limit: int = 12) -> dict:
+        if R.normalise(item_type) in ('all','everything','all items','all types'):
+            return self.compare_item_leaders(floor)
+        self.last_item_type=item_type
         from floorwise.core.analytics import rank_by_items
         if offset<0 or not 1<=limit<=100:
             raise ValueError('Invalid page; offset >= 0 and limit 1 to 100 required.')
@@ -263,6 +280,15 @@ class Session:
                                      {**{k:v for k,v in result.items() if k!='rows'}, 'primary_ids':[r['id'] for r in result['rows'][:result['top_ties']]]}, result['rows'])
         return {k:v for k,v in result.items() if k!='rows'} | {'rows': result['rows'][offset:offset+limit], 'result_id': visual['id'],
                 'next_offset': offset+limit if offset+limit<len(result['rows']) else None}
+
+    def compare_item_leaders(self,floor=None,compare_floor=None):
+        from floorwise.core.analytics import item_leaders
+        result=item_leaders(self.building,floor,compare_floor)
+        ids=list(dict.fromkeys(sid for row in result['rows'] for scope in row['scopes'] for sid in scope['leader_ids']))
+        visual=self.publish_visual('comparison','Which places have the most of each item?',ids,
+                                   {k:v for k,v in result.items() if k!='rows'},result['rows'])
+        return {k:v for k,v in result.items() if k!='rows'} | {'result_id':visual['id'],
+                'presentation':'Complete compact comparison table is visible. Each type has total, maximum and all tied leading places.'}
 
     def filter_rooms(self, requirements: list[dict], floor: str | None = None, room_type: str | None = None) -> dict:
         from floorwise.core.analytics import filter_rooms
@@ -303,7 +329,8 @@ class Session:
         return {
             "id": space_id, "name": s["name"], "type": s["room_type"], "floor": b.floor_name(s["floor_id"]),
             "area_m2": round(geometry.area(b, space_id), 2), "centre": [round(x, 2), round(y, 2), round(z, 2)],
-            "doors": doors[:MAX_RESULTS], "contents": contents,
+            "doors": doors[:MAX_RESULTS], "door_count":len(doors), "door_examples_only":len(doors)>MAX_RESULTS,
+            "connector_access":connector_inventory_data(b,room=space_id), "contents": contents,
             "shares_walls_with": [b.spaces[n]["name"] for n, _ in geometry.wall_neighbours(b, space_id)][:MAX_RESULTS],
             "above": b.label(above[0][0]) if above else None, "below": b.label(below[0][0]) if below else None,
         }
@@ -422,6 +449,21 @@ class Session:
                 result['walking_change_m'] = round(current_walk-previous_walk,1)
         return result
 
+    def closure_preview(self, element: str) -> dict:
+        """What closing this place would do, without closing it (the UI asks before stranding rooms)."""
+        element_id = self.element(element)
+        was_closed = element_id in self.closed
+        before = self.impact_snapshot()
+        self.closed.add(element_id)
+        try:
+            impact = self.impact(before)
+        finally:
+            if not was_closed:
+                self.closed.discard(element_id)
+        b = self.building
+        name = b.connectors[element_id]["name"] if element_id in b.connectors else b.label(element_id) if element_id in b.spaces else element_id
+        return {"element": name, "id": element_id, "already_closed": was_closed, "impact": impact}
+
     def door_preview(self, first: str, second: str) -> dict:
         b = self.building
         a, c = self.space(first), self.space(second)
@@ -445,31 +487,129 @@ class Session:
         if "error" in preview:
             return preview
         door = preview["door"]
-        self.building.openings[door["id"]] = door
-        self.building.data["openings"].append(door)
+        self._insert_opening(door)
         self.edits.append({"op": "add_door", "door": door})
-        from floorwise.core.walk import invalidate
-        invalidate(self.building)
+        self._undo.append(lambda: self._drop_opening(door["id"]))
+        self.last_route = None
         self.emit("edit", op="add_door", door=door)
         return {"added": door["id"], "between": preview["between"], "impact": preview["impact"]}
 
+    def _refresh(self, spaces=()) -> None:
+        from floorwise.core.spacewalk import refresh_spaces
+        from floorwise.core.walk import invalidate
+        if spaces:
+            refresh_spaces(self.building, spaces)
+        invalidate(self.building)
+        self.last_route = None
+
+    def _insert_opening(self, door: dict) -> None:
+        self.building.openings[door["id"]] = door
+        self.building.data["openings"].append(door)
+        self._refresh(door["space_ids"])
+
+    def _drop_opening(self, opening_id: str) -> None:
+        gone = self.building.openings.pop(opening_id, None)
+        self.building.data["openings"][:] = [o for o in self.building.data["openings"] if o["id"] != opening_id]
+        self._refresh(gone["space_ids"] if gone else ())
+
+    def _door_between(self, first: str, second: str) -> str | None:
+        """The opening that joins two named rooms (an opening id is accepted for either argument)."""
+        b = self.building
+        if first in b.openings and not second:
+            return first
+        a, c = self.space(first), self.space(second)
+        found = [o["id"] for o in b.openings.values() if o["kind"] in ("door", "opening") and set(o["space_ids"]) == {a, c}]
+        return found[0] if len(found) == 1 else (None if not found else found[0])
+
+    def remove_door(self, first: str, second: str = "") -> dict:
+        """Wall up a door or opening (by its id, or by the two rooms it joins)."""
+        b = self.building
+        opening_id = self._door_between(first, second)
+        if opening_id is None:
+            return {"error": "There is no door between those two rooms."}
+        opening = b.openings[opening_id]
+        if opening["kind"] == "entrance":
+            return {"error": "That is a building entrance and cannot be removed."}
+        before = self.impact_snapshot()
+        self._drop_opening(opening_id)
+        impact = self.impact(before)
+        self.edits.append({"op": "remove_door", "door": opening})
+        self._undo.append(lambda: self._insert_opening(opening))
+        self.emit("edit", op="remove_door", door=opening, impact=impact)
+        return {"removed": opening_id, "between": [b.label(s) for s in opening["space_ids"]], "impact": impact}
+
+    def add_asset(self, name: str, kind: str, room: str) -> dict:
+        """Put a new item (machine, desk, ...) in a room."""
+        b = self.building
+        space_id = self.space(room)
+        from floorwise.core.graph import anchor
+
+        x, y = anchor(b, space_id)
+        number = 1 + sum(1 for edit in self.edits if edit["op"] == "add_asset")
+        record = {"id": f"{b.spaces[space_id]['floor_id']}-A-new{number}", "name": name.strip() or kind, "category": "equipment",
+                  "type": R.normalise(kind).replace(" ", "_") or "item", "space_id": space_id,
+                  "floor_id": b.spaces[space_id]["floor_id"], "position": [round(x, 3), round(y, 3)], "source": "user"}
+        b.assets[record["id"]] = record
+        b.data["assets"].append(record)
+        self.edits.append({"op": "add_asset", "asset": record})
+        self._undo.append(lambda: self._drop_asset(record["id"]))
+        self._refresh()
+        self.emit("edit", op="add_asset", asset=record["id"], to=space_id)
+        return {"added": record["name"], "id": record["id"], "in": b.label(space_id)}
+
+    def _drop_asset(self, asset_id: str) -> None:
+        self.building.assets.pop(asset_id, None)
+        self.building.data["assets"][:] = [a for a in self.building.data["assets"] if a["id"] != asset_id]
+        self._refresh()
+
+    def remove_asset(self, asset: str) -> dict:
+        b = self.building
+        asset_id = self._asset_id(asset)
+        if isinstance(asset_id, dict):
+            return asset_id
+        record = b.assets[asset_id]
+        self._drop_asset(asset_id)
+        self.edits.append({"op": "remove_asset", "asset": record})
+        self._undo.append(lambda: (b.assets.__setitem__(record["id"], record), b.data["assets"].append(record), self._refresh()))
+        self.emit("edit", op="remove_asset", asset=asset_id)
+        return {"removed": record["name"], "from": b.label(record["space_id"])}
+
+    def undo(self) -> dict:
+        """Revert the most recent edit (door added/removed/widened, item moved/added/removed)."""
+        if not self._undo or not self.edits:
+            return {"error": "There is nothing to undo."}
+        undone = self.edits.pop()
+        self._undo.pop()()
+        self.emit("edit", op="undo", undone=undone["op"])
+        return {"undone": undone["op"], "remaining_edits": len(self.edits)}
+
+    def _asset_id(self, asset: str):
+        b = self.building
+        if asset in b.assets:
+            return asset
+        match = next((a["id"] for a in b.assets.values() if R.normalise(a["name"]) == R.normalise(asset)), None)
+        if match:
+            return match
+        found = self.search(asset)["assets"]
+        if len(found) != 1:
+            return {"error": f"Which item is '{asset}'?", "candidates": found[:8]}
+        return found[0]["id"]
+
     def move_asset(self, asset: str, to: str) -> dict:
         b = self.building
-        asset_id = asset if asset in b.assets else next(
-            (a["id"] for a in b.assets.values() if R.normalise(a["name"]) == R.normalise(asset)), None)
-        if asset_id is None:
-            found = self.search(asset)["assets"]
-            if len(found) != 1:
-                return {"error": f"Which item is '{asset}'?", "candidates": found[:8]}
-            asset_id = found[0]["id"]
+        asset_id = self._asset_id(asset)
+        if isinstance(asset_id, dict):
+            return asset_id
         space_id = self.space(to)
         from floorwise.core.graph import anchor
 
         x, y = anchor(b, space_id)
         record = b.assets[asset_id]
         old = record["space_id"]
+        previous = {k: record[k] for k in ("space_id", "floor_id", "position")}
         record.update(space_id=space_id, floor_id=b.spaces[space_id]["floor_id"], position=[round(x, 3), round(y, 3)])
         self.edits.append({"op": "move_asset", "asset": asset_id, "from": old, "to": space_id})
+        self._undo.append(lambda: (record.update(previous), self._refresh()))
         from floorwise.core.walk import invalidate
         invalidate(self.building)
         self.last_route = None
@@ -510,6 +650,7 @@ class Session:
         opening["width_m"] = width_m
         receipt = {"op": "widen_door", "opening": opening_id, "from": old, "to": width_m}
         self.edits.append(receipt)
+        self._undo.append(lambda: (opening.__setitem__("width_m", old), self._refresh()))
         self.last_route = None
         self.emit("edit", **receipt)
         return receipt

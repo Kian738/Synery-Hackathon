@@ -2,6 +2,13 @@ import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+async function scopeTo(page: import("@playwright/test").Page, name: string) {
+  const group = page.getByRole("group", { name: "Visible floors" });
+  if (!(await group.isVisible())) await page.getByRole("button", { name: "Layers" }).click();
+  await group.getByRole("button", { name, exact: true }).click();
+}
+
+
 const campus="/?building=proc-campus-dev-000";
 async function capture(page:any,name:string,project:string){
   const folder=path.resolve(process.cwd(),"../runs/ux-overhaul");await mkdir(folder,{recursive:true});
@@ -48,12 +55,12 @@ test("floor scope and linked plan stay usable through preview",async({page},info
   if(await readAloud.getAttribute("aria-pressed")==="true")await readAloud.click();
   await expect(page.locator(".building-tools")).toBeAttached();
   if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
-  await page.getByRole("combobox",{name:"Visible floors"}).selectOption("route");
+  await scopeTo(page,"Route floors");
   await expect(scene).toHaveAttribute("data-visible-floors",/F0.*F1.*F2/);
   await capture(page,"route-floors",info.project.name);
   await expect(page.locator(".building-tools")).toBeAttached();
   if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
-  await page.getByRole("combobox",{name:"Visible floors"}).selectOption("current");
+  await scopeTo(page,"This floor");
   await expect(scene).toHaveAttribute("data-visible-floors",/^[^,]+$/);
   await page.getByRole("button",{name:"Guide me step by step"}).click();
   await page.getByRole("button",{name:"Play preview",exact:true}).click();

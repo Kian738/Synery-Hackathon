@@ -5,7 +5,8 @@ POST /api/sessions/{id}/scenario        run a template ("evacuation", "delivery"
 POST /api/sessions/{id}/scenario/ask    the single most important missing input for a partial scenario, or null
 Every number is the output of a checked step; the UI only words and draws it."""
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from server.locks import session_write
 
 from floorwise.evacuation import to_dict
 from floorwise.reason import PlanError, ScenarioSpec
@@ -24,6 +25,7 @@ class DirectScenarioBody(BaseModel):
 
 
 class ScenarioBody(BaseModel):
+    model_config=ConfigDict(extra="forbid")
     template: str = "evacuation"
     params: dict = Field(default_factory=dict)
     audience: str = "safety_officer"
@@ -62,7 +64,7 @@ def scenario_router(get_session):
             instantiate(template_body.template, **template_body.params)
         except TemplateError as error:
             raise HTTPException(422, {"error": str(error), "templates": list(template_names())}) from error
-        with entry["lock"]:
+        with session_write(entry):
             try:
                 report = scenario_report(entry["session"].building, template_body.template, template_body.params, template_body.audience)
             except PlanError as error:
@@ -72,7 +74,7 @@ def scenario_router(get_session):
     @router.post("/{session_id}/scenario/robust")
     def robust(session_id: str, body: ScenarioBody):
         entry = get_session(session_id)
-        with entry["lock"]:
+        with session_write(entry):
             try:
                 return robust_report(entry["session"].building, body.params.get("spec", {}))
             except (ValueError, TypeError, KeyError) as error:

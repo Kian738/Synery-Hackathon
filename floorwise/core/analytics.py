@@ -4,6 +4,30 @@ from collections import Counter, defaultdict
 from floorwise.core import resolve
 
 
+def item_leaders(building, floor=None, compare_floor=None):
+    """One pass over assets, complete exact-type totals and every tied leading place."""
+    scopes=[resolve.resolve_floor(building,floor) if floor else None]
+    if compare_floor is not None:scopes.append(resolve.resolve_floor(building,compare_floor))
+    records=[]
+    for fid in scopes:
+        counts=defaultdict(Counter)
+        for asset in building.assets.values():
+            if fid is None or asset['floor_id']==fid:counts[asset['type']][asset['space_id']]+=1
+        records.append((fid,counts))
+    rows=[]
+    for kind in sorted({a['type'] for a in building.assets.values()}):
+        summaries=[]
+        for fid,counts in records:
+            grouped=counts.get(kind,Counter());maximum=max(grouped.values(),default=0)
+            ids=sorted((sid for sid,n in grouped.items() if n==maximum),key=building.label)
+            summaries.append({'scope':building.floor_name(fid) if fid else 'Whole building',
+                              'total':sum(grouped.values()),'maximum':maximum,'leader_ids':ids,
+                              'leaders':[building.label(sid) for sid in ids]})
+        rows.append({'id':summaries[0]['leader_ids'][0] if summaries[0]['leader_ids'] else kind,
+                     'label':kind.replace('_',' '),'item_type':kind,'scopes':summaries,'count':summaries[0]['maximum']})
+    return {'rows':rows,'type_count':len(rows),'scope_count':len(records),'semantics':'exact recorded types; all tied places; counts are not seating capacity'}
+
+
 def asset_kinds(building, mention: str, inclusive: bool = True) -> list[str]:
     key = resolve.normalise(mention).strip()
     if inclusive and key in {"chair", "chairs"}:

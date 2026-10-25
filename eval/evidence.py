@@ -45,9 +45,11 @@ def fingerprint():
                       and '__pycache__' not in p.parts)
     source.extend(ROOT / p for p in ('pyproject.toml', 'uv.lock', 'web/package.json', 'web/package-lock.json'))
     data = [DATA / 'manifest.csv', KIT / 'CHANGELOG.md']
-    for split in ('train', 'dev', 'test'):
+    from eval.common import building_paths
+    for building in building_paths(['train', 'dev', 'test']):
         for name in ('building.json', 'questions.jsonl', 'questions_basic.jsonl'):
-            data.extend((DATA / split).glob('*/' + name))
+            candidate = building.parent / name
+            if candidate.exists():data.append(candidate)
     build = [ROOT / 'web/dist/index.html', *(ROOT / 'web/dist/assets').glob('*')]
     from floorwise import llm
     models = {role: llm.model_for(role) for role in ('chat', 'parser', 'judge')}

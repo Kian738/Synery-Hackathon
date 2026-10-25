@@ -81,3 +81,12 @@ def client(provider: str | None = None):
 
     config = PROVIDERS[provider]
     return openai.OpenAI(base_url=config["base_url"], api_key=os.environ[config["key_env"]], timeout=timeout_s(), max_retries=retries())
+
+
+def warm_provider():
+    """Import the provider runtime before serving questions; performs no model request."""
+    if os.environ.get('FLOORWISE_OFFLINE')=='1' or not info().available:return
+    instance=client()
+    instance.close()
+    # These tools have numerical-library imports, but importing them computes no scenario.
+    from floorwise.agent import scenarios,insight_tools  # noqa: F401

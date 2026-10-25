@@ -72,6 +72,14 @@ BASIC: list[tuple[str, re.Pattern]] = [
 
 
 def parse_basic(text: str) -> QuerySpec | None:
+    request = re.fullmatch(
+        r"(?:please\s+)?(?:find|show|plan)(?:\s+me)?\s+(?:an?|the)\s+"
+        r"(?:(?P<mode>step-free|indoor|walking)\s+)?route\s+from\s+"
+        r"(?P<start>.+?)\s+to\s+(?P<destination>.+?)[.?]?", text, re.I,
+    )
+    if request:
+        return QuerySpec(kind="route", start=request["start"], destination=request["destination"],
+                         step_free=(request["mode"] or "").lower() == "step-free")
     for kind, pattern in BASIC:
         match = pattern.search(text)
         if not match:

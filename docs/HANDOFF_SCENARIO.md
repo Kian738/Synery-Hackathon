@@ -1,3 +1,5 @@
+> Historical upstream scenario notes. Current integration uses the explicit-input capacity panel; the older quick-fire drawer and its browser tests were excluded. Multi-hop API/template diagnostics remain available. Treat the UI descriptions and historical timing/benchmark figures below as historical, not final acceptance. The current submission package uses SUBMISSION/BENCHMARK.md and SUBMISSION/answers.json; see the submission contract tests and STATUS.md.
+
 # Handoff: multi-hop scenario engine (for Codex or anyone picking this up)
 
 State at handoff: all offline gates, `pytest` (362) and `fw ui-test` (128 passed, 30 skipped) were green on the branch that added this.

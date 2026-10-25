@@ -7,14 +7,15 @@ export function GuidePlayer({route,model,time,playing,speed,step,reduced,transit
   route:Route;model:Presentation;time:number;playing:boolean;speed:number;step:number;reduced:boolean;transition:string|null;
   onSeek:(v:number)=>void;onPlay:()=>void;onPrevious:()=>void;onNext:()=>void;onSpeed:(v:number)=>void;onRepeat?:()=>void;onExit?:()=>void;
 }) {
-  const arrived=time>=model.duration,progress=model.duration?100*time/model.duration:100;
+  const safeTime=Math.max(0,Math.min(Number.isFinite(time)?time:0,model.duration));
+  const arrived=safeTime>=model.duration-.011,progress=model.duration?100*safeTime/model.duration:100;
   const instruction=route.guide.steps[step];
   return <section className="guide-player" aria-label="Route preview player">
     <div className="player-instruction" role="status"><Pictogram name={instruction?.icon??"straight"} size={26}/><div><span>{arrived?"Destination reached in preview":transition??`Decision ${step+1} of ${route.guide.steps.length}`}</span><p>{instruction?.text}</p></div><button aria-label="Repeat instruction" title="Repeat instruction" onClick={onRepeat}><Pictogram name="speaker"/></button></div>
     <div className="player-progress">
       <div className="progress-track"><span style={{width:`${progress}%`}}/><i style={{left:`${progress}%`}}/></div>
       <input type="range" aria-label="Preview progress" aria-valuetext={`${clock(time)} of ${clock(model.duration)}, decision ${step+1}`} min={0} max={Math.ceil(model.duration*100)/100||1} step="0.01" value={time} onChange={e=>onSeek(Number(e.target.value))}/>
-      <div className="progress-chapters" aria-hidden="true">{model.chapters.map((c,i)=>route.guide.steps[i]?.kind==="floor"?<i key={i} style={{left:`${100*c/(model.duration||1)}%`}}/>:null)}</div>
+      <div className="progress-chapters">{model.chapters.map((c,i)=><button key={i} title={route.guide.steps[i]?.short} aria-label={`Seek to decision ${i+1}: ${route.guide.steps[i]?.short??''}`} style={{left:`${100*c/(model.duration||1)}%`}} onClick={()=>onSeek(c)}><i data-floor={route.guide.steps[i]?.kind==='floor'}/></button>)}</div>
     </div>
     <div className="player-transport">
       <span className="player-time">{clock(time)} <span>/ {clock(model.duration)}</span></span>

@@ -171,6 +171,13 @@ def _vocab_match(text: str, vocabulary: set[str], what: str) -> str:
     for attempt in (key, " ".join(_singular(w) for w in key.split()), _singular(key)):
         if attempt in candidates:
             return candidates[attempt]
+    if what == "room type":
+        # "Office spaces" and "lift rooms" describe the type, not a new
+        # dataset-specific category. Preserve exact compound types above first.
+        stripped = re.sub(r"\s+(?:spaces?|rooms?)$", "", key)
+        for attempt in (stripped, " ".join(_singular(w) for w in stripped.split())):
+            if attempt in candidates:
+                return candidates[attempt]
     ranked = process.extract(key, list(candidates), scorer=fuzz.ratio, limit=3)
     if ranked and ranked[0][1] >= 78 and (len(ranked) == 1 or ranked[0][1] - ranked[1][1] >= 8):
         return candidates[ranked[0][0]]

@@ -2,6 +2,13 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+async function scopeTo(page: import("@playwright/test").Page, name: string) {
+  const group = page.getByRole("group", { name: "Visible floors" });
+  if (!(await group.isVisible())) await page.getByRole("button", { name: "Layers" }).click();
+  await group.getByRole("button", { name, exact: true }).click();
+}
+
+
 // Explicit capture command only; regular UI regression runs do not wait for recordings.
 test.use({video:process.env.FLOORWISE_CAPTURE_DEMO === "1" ? {mode:"on",size:{width:1440,height:900}} : "off"});
 test("capture a deterministic fallback of the real route and widening workflow", async ({page},testInfo)=>{
@@ -26,7 +33,7 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await expect(page.getByRole("region",{name:"Route"})).toContainText("Lab 4.26");
   await expect(page.locator("canvas")).toBeVisible();
   await page.getByLabel("Building tools",{exact:true}).click();
-  await page.getByRole("combobox",{name:"Visible floors"}).selectOption("building");
+  await scopeTo(page,"Whole building");
   await page.waitForTimeout(2000);
   await page.screenshot({path:path.join(out,"building-route.png")});
   await page.waitForTimeout(4000);
