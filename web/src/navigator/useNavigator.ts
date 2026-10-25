@@ -257,6 +257,9 @@ export function useNavigator(buildingId: string) {
           const delta = event.data.text;
           setMessages((all) => {
             const last = all[all.length - 1];
+            if (last && last.role === "agent" && last.streamId) {
+              return all;
+            }
             if (last && last.role === "agent" && (last.streaming || last.status === "streaming")) {
               return [
                 ...all.slice(0, -1),
@@ -269,6 +272,7 @@ export function useNavigator(buildingId: string) {
             ];
           });
         } else if (event.type === "clear_deltas") {
+          audioStreamQueue.reset();
           setMessages((all) => {
             const last = all[all.length - 1];
             if (last && last.role === "agent" && (last.streaming || last.status === "streaming")) {

@@ -515,11 +515,18 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
                     else None
                 )
  
+                had_assistant_delta = False
+
                 def on_chat_event(kind: str, payload) -> None:
+                    nonlocal had_assistant_delta
                     if streamer:
-                        if kind in ("text_delta", "assistant_delta") and isinstance(payload, dict) and "text" in payload:
+                        if kind == "assistant_delta" and isinstance(payload, dict) and "text" in payload:
+                            had_assistant_delta = True
+                            streamer.feed_delta(payload["text"])
+                        elif kind == "text_delta" and not had_assistant_delta and isinstance(payload, dict) and "text" in payload:
                             streamer.feed_delta(payload["text"])
                         elif kind in ("clear_deltas", "assistant_start"):
+                            had_assistant_delta = False
                             streamer.clear()
                     push(kind, payload)
  

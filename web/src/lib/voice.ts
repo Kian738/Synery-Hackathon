@@ -119,6 +119,9 @@ export class AudioStreamQueue {
       } catch {}
       activeAudio = null;
     }
+    if (this.queue.some((item) => item.index === index)) {
+      return;
+    }
     try {
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
