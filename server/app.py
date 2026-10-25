@@ -49,6 +49,18 @@ def _load_env_if_present() -> None:
             if k and k not in os.environ:
                 os.environ[k] = v
 
+    if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        cred_path = Path.home() / ".config" / "anthropic" / "credentials" / "default.json"
+        if cred_path.is_file():
+            try:
+                import json
+                cred = json.loads(cred_path.read_text(encoding="utf-8"))
+                tok = cred.get("access_token")
+                if tok:
+                    os.environ["ANTHROPIC_AUTH_TOKEN"] = tok
+            except Exception:
+                pass
+
 
 _load_env_if_present()
 

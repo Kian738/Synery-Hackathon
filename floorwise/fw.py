@@ -27,14 +27,25 @@ DEFAULT_BUILDING = DATA / "dev" / "proc-factory-dev-003"
 
 def load_env() -> None:
     path = ROOT / ".env"
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            if value.strip() and key.strip() not in os.environ:
-                os.environ[key.strip()] = value.strip()
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                if value.strip() and key.strip() not in os.environ:
+                    os.environ[key.strip()] = value.strip()
+
+    if not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        cred_path = Path.home() / ".config" / "anthropic" / "credentials" / "default.json"
+        if cred_path.is_file():
+            try:
+                import json
+                cred = json.loads(cred_path.read_text(encoding="utf-8"))
+                tok = cred.get("access_token")
+                if tok:
+                    os.environ["ANTHROPIC_AUTH_TOKEN"] = tok
+            except Exception:
+                pass
 
 
 def run(command: list[str], cwd: Path = ROOT) -> int:

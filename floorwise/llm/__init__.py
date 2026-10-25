@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 PROVIDERS = {
     "anthropic": {
-        "chat": "claude-opus-5-5", "parser": "claude-haiku-5-5", "vision": "claude-opus-5-5", "judge": "claude-opus-5-5",
+        "chat": "claude-sonnet-5-5", "parser": "claude-haiku-5-5", "vision": "claude-opus-5-5", "judge": "claude-opus-5-5",
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY",
