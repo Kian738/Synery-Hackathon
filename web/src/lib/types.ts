@@ -71,6 +71,10 @@ export interface GuideStep {
   point: XY | null;
   landmark: string | null;
   space_id: string | null;
+  /** Glanceable form: what to do, where it leads, how far until then ("in 10 m" or "now"). */
+  headline?: string;
+  target?: string;
+  cue?: string;
 }
 
 export interface RoutePoint {

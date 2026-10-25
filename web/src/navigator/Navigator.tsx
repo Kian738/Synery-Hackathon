@@ -20,6 +20,7 @@ import type { ScenarioMark } from "../lib/types";
 import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from "../lib/geometry";
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
+import { spokenStep } from "../lib/guide";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
@@ -126,7 +127,7 @@ export default function Navigator() {
     spokenFor.current = key;
     speak(nav.route.guide.spoken);
   }, [nav.route, voiceOut,following]);
-  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speak(steps[nav.activeStep].text);return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
+  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speak(spokenStep(steps[nav.activeStep]));return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
 
   const pins: Pin[] = useMemo(() => {
     if (!g) return [];
@@ -243,7 +244,7 @@ export default function Navigator() {
               {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
               {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
-                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
+                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
                 onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
               {!following&&<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}><Pictogram name="aid" size={18}/>Stress test</button><Link to="/lab"><Pictogram name="info" size={18}/>Evidence</Link></>}
@@ -257,7 +258,7 @@ export default function Navigator() {
               pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
                 <Building3D hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
-                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?.short??steps[nav.activeStep]?.text??"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                  closed={nav.closed} previewDoor={nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
@@ -397,9 +398,11 @@ function StepRow({ step, index, active, onClick, floorName }: { step: GuideStep;
       <button type="button" onClick={onClick} aria-current={active ? "step" : undefined} className="k-step" data-kind={step.kind} data-active={active}>
         <span className="k-step-icon"><Pictogram name={step.icon} size={18} /></span>
         <span className="k-step-body">
-          <span className="k-step-text">{step.text}</span>
+          {step.headline
+            ? <><span className="k-step-text"><b>{step.headline}</b> {step.target}</span>{active && <span className="k-step-detail">{step.text}</span>}</>
+            : <span className="k-step-text">{step.text}</span>}
           {(step.metres > 0 || isFloor) && (
-            <span className="k-step-meta">{index > 0 && step.metres > 0 ? `${Math.round(step.metres)} m` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
+            <span className="k-step-meta">{index > 0 && step.metres > 0 ? `${step.cue && step.cue !== "now" ? step.cue : `${Math.round(step.metres)} m`}` : ""}{isFloor && floorName ? ` · now on ${floorName}` : ""}</span>
           )}
         </span>
       </button>
@@ -520,7 +523,7 @@ function Composer({ busy, onSend,onStop }: { busy: boolean; onSend: (t: string) 
 function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const i = Math.max(0,Math.min(steps.length-1,index));
   const step = steps[i];
-  useEffect(() => { if (step) speak(step.text); }, [step]);
+  useEffect(() => { if (step) speak(spokenStep(step)); }, [step]);
   if (!step) return null;
   return (
     <div className="absolute inset-0 flex flex-col bg-ink/95 p-6 text-white" role="dialog" aria-label="Step by step">
@@ -534,7 +537,7 @@ function StepMode({ steps, index, onIndex, onClose }: { steps: GuideStep[]; inde
       </div>
       <div className="grid grid-cols-3 gap-2">
         <button disabled={i <= 1} onClick={() => onIndex(i - 1)} className="border border-ink-3 py-4 font-sign text-xl disabled:opacity-30">Back</button>
-        <button onClick={() => speak(step.text)} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
+        <button onClick={() => speak(spokenStep(step))} className="border border-ink-3 py-4 font-sign text-xl">Repeat</button>
         <button disabled={i >= steps.length - 1} onClick={() => onIndex(i + 1)} className="bg-mark py-4 font-sign text-xl font-bold text-ink disabled:opacity-30">Next</button>
       </div>
     </div>

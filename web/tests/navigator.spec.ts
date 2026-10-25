@@ -56,13 +56,13 @@ test("follow-route mode advances through eye-level waypoints", async ({ page }) 
   await page.goto(`${FACTORY}&at=proc-factory-dev-003-F0-S021&to=Meeting%20room%201.10`);
   await page.getByRole("button", { name: "Guide me step by step" }).click();
   await expect(page.getByRole("region",{name:"Route preview player"})).toBeVisible();
-  await expect(page.getByRole("region",{name:"Route preview player"})).toContainText(/Decision 1 of/);
+  await expect(page.getByRole("region",{name:"Route preview player"})).toContainText(/Step 1 of/);
   const canvas=page.locator("canvas");
   await expect(canvas).toHaveAttribute("data-camera-position", /\[/);
   const before=await canvas.getAttribute("data-camera-position");
   await page.getByRole("button", {name:"Next instruction"}).click();
   await expect(canvas).not.toHaveAttribute("data-camera-position", before!);
-  await expect(page.getByRole("region",{name:"Route preview player"})).toContainText(/Decision 2 of/);
+  await expect(page.getByRole("region",{name:"Route preview player"})).toContainText(/Step 2 of/);
 });
 
 test("step-free toggle is announced as pressed", async ({ page }) => {
@@ -92,7 +92,7 @@ test("preview has a seekable player, speed, arrival and replay", async ({page})=
   await page.getByRole("button",{name:"Playback speed 2×",exact:true}).click();
   await progress.focus();
   await progress.press("End");
-  await expect(page.getByText("Destination reached in preview")).toBeVisible();
+  await expect(page.getByRole("region",{name:"Route preview player"}).getByText("You have arrived")).toBeVisible();
   await expect(page.getByRole("button",{name:"Continue at landing"})).toHaveCount(0);
   await page.getByRole("button",{name:"Replay preview"}).click();
   await expect(page.getByRole("button",{name:"Pause preview"})).toBeVisible();

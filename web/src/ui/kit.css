@@ -249,3 +249,27 @@
 .k-step-body { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
 .k-step-text { font:500 15px/1.4 var(--font-sans); }
 .k-step-meta { color:var(--k-mute); font:500 12px var(--font-sans); }
+
+/* Guide me card: one action at a time. Icon, what to do, where it leads, how far; the next action is previewed in one quiet line. */
+.k-guide-now { display:grid !important; grid-template-columns:auto 1fr auto auto; align-items:center; gap:14px; min-height:76px; }
+.k-guide-icon { display:grid; place-items:center; width:56px; height:56px; border-radius:var(--r-lg, 16px); background:var(--accent, #ffd45c); color:#1a1405; }
+.k-guide-icon svg { width:30px; height:30px; }
+.k-guide-body { display:grid; gap:2px; min-width:0; }
+.k-guide-body small { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#9fb3bb; }
+.k-guide-body strong { font-size:22px; line-height:1.15; color:#f4f8f9; }
+.k-guide-target { font-size:15px; color:#d6e2e6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.k-guide-next { font-style:normal; font-size:13px; color:#8fa6af; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.k-guide-cue { padding:6px 12px; border-radius:999px; background:#22333b; color:#ffe39a; font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.k-guide-now[data-kind="floor"] .k-guide-icon { background:#74c9ef; }
+.k-guide-now[data-kind="arrive"] .k-guide-icon { background:#6bd49a; }
+@media (max-width:640px) { .k-guide-now { grid-template-columns:auto 1fr auto; gap:10px; } .k-guide-icon { width:46px; height:46px; } .k-guide-body strong { font-size:18px; } .k-guide-cue { grid-column:2; justify-self:start; } }
+.k-step-detail { display:block; margin-top:4px; font-size:13px; color:#9fb3bb; }
+.k-guide-icon { color:#1a1405 !important; }
+.k-guide-icon svg { color:#1a1405; }
+@media (max-width:640px) {
+  .guide-player { box-sizing:border-box; max-width:calc(100% - 20px); overflow:hidden; }
+  .guide-player .player-transport { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 10px; }
+  .guide-player .player-time { display:none; }
+  .guide-player .speed-options button { min-width:34px; padding:0 6px; }
+  .k-guide-now > button { width:36px; height:36px; }
+}

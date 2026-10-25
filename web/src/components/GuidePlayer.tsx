@@ -9,9 +9,19 @@ export function GuidePlayer({route,model,time,playing,speed,step,reduced,transit
 }) {
   const safeTime=Math.max(0,Math.min(Number.isFinite(time)?time:0,model.duration));
   const arrived=safeTime>=model.duration-.011,progress=model.duration?100*safeTime/model.duration:100;
-  const instruction=route.guide.steps[step];
+  const instruction=route.guide.steps[step],next=route.guide.steps[step+1];
   return <section className="guide-player" aria-label="Route preview player">
-    <div className="player-instruction" role="status"><Pictogram name={instruction?.icon??"straight"} size={26}/><div><span>{arrived?"Destination reached in preview":transition??`Decision ${step+1} of ${route.guide.steps.length}`}</span><p>{instruction?.text}</p></div><button aria-label="Repeat instruction" title="Repeat instruction" onClick={onRepeat}><Pictogram name="speaker"/></button></div>
+    <div className="player-instruction k-guide-now" role="status" aria-live="polite" data-kind={instruction?.kind}>
+      <span className="k-guide-icon"><Pictogram name={instruction?.icon??"straight"} size={30}/></span>
+      <div className="k-guide-body">
+        <small>{arrived?"You have arrived":transition??`Step ${step+1} of ${route.guide.steps.length}`}</small>
+        <strong>{instruction?.headline||instruction?.text}</strong>
+        {instruction?.headline&&<span className="k-guide-target">{instruction.target}</span>}
+        {next&&!arrived&&<em className="k-guide-next">Then: {next.headline?`${next.headline.charAt(0).toLowerCase()}${next.headline.slice(1)} ${next.target}`:next.short}</em>}
+      </div>
+      {instruction?.cue&&instruction.cue!=="now"&&!arrived&&<b className="k-guide-cue">{instruction.cue}</b>}
+      <button aria-label="Repeat instruction" title="Repeat instruction" onClick={onRepeat}><Pictogram name="speaker"/></button>
+    </div>
     <div className="player-progress">
       <div className="progress-track"><span style={{width:`${progress}%`}}/><i style={{left:`${progress}%`}}/></div>
       <input type="range" aria-label="Preview progress" aria-valuetext={`${clock(time)} of ${clock(model.duration)}, decision ${step+1}`} min={0} max={Math.ceil(model.duration*100)/100||1} step="0.01" value={time} onChange={e=>onSeek(Number(e.target.value))}/>

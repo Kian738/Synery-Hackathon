@@ -30,7 +30,7 @@ test("paired phone operates the real Navigator without changing declared locatio
     await expect(phone.getByRole("region",{name:"Current instruction"})).toContainText("Step 1");
     await page.getByRole("button",{name:"Close phone setup"}).click();
     await phone.getByRole("button",{name:"Next",exact:true}).click();
-    await expect(page.getByRole("region",{name:"Route preview player"})).toContainText("Decision 2");
+    await expect(page.getByRole("region",{name:"Route preview player"})).toContainText("Step 2");
     await expect(phone.getByRole("region",{name:"Current instruction"})).toContainText("Step 2");
     const canvas=page.locator("canvas");await expect(canvas).toHaveAttribute("data-camera-quaternion",/\[/);
     const position=await canvas.getAttribute("data-camera-position");
@@ -40,7 +40,7 @@ test("paired phone operates the real Navigator without changing declared locatio
     expect(await canvas.getAttribute("data-camera-position")).toBe(position);
     await phone.getByRole("button",{name:"Recenter view",exact:true}).click();
     await phone.getByRole("button",{name:"Back",exact:true}).click();
-    await expect(page.getByRole("region",{name:"Route preview player"})).toContainText("Decision 1");
+    await expect(page.getByRole("region",{name:"Route preview player"})).toContainText("Step 1");
     expect(await location.textContent()).toBe(declared);
     const out=path.resolve("../runs/ux2");await fs.mkdir(out,{recursive:true});
     await phone.screenshot({path:path.join(out,"phone-paired-navigator.png")});
