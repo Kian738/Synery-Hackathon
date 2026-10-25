@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
-import { ApiError, api, chat, cancelChat } from "../lib/api";
+import { ApiError, api, chat, cancelChat, consumePreloadedBuilding } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
 import { audioStreamQueue } from "../lib/voice";
 import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
@@ -85,8 +85,14 @@ export function useNavigator(buildingId: string) {
     setSessionId(null); setBusy(false); setNotice(null); setGeometry(null);
     setPreviousRoute(null); setWeakPoints([]); setVisualResult(null);setTurnUsage(null);
     (async () => {
-      const { session_id } = await api.newSession(buildingId);
-      const g = await api.sessionGeometry(session_id);
+      const preloaded = consumePreloadedBuilding(buildingId);
+      const { session_id, geometry: g } = preloaded
+        ? await preloaded
+        : await (async () => {
+            const { session_id } = await api.newSession(buildingId);
+            const g = await api.sessionGeometry(session_id);
+            return { session_id, geometry: g };
+          })();
       if (cancelled) return;
       setSessionId(session_id);
       setGeometry(g);

@@ -117,7 +117,10 @@ def evaluate_conversation(body: dict):
 from server.lab import router as lab_router  # noqa: E402
 from server.companion import create_companion_router  # noqa: E402
 
+from server.campus import router as campus_router  # noqa: E402
+
 app.include_router(lab_router)
+app.include_router(campus_router)
 app.include_router(create_companion_router())
 
 
@@ -181,9 +184,75 @@ def buildings(split: str | None = None) -> list[dict]:
     return [{k: r.get(k) for k in keys} for r in rows] + custom
 
 
+@app.get("/api/buildings/georef")
+def buildings_georef() -> list[dict]:
+    from server.georef import GEOREF
+    rows_by_id = {r["building_id"]: r for r in manifest()}
+    return [
+        {
+            "building_id": bid,
+            "name": rows_by_id.get(bid, {}).get("name", bid),
+            "lat": lat,
+            "lon": lon,
+            "zoom_hint": zoom,
+            "campus": campus,
+            "height_m": height_m,
+            "has_indoor": True,
+            "floors": rows_by_id.get(bid, {}).get("floors", "?"),
+            "rooms": rows_by_id.get(bid, {}).get("rooms", "?"),
+            "spaces": rows_by_id.get(bid, {}).get("spaces", "?"),
+        }
+        for bid, (lat, lon, zoom, campus, height_m) in GEOREF.items()
+    ]
+
+
+@app.get("/api/buildings/georef/features.geojson")
+def buildings_geojson() -> dict:
+    from server.georef import get_buildings_geojson
+    return get_buildings_geojson()
+
+
 @app.get("/api/buildings/{building_id}")
 def building(building_id: str) -> dict:
     return geometry_payload(load(building_id))
+
+
+# ---------- outdoor routing (OpenRouteService proxy) ----------
+
+ORS_PROFILES = {"foot-walking", "wheelchair", "cycling-regular", "driving-car"}
+
+
+class OutdoorRouteRequest(BaseModel):
+    from_lat: float
+    from_lon: float
+    to_lat: float
+    to_lon: float
+    profile: str = "foot-walking"
+
+
+@app.post("/api/outdoor/route")
+async def outdoor_route(body: OutdoorRouteRequest) -> dict:
+    ors_key = os.environ.get("ORS_API_KEY", "")
+    if not ors_key:
+        raise HTTPException(503, "ORS_API_KEY not configured")
+    if body.profile not in ORS_PROFILES:
+        raise HTTPException(422, f"profile must be one of {sorted(ORS_PROFILES)}")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{os.environ.get('ORS_API_URL', 'https://api.heigit.org/openrouteservice').rstrip('/')}/v2/directions/{body.profile}/geojson",
+                headers={"Authorization": ors_key, "Content-Type": "application/json"},
+                json={
+                    "coordinates": [[body.from_lon, body.from_lat], [body.to_lon, body.to_lat]],
+                    "instructions": True,
+                    "language": "en",
+                },
+            )
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"ORS unreachable: {exc}") from exc
+    if not resp.is_success:
+        raise HTTPException(502, f"ORS error: {resp.text[:200]}")
+    return resp.json()
 
 
 # ---------- sessions ----------
@@ -686,6 +755,8 @@ if WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
     @app.get("/")
+    @app.get("/map")
+    @app.get("/tunnel")
     @app.get("/phone")
     @app.get("/lab")
     @app.get("/lab/{rest:path}")

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { RoomText } from "../components/RoomText";
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
@@ -13,6 +13,8 @@ import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
 import { audioStreamQueue, canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { ScenarioPanel } from "./ScenarioPanel";
+import { JourneyBanner } from "../journey/JourneyBanner";
+import { currentIndoorLeg, nextLeg, setJourneyIndex } from "../journey/journey";
 import { entrances, type Message, useNavigator } from "./useNavigator";
 
 const DEFAULT_BUILDING = "proc-campus-dev-000";
@@ -198,6 +200,28 @@ export default function Navigator() {
     if (stepFree) nav.setStepFree(true);
     nav.goTo(to, nav.here, stepFree);
   }, [nav.geometry, nav.here, nav.sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A trip between buildings: once this leg's route is planned, start the step-by-step guide by itself.
+  const tripLeg = currentIndoorLeg(buildingId);
+  const tripShown = useRef<string | null>(null);
+  const navigateTo = useNavigate();
+  const startGuide = () => {
+    if (nav.route?.preview_available === false) { setStepMode(true); return; }
+    setView("guide"); setQuestionOpen(false); setPlanExpanded(false); setWeakOpen(false); setStageExpanded(false); nav.setVisualResult(null); nav.setActiveStep(0); setSelected(null);
+  };
+  // Reaching the exit door (the last step of the leg) carries the trip on by itself: tunnel, then the next building.
+  const atTripExit = !!tripLeg?.active && tripLeg.leg.role === "exit" && !!nav.route
+    && (!!tripLeg.leg.trivial || ((nav.route?.guide?.steps.length ?? 0) > 1 && nav.activeStep >= (nav.route?.guide?.steps.length ?? 0) - 1));
+  useEffect(() => {
+    if (!atTripExit || !tripLeg) return;
+    const timer = window.setTimeout(() => { setJourneyIndex(nextLeg(tripLeg.result, tripLeg.index)); navigateTo("/tunnel"); }, tripLeg.leg.trivial ? 3500 : 2000);
+    return () => window.clearTimeout(timer);
+  }, [atTripExit, tripLeg?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Show the planner's own route for this leg (start room to the exit door, or entrance to the destination room).
+  useEffect(() => {
+    if (!tripLeg || !nav.geometry || tripShown.current === tripLeg.key) return;
+    tripShown.current = tripLeg.key;
+    nav.applyEvents([{ type: "route", route: tripLeg.leg.route } as never]);
+  }, [nav.geometry, tripLeg?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const g = nav.geometry;
   const steps = nav.route?.guide?.steps ?? [];
@@ -392,13 +416,13 @@ export default function Navigator() {
     if (nav.route?.polyline.length) {
       const first = nav.route.polyline[0], last = nav.route.polyline[nav.route.polyline.length - 1];
       if(nav.route.stops[0]!==nav.here)out.push({ id: "start", at: [first.x, first.y], floor_id: first.floor_id, label: "Route start", tone: "start" });
-      out.push({ id: "end", at: [last.x, last.y], floor_id: last.floor_id, label: "Destination", tone: "end" });
+      out.push({ id: "end", at: [last.x, last.y], floor_id: last.floor_id, label: tripLeg ? (tripLeg.leg.role === "exit" ? "Exit door" : "Your destination") : "Destination", tone: "end" });
       const step = steps[nav.activeStep];
       if (!following && step?.point && step.floor_id && nav.activeStep > 0 && step.kind !== "arrive")
         out.push({ id: "step", at: step.point, floor_id: step.floor_id, label: step.text, tone: "info", n: nav.activeStep });
     }
     return out;
-  }, [g, nav.here, nav.route, nav.activeStep, steps,following,previewPosition]);
+  }, [g, nav.here, nav.route, nav.activeStep, steps,following,previewPosition,tripLeg?.key]);
 
   const focusStep = (i: number) => {
     nav.setActiveStep(i);
@@ -454,10 +478,15 @@ export default function Navigator() {
 
   return (
     <div className={`navigator-shell flex h-full flex-col lg:flex-row ${!nav.route && nav.messages.length === 0 ? "first-use" : ""} ${stageExpanded?"stage-expanded":""} ${following?"guiding":""} ${questionOpen?"question-open":""} ${planExpanded?"map-open":""} ${weakOpen?"analysis-open":""}`}>
+      <JourneyBanner buildingId={buildingId} routeFailed={!!nav.notice && !nav.route} atExit={atTripExit} guiding={following || stepMode} onStartGuide={startGuide} />
       {/* ---------- sign column ---------- */}
       <aside className="order-2 flex min-h-0 flex-1 flex-col navigation-panel bg-ink text-white lg:order-1 lg:w-[370px] lg:flex-none">
         <header className="flex items-center gap-2 border-b border-ink-2 px-4 py-3">
           <BuildingPicker buildings={buildings} value={buildingId} onChange={(b) => setParams({ building: b })} name={g.building.name} />
+          <Link to="/map" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-cyan-400/40 bg-cyan-950/60 font-mono text-xs font-semibold text-cyan-300 backdrop-blur hover:border-cyan-400 hover:bg-cyan-900/60 hover:text-white transition-all ml-2" title="Return to 3D Drone Recon View">
+            <span>🚁</span>
+            <span>DRONE VIEW</span>
+          </Link>
           <button onClick={() => setBuildingImport(true)} className="ml-auto text-sm text-concrete">Import plan</button>
         </header>
 

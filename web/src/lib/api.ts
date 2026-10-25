@@ -44,6 +44,31 @@ export const api = {
     fetch(`/api/lab/route-preview?building=${building}&start=${encodeURIComponent(start)}&destination=${encodeURIComponent(destination)}&step_free=${stepFree}`).then(json<Route>),
 };
 
+const buildingPreloadCache = new Map<string, Promise<{ session_id: string; geometry: Geometry }>>();
+
+/** Preload a building's session and 3D geometry in the background while still on the exterior map. */
+export function preloadBuilding(buildingId: string): Promise<{ session_id: string; geometry: Geometry }> {
+  if (!buildingPreloadCache.has(buildingId)) {
+    const promise = (async () => {
+      const { session_id } = await api.newSession(buildingId);
+      const geometry = await api.sessionGeometry(session_id);
+      return { session_id, geometry };
+    })();
+    buildingPreloadCache.set(buildingId, promise);
+  }
+  return buildingPreloadCache.get(buildingId)!;
+}
+
+/** Retrieve preloaded building data and consume it so it's not reused with stale sessions. */
+export function consumePreloadedBuilding(buildingId: string): Promise<{ session_id: string; geometry: Geometry }> | null {
+  const cached = buildingPreloadCache.get(buildingId);
+  if (cached) {
+    buildingPreloadCache.delete(buildingId);
+    return cached;
+  }
+  return null;
+}
+
 export type ChatEvent =
   | { type: "assistant_start"; data: {message_id:string;model:string} }
   | { type: "assistant_delta"; data: {message_id:string;text:string} }

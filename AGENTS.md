@@ -53,6 +53,8 @@ Why: LLMs are unreliable at geometry (FloorplanQA, ICML 2026), and the benchmark
 | `web/src/scene-assets/` | bounded illustrative procedural visuals for all supplied asset types | catalogue + footprint tests |
 | `server/checks.py` | the Lab's inspection sheet: every check in plain words, target, cost, grading group | |
 | `server/lab.py` | Benchmark Lab API: runs, compare, dataset, launch suites with live logs | tested |
+| `server/georef.py`, `web/src/map/` | baked OSM centroids for the 17 OSM buildings; `/map` MapLibre satellite entry screen, `/api/buildings/georef`, `/api/outdoor/route` (ORS proxy, `ORS_API_KEY`), agent tool `outdoor_route` (not registered in benchmark mode) | build + in-process endpoint checks; browser untested |
+| `floorwise/core/campus.py`, `server/campus.py`, `web/src/map/CampusRoutePanel.tsx`, `web/src/journey/` | routes between buildings: joint choice of exit and entrance (one Dijkstra per building, pruned pairs, pluggable outdoor provider), `POST /api/campus/route`, agent tool `campus_route` (not in benchmark mode), route card and guided trip on `/map`, trip banner in the Navigator, `/tunnel` teleport screen | `tests/test_campus.py`; UI build-checked only |
 | `web/src/navigator/` | Navigator UI (signage design, route sign, steps, step mode, voice) | desktop + phone regression coverage; see docs/STATUS.md |
 | `web/src/lab/` | Benchmark Lab UI (overview, launcher, runs, drill-down on plan, compare, dataset) | Playwright |
 | `docs/` | our docs plus the kit (`docs/industrial-agents-hackathon-2026`, read-only) | |
