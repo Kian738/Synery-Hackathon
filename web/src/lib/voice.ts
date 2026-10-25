@@ -44,6 +44,19 @@ export class AudioStreamQueue {
     this.stop();
     this.hadChunks = false;
     this.isStreamActive = true;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+      activeUtterance = null;
+    }
+    if (activeAudio) {
+      try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+      } catch {}
+      activeAudio = null;
+    }
   }
 
   markDone() {
@@ -72,6 +85,19 @@ export class AudioStreamQueue {
     const wasPlaying = this.isPlaying;
     this.isPlaying = false;
     this.isStreamActive = false;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+      activeUtterance = null;
+    }
+    if (activeAudio) {
+      try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+      } catch {}
+      activeAudio = null;
+    }
     if (wasPlaying && typeof window !== "undefined") {
       window.dispatchEvent(new Event("floorwise:speech-end"));
     }
@@ -79,6 +105,20 @@ export class AudioStreamQueue {
 
   enqueue(base64Audio: string, index = 0, text?: string) {
     this.hadChunks = true;
+    // Silence browser speech synthesis as soon as real audio chunks arrive
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+      activeUtterance = null;
+    }
+    if (activeAudio) {
+      try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+      } catch {}
+      activeAudio = null;
+    }
     try {
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
@@ -110,6 +150,19 @@ export class AudioStreamQueue {
     const next = this.queue.shift()!;
     this.isPlaying = true;
     this.currentUrl = next.url;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+      activeUtterance = null;
+    }
+    if (activeAudio) {
+      try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+      } catch {}
+      activeAudio = null;
+    }
     const audio = new Audio(next.url);
     this.currentAudio = audio;
 
@@ -240,6 +293,10 @@ export function normalizeLanguageTag(_lang?: string): string {
  */
 export async function speak(text: string, onEnd?: () => void) {
   stopSpeaking();
+  if (audioStreamQueue.active || audioStreamQueue.hadChunks) {
+    onEnd?.();
+    return;
+  }
   const clean = cleanTextForSpeech(text);
   if (!clean) {
     onEnd?.();
@@ -300,6 +357,10 @@ export async function speak(text: string, onEnd?: () => void) {
 
 function speakBrowser(clean: string, onEnd: () => void) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    onEnd();
+    return;
+  }
+  if (audioStreamQueue.active || audioStreamQueue.hadChunks) {
     onEnd();
     return;
   }
