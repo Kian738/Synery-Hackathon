@@ -12,7 +12,7 @@ export type Message =
   | { id: number; role: 'result'; text: string; result: VisualResult & { total_rows: number }; query?: string }
   | { id: number; role: "activity"; text: string; tool?: string; input?: Record<string, unknown>; result?: unknown; failed?: boolean }
   | { id: number; role: "error"; text: string }
-  | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" }
+  | { id: number; role: "options"; text: string; options: { id: string; label: string }[]; purpose: "destination" | "start" | "choice" }
   | { id: number; role: "change"; text: string; first: string; second: string; widenings?: {opening_id:string;to_m:number}[]; kind?: "widen"; openingId?: string; width?: number; start?: string; destination?: string; state: "pending" | "applied" | "discarded" };
 
 type NewMessage = Message extends infer M ? (M extends Message ? Omit<M, "id"> : never) : never;
@@ -156,6 +156,8 @@ export function useNavigator(buildingId: string) {
         if (sessionIdRef.current) api.sessionGeometry(sessionIdRef.current).then(setGeometry);
       } else if (e.type === "scenario_result") {
         setScenarioIn({ n: nextId++, report: e.report, hazard: e.hazard });
+      } else if (e.type === "choice") {
+        push({ role: "options", text: e.question, options: e.options.map((label) => ({ id: label, label })), purpose: "choice" });
       } else if (e.type === "scenario_replay") {
         setReplayCmd({ n: nextId++, action: e.action, seconds: e.seconds });
       } else if (e.type === "profile") {

@@ -102,7 +102,7 @@ def resolve_space(building: Building, mention: str, floor_hint: str | None = Non
     if len(exact) > 1:
         raise ResolveError(
             f"'{mention}' matches {len(exact)} spaces; which one?",
-            [{"id": i, "label": building.label(i)} for i in exact],
+            [{"id": i, "label": building.label(i), "hint": hints.get(i, "")} for i in exact for hints in [distinguishing_hints(building, exact)]],
         )
     # "room 0.29", "the 2.04 lab": a token that is a room number settles it when unique on the floor.
     refs = [t for t in key.split() if any(ch.isdigit() for ch in t)]
@@ -118,6 +118,38 @@ def resolve_space(building: Building, mention: str, floor_hint: str | None = Non
         f"No space matches '{mention}' exactly.",
         [{"id": r[2], "label": building.label(r[2]), "score": round(r[1])} for r in ranked],
     )
+
+
+def distinguishing_hints(building: Building, ids: list[str]) -> dict[str, str]:
+    """For spaces that share a name: a short phrase each, from what is recorded (neighbour, contents, position on the
+    floor plan), so a person can be asked 'the one next to the Kitchen or the one with the printer?' instead of a list
+    of identical labels. Only said when it is true of the data; never used to choose between them."""
+    from collections import Counter
+
+    from shapely.geometry import Polygon
+
+    names = {i: normalise(building.spaces[i]["name"]) for i in ids}
+    hints: dict[str, str] = {}
+    for i in ids:
+        parts = []
+        near = sorted({building.spaces[o]["name"] for op in building.openings.values() if i in op["space_ids"]
+                       for o in op["space_ids"] if o != i and o in building.spaces and normalise(building.spaces[o]["name"]) not in names.values()})
+        if near:
+            parts.append("next to " + ", ".join(near[:2]))
+        things = Counter(a["type"].replace("_", " ") for a in building.assets.values() if a["space_id"] == i)
+        if things:
+            parts.append("with " + ", ".join(f"{n} {t}" for t, n in things.most_common(2)))
+        floor_spaces = [x for x in building.spaces.values() if x["floor_id"] == building.spaces[i]["floor_id"] and x.get("polygon")]
+        if floor_spaces and building.spaces[i].get("polygon"):
+            xs = [Polygon(x["polygon"]).centroid for x in floor_spaces]
+            cx, cy = sum(c.x for c in xs) / len(xs), sum(c.y for c in xs) / len(xs)
+            c = Polygon(building.spaces[i]["polygon"]).centroid
+            side = ("left" if c.x < cx else "right") if abs(c.x - cx) > abs(c.y - cy) * 0.5 else ""
+            end = ("top" if c.y > cy else "bottom") if abs(c.y - cy) > abs(c.x - cx) * 0.5 else ""
+            if side or end:
+                parts.append("on the " + "-".join(x for x in (end, side) if x) + " of the plan")
+        hints[i] = "; ".join(parts)
+    return hints
 
 
 # ---------- vocabularies: room types, asset types ----------

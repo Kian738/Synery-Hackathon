@@ -127,7 +127,8 @@ export type UiEvent =
   | { type: "edit"; op: string; [key: string]: unknown }
   | { type: "profile"; profile: Profile }
   | { type: "scenario_result"; report: ScenarioReport; hazard: string }
-  | { type: "scenario_replay"; action: "play" | "pause" | "restart" | "seek"; seconds?: number };
+  | { type: "scenario_replay"; action: "play" | "pause" | "restart" | "seek"; seconds?: number }
+  | { type: "choice"; question: string; options: string[] };
 
 export interface BuildingRow {
   building_id: string;

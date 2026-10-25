@@ -59,16 +59,13 @@ test('all four speeds are visible and preserve paused progress',async({page})=>{
   }
 });
 
-test('scenario requires explicit assumptions and presents a computed comparison',async({page})=>{
+test('scenario states its assumptions and presents a computed comparison',async({page})=>{
   await page.goto('/?building=proc-campus-dev-000');
   await page.getByLabel('Building tools',{exact:true}).click();
   await page.getByRole('button',{name:'Scenarios',exact:true}).click();
-  const panel=page.getByRole('region',{name:'Scenario inputs'});
-  await expect(panel.getByRole('button',{name:'Compare scenario'})).toBeDisabled();
-  await panel.getByLabel('People in this room').fill('20');await panel.getByLabel('People per minute').fill('20');
-  await panel.getByRole('button',{name:'Compare scenario'}).click();
-  const answer=page.getByRole('region',{name:'Visual answer'});
-  await expect(answer.getByRole('heading')).toContainText('of 20 evacuated',{timeout:20000});
-  await answer.getByText('Inputs, method and assumptions',{exact:true}).click();
-  await expect(answer.getByText(/Explicit user occupancy only/)).toBeVisible();
+  await page.getByRole('button',{name:/Quick fire test/}).click();
+  await expect(page.locator('.scenario-headline')).toHaveText(/Everyone is out in \d+ s|of \d+ people get out/,{timeout:60000});
+  await expect(page.getByText(/Everyone using their nearest exit instead/)).toBeVisible();
+  await page.getByRole('button',{name:'Show more'}).click();
+  await expect(page.getByText('What this is built on')).toBeVisible();
 });

@@ -523,7 +523,7 @@ export default function Navigator() {
                 speak(text, () => setCurrentlySpeakingId(null));
               }
             }}
-            onOption={(id) => nav.goTo(id)}
+            onOption={(id, purpose) => (purpose === "choice" ? nav.ask(id) : nav.goTo(id))}
             onDecide={nav.decideChange}
           />
         </div>
@@ -783,7 +783,7 @@ function Conversation({
   onRoom: (id: string) => void;
   messages: Message[];
   busy: boolean;
-  onOption: (id: string) => void;
+  onOption: (id: string, purpose?: string) => void;
   onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
   currentlySpeakingId?: number | null;
   onSpeakMessage?: (id: number, text: string) => void;
@@ -817,7 +817,7 @@ function Conversation({
               <p className="text-[15.5px]">{m.text}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {m.options.map((o, i) => (
-                  <button key={o.id} onClick={() => onOption(o.id)} className="flex items-center gap-2 border border-white px-3 py-1.5 font-sign text-[15px] hover:bg-white hover:text-ink">
+                  <button key={o.id} onClick={() => onOption(o.id, m.purpose)} className="flex items-center gap-2 border border-white px-3 py-1.5 font-sign text-[15px] hover:bg-white hover:text-ink">
                     <span className="grid h-5 w-5 place-items-center bg-mandatory text-[12px] font-bold text-white">{i + 1}</span>{o.label}
                   </button>
                 ))}
