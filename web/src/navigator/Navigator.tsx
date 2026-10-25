@@ -64,6 +64,14 @@ export default function Navigator() {
   const [seekRequest,setSeekRequest]=useState(0);
   const [previewPosition,setPreviewPosition]=useState<{x:number;y:number;floor_id:string;heading?:number}|null>(null);
   const following=view==="follow"||view==="guide";
+  /** The walked line of the floor the current step is on, for the phone's AR overlay (at most 400 points). */
+  const phonePath = useMemo(() => {
+    const route = nav.route, floor = route?.guide.steps[nav.activeStep]?.floor_id ?? route?.polyline[0]?.floor_id;
+    const pts = (route?.polyline ?? []).filter(p => p.floor_id === floor && !p.gap);
+    if (pts.length < 2) return undefined;
+    const stride = Math.max(1, Math.ceil(pts.length / 400));
+    return pts.filter((_, i) => i % stride === 0 || i === pts.length - 1).map(p => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100] as [number, number]);
+  }, [nav.route, nav.activeStep]);
   useEffect(() => { if (!nav.route || scopeTouched.current) return; setScope(nav.route.floors.length > 1 ? "route" : "current"); }, [nav.route]);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -241,7 +249,7 @@ export default function Navigator() {
               {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
               {!following&&<button onClick={()=>{setExploreOpen(true);setToolsOpen(false);setScenarioOpen(false);setPlanExpanded(false);setWeakOpen(false);setPhoneOpen(false);}}><Pictogram name="pin" size={18}/>Find, save &amp; share</button>}
               {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
-              <CompanionControl buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
+              <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
                 onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?.text??"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
                 onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
