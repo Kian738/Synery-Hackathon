@@ -5,7 +5,7 @@ import importlib
 import os
 import sys
 
-SUITES = ["scenarios","unseen","private","chat_regressions","atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "sunday", "generated", "rules", "roundtrip", "walls", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "rehearse", "report"]
+SUITES = ["scenarios","unseen","private","chat_regressions","atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "sunday", "generated", "rules", "roundtrip", "walls", "edits", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "rehearse", "report"]
 GATES = [
     ["routes", "--split", "train,dev"],
     ["solver", "--split", "train,dev"],
@@ -18,6 +18,7 @@ GATES = [
     ["rules", "--split", "dev", "--limit", "16", "--pairs", "2", "--samples", "3"],
     ["roundtrip", "--split", "dev", "--per-building", "6"],
     ["walls", "--split", "dev", "--pairs", "4"],
+    ["edits", "--split", "dev", "--per-building", "2", "--limit", "12"],
     ["robust", "--split", "dev"],
     ["metamorphic", "--split", "dev"],
     ["walkability", "--split", "dev", "--pairs", "4"],

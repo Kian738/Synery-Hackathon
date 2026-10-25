@@ -8,7 +8,7 @@ export function GuidePlayer({route,model,time,playing,speed,step,reduced,transit
   onSeek:(v:number)=>void;onPlay:()=>void;onPrevious:()=>void;onNext:()=>void;onSpeed:(v:number)=>void;onRepeat?:()=>void;onExit?:()=>void;
 }) {
   const safeTime=Math.max(0,Math.min(Number.isFinite(time)?time:0,model.duration));
-  const arrived=safeTime>=model.duration,progress=model.duration?100*safeTime/model.duration:100;
+  const arrived=safeTime>=model.duration-.011,progress=model.duration?100*safeTime/model.duration:100;
   const instruction=route.guide.steps[step];
   return <section className="guide-player" aria-label="Route preview player">
     <div className="player-instruction" role="status"><Pictogram name={instruction?.icon??"straight"} size={26}/><div><span>{arrived?"Destination reached in preview":transition??`Decision ${step+1} of ${route.guide.steps.length}`}</span><p>{instruction?.text}</p></div><button aria-label="Repeat instruction" title="Repeat instruction" onClick={onRepeat}><Pictogram name="speaker"/></button></div>

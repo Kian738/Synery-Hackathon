@@ -1,0 +1,101 @@
+/* Floorwise control kit: the ONLY place control size, radius, spacing and font are defined.
+   Everything floating over the 3D stage is a .k-dock of .k-ctl / .k-seg / .k-pop. See docs/UI_RESEARCH.md. */
+:root {
+  --ctl: 40px;            /* every control is this tall (and icon buttons this wide) */
+  --gap: 8px;             /* between controls in a dock */
+  --gap-group: 16px;      /* between docks and the stage edge */
+  --r-ctl: 12px;          /* controls */
+  --r-panel: 16px;        /* panels and popovers */
+  --r-pill: 999px;        /* status chips only */
+  --k-bg: #152128;
+  --k-bg-hi: #1f3039;
+  --k-line: #34464f;
+  --k-ink: #edf3f5;
+  --k-mute: #9fb2ba;
+  --k-accent: #ffd45c;
+  --k-danger: #ff8a8f;
+  --k-font: 600 13px var(--font-sans);
+}
+@media (max-height: 480px) { :root { --ctl: 34px; } }
+
+.k-dock { display:flex; align-items:center; gap:var(--gap); }
+.k-dock.col { flex-direction:column; align-items:stretch; }
+
+.k-ctl, .k-seg button {
+  position:relative; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  height:var(--ctl); min-width:var(--ctl); padding:0 12px; border:1px solid var(--k-line); border-radius:var(--r-ctl);
+  background:var(--k-bg); color:var(--k-ink); font:var(--k-font); cursor:pointer; text-decoration:none; white-space:nowrap;
+}
+.k-ctl.icon { padding:0; width:var(--ctl); }
+.k-ctl:hover:not(:disabled), .k-seg button:hover:not(:disabled) { background:var(--k-bg-hi); }
+.k-ctl[aria-pressed="true"], .k-seg button[aria-pressed="true"] { background:var(--k-accent); border-color:var(--k-accent); color:#1c2226; }
+.k-ctl:disabled, .k-seg button:disabled { opacity:.4; cursor:not-allowed; }
+.k-ctl:focus-visible, .k-seg button:focus-visible, .k-floor:focus-visible { outline:2px solid var(--k-accent); outline-offset:2px; }
+.k-ctl.accent { background:var(--k-accent); border-color:var(--k-accent); color:#1c2226; }
+
+.k-seg { display:inline-flex; gap:2px; padding:3px; box-sizing:border-box; height:var(--ctl); border:1px solid var(--k-line); border-radius:var(--r-ctl); background:var(--k-bg); }
+.k-seg button { height:100%; min-width:34px; border:0; border-radius:calc(var(--r-ctl) - 4px); background:transparent; padding:0 10px; }
+
+/* delayed tooltip for icon-only controls (the accessible name is always set too) */
+.k-ctl[data-tip]::after, .k-seg button[data-tip]::after {
+  content:attr(data-tip); position:absolute; z-index:40; left:50%; top:calc(100% + 8px); transform:translateX(-50%); padding:4px 8px; border-radius:8px;
+  background:#0c1317; border:1px solid var(--k-line); color:var(--k-ink); font:500 12px var(--font-sans); pointer-events:none; opacity:0; transition:opacity .12s .5s; white-space:nowrap;
+}
+.k-ctl[data-tip]:hover::after, .k-seg button[data-tip]:hover::after, .k-ctl[data-tip]:focus-visible::after { opacity:1; }
+.k-dock.col .k-ctl[data-tip]::after { left:calc(100% + 8px); top:50%; transform:translateY(-50%); }
+
+.k-badge { position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 4px; box-sizing:border-box; border-radius:var(--r-pill); background:var(--k-danger); color:#2a1214; font:700 11px var(--font-sans); display:grid; place-items:center; }
+
+.k-pop { position:relative; }
+.k-pop-panel { position:absolute; z-index:30; top:calc(100% + var(--gap)); right:0; min-width:236px; padding:var(--gap); box-sizing:border-box; display:flex; flex-direction:column; gap:var(--gap);
+  border:1px solid var(--k-line); border-radius:var(--r-panel); background:var(--k-bg); box-shadow:0 18px 40px #000a; }
+.k-pop-panel.left { right:auto; left:0; }
+.k-pop-panel .k-row, .k-pop-panel>button, .k-pop-panel>a { display:flex; align-items:center; gap:10px; justify-content:flex-start; width:100%; height:var(--ctl); padding:0 12px; box-sizing:border-box; border:0; border-radius:var(--r-ctl); background:transparent; color:var(--k-ink); font:var(--k-font); text-decoration:none; text-align:left; cursor:pointer; }
+.k-pop-panel .k-row:hover, .k-pop-panel>button:hover, .k-pop-panel>a:hover { background:var(--k-bg-hi); }
+.k-pop-panel [aria-pressed="true"]:not(.k-seg button) { background:var(--k-bg-hi); box-shadow:inset 3px 0 0 var(--k-accent); }
+.k-pop-panel .k-seg { width:100%; } .k-pop-panel .k-seg button { flex:1; width:auto; }
+.k-pop-title { color:var(--k-mute); font:600 11px var(--font-sans); text-transform:uppercase; letter-spacing:.06em; padding:2px 4px 0; }
+.k-closed { display:flex; align-items:center; gap:8px; padding:6px 6px 6px 12px; border:1px solid #7a3b3b; border-radius:var(--r-ctl); background:#2a1a1c; color:#ffd2d2; font:var(--k-font); }
+.k-closed button { margin-left:auto; height:28px; padding:0 10px; border:0; border-radius:8px; background:var(--k-accent); color:#1c2226; font:700 12px var(--font-sans); cursor:pointer; }
+
+/* stage layout: four docks, one gap */
+.k-top { position:absolute; z-index:15; left:var(--gap-group); right:var(--gap-group); top:var(--gap-group); display:flex; justify-content:space-between; align-items:flex-start; gap:var(--gap-group); pointer-events:none; }
+.k-top > * { pointer-events:auto; }
+.k-cam { position:absolute; z-index:12; left:var(--gap-group); bottom:var(--gap-group); }
+.k-status { position:absolute; z-index:12; left:50%; bottom:var(--gap-group); transform:translateX(-50%); max-width:calc(100% - 2*var(--gap-group) - 120px); }
+.k-status .k-pill { display:flex; align-items:center; gap:10px; height:var(--ctl); padding:0 6px 0 14px; box-sizing:border-box; border:1px solid var(--k-line); border-radius:var(--r-pill); background:#152128ee; color:var(--k-ink); font:var(--k-font); cursor:pointer; backdrop-filter:blur(8px); }
+.k-status .k-pill span { color:var(--k-mute); font-weight:500; }
+.k-status .k-pill u { text-decoration:none; height:28px; display:grid; place-items:center; padding:0 12px; border-radius:var(--r-pill); background:var(--k-accent); color:#1c2226; font-weight:700; }
+.k-status .k-pill[aria-pressed="false"] u { background:var(--k-bg-hi); color:var(--k-ink); }
+
+/* floor rail: compact dots by default, names on hover/focus, names kept for route floors */
+.k-rail { position:absolute; z-index:12; left:var(--gap-group); top:calc(var(--gap-group) + var(--ctl) + var(--gap)); display:flex; flex-direction:column; gap:4px; padding:6px; box-sizing:border-box;
+  border:1px solid var(--k-line); border-radius:var(--r-panel); background:var(--k-bg); max-height:calc(100% - 140px); overflow-y:auto; scrollbar-width:none; }
+.k-floor { --fc:#8fa3ab; display:flex; align-items:center; gap:8px; height:32px; padding:0 8px; border:0; border-radius:10px; background:transparent; color:var(--k-ink); font:var(--k-font); cursor:pointer; text-align:left; overflow:hidden; }
+.k-floor:hover { background:var(--k-bg-hi); }
+.k-floor i { flex:none; width:12px; height:12px; box-sizing:border-box; border-radius:50%; border:2px solid var(--fc); background:transparent; }
+.k-floor[data-current="true"] { background:var(--k-bg-hi); }
+.k-floor[data-current="true"] i { background:var(--fc); }
+.k-floor[data-route="true"] i { box-shadow:0 0 0 3px #ffd45c55; border-color:var(--k-accent); background:var(--fc); }
+.k-floor b { flex:none; min-width:14px; text-align:center; font-weight:700; }
+.k-floor .name, .k-floor em { max-width:0; opacity:0; overflow:hidden; white-space:nowrap; font-style:normal; font-weight:500; color:var(--k-mute); transition:max-width .18s ease, opacity .18s ease; }
+.k-floor em { color:#65d7ac; }
+.k-rail:hover .name, .k-rail:focus-within .name, .k-rail.open .name, .k-rail:hover em, .k-rail:focus-within em,
+.k-rail[data-route="true"] .k-floor[data-route="true"] .name { max-width:150px; opacity:1; }
+
+.navigator-shell.guiding .floor-selector-host, .navigator-shell.guiding .k-cam { display:none; }
+.floor-selector-host.hidden { display:none; }
+
+.k-ctl[aria-pressed="true"]:hover:not(:disabled), .k-seg button[aria-pressed="true"]:hover:not(:disabled) { background:var(--k-accent); }
+
+.k-ctl[aria-pressed="true"]::after { display:none; }
+.k-pop-panel[hidden] { display:none; }
+
+/* narrow screens: icon-only chrome, rail on the right so it never covers the camera dock */
+@media (max-width: 640px) {
+  .k-top { flex-wrap: wrap; gap: var(--gap); }
+  .k-top .k-ctl:not(.icon) span, .k-top .k-seg button span { display: none; }
+  .k-top .k-ctl:not(.icon) { padding: 0; width: var(--ctl); }
+  .k-rail { left: auto; right: var(--gap-group); top: calc(var(--gap-group) + 2 * var(--ctl) + 2 * var(--gap)); max-height: calc(100% - 200px); }
+  .k-status .k-pill { height: auto; min-height: var(--ctl); padding: 4px 6px 4px 12px; flex-wrap: wrap; }
+}

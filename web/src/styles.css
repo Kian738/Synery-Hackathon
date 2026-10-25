@@ -31,6 +31,24 @@ body,
   height: 100%;
 }
 
+/* The app is one fixed-height shell: the page itself never scrolls (panels scroll inside), so nothing can be scrolled out from under the viewer. */
+html:has(.navigator-shell),
+body:has(.navigator-shell) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#root:has(> .navigator-shell) { height: 100dvh; overflow: hidden; }
+
+/* The conversation takes the space between the route card and the composer, so streamed text never moves the controls around it. */
+.conversation-scroll {
+  flex: 1 1 0;
+  min-height: 140px;
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: var(--color-concrete);
@@ -109,8 +127,6 @@ body {
 .model-actions button:disabled { opacity:.5; }
 .model-viewport { flex:1; min-width:0; position:relative; }
 .building-stage { width:100%; height:100%; position:relative; }
-.floor-selector { position:absolute; left:24px; top:90px; z-index:12; max-height:55%; overflow-y:auto; background:#182329; border:1px solid #485d68; color:#edf3f5; }
-.floor-selector button { min-height:44px; }
 .scene-caption { position:absolute; bottom:25px; left:25px; color:#edf3f5; font-size:13px; line-height:1.6; pointer-events:none; max-width:65%; }
 .scene-caption span { color:#b6c5cc; }
 .model-notice { position:absolute; z-index:20; top:88px; left:110px; right:24px; padding:14px 16px; border-left:3px solid #ffd45c; background:#213139; color:#edf3f5; display:flex; gap:16px; align-items:start; box-shadow:0 4px 15px #0005; }
@@ -152,7 +168,6 @@ body {
  .model-toolbar button,.model-toolbar a { padding:6px 9px;font-size:12px; }
  .model-actions { margin-left:auto; }
  .model-actions a { display:none; }
- .floor-selector { left:10px;top:80px;max-height:45%; }
  .model-notice,.follow-instruction { top:80px;left:80px;right:10px;padding:10px;font-size:13px; }
  .follow-instruction p { font-size:16px; }
  .scene-caption { bottom:10px;left:10px;font-size:11px;max-width:85%; }
@@ -169,12 +184,7 @@ body {
  .navigator-shell .example-requests { margin-top:12px; }
 }
 
-.floor-selector nav { background:#182329; }
-.floor-selector .bg-white { background:#182329; color:#edf3f5; }
-.floor-selector .text-ink-3 { color:#b6c5cc; }
-.floor-selector button:hover { background:#34464f; }
 
-.floor-selector { max-width:175px; }
 .follow-instruction,.model-notice { left:215px; }
 @media(max-width:1023px) { .follow-instruction,.model-notice { left:80px; } }
 
@@ -233,7 +243,6 @@ body {
  .scene-caption { max-width:calc(100% - 160px);font-size:10px;bottom:58px; }
  .scene-navigation { right:auto;left:10px;max-width:calc(100% - 155px);flex-wrap:wrap;bottom:8px; }
  .scene-navigation button { min-width:30px;min-height:34px; }
- .floor-selector { top:108px;max-height:36%; }
  .model-actions { gap:3px; }.model-actions select { max-width:125px;padding:7px;font-size:12px; }
 }
 .media-status { padding-right:60px; }
@@ -312,8 +321,7 @@ body {
 .guide-player{bottom:14px;max-width:620px;padding:9px 14px 6px;border:0;border-radius:8px;background:#152128eb;box-shadow:0 3px 18px #0004;display:grid;grid-template-columns:1fr;gap:0}.player-instruction{gap:9px;align-items:center}.player-instruction p{font-size:16px;line-height:1.25;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.player-instruction span{font-size:10px;line-height:1.2}.player-instruction>svg{width:20px;height:20px}.player-instruction>button{min-height:34px;min-width:34px}.player-progress{height:22px;margin-top:2px}.progress-track{top:10px;height:3px}.player-progress input{height:24px}.progress-chapters{top:8px}.player-transport{min-height:36px}.player-main-controls .play-toggle{width:38px;height:38px;min-height:38px}.player-transport button{min-width:36px;min-height:36px}.player-time{font-size:11px}.player-options select{min-height:34px;padding:4px}.building-stage canvas{touch-action:none}.guide-player button,.model-toolbar button{touch-action:manipulation}.room-mention{display:inline;color:#8bd7ef;text-decoration:underline;text-underline-offset:3px;font-weight:600;text-align:inherit;border-radius:3px}.room-mention:hover,.room-mention:focus-visible{background:#314750;color:white}.cmp-settings{margin-top:auto}.cmp-settings summary{padding:14px 0;color:var(--cmp-muted);cursor:pointer}.cmp-settings .cmp-panel{margin:10px 0}.cmp-panel[aria-label="Current instruction"] h1{font-size:24px}.cmp-instruction{font-size:22px!important;line-height:1.25!important}.cmp-step .cmp-short{display:none}.cmp-panel[aria-label="Look around"]{padding:10px}.cmp-pad{min-height:140px!important}.cmp-row.three .cmp-btn{min-height:48px}.cmp-settings:not([open]){border-top:1px solid var(--cmp-edge)}
 @media(max-width:640px){.guide-player{bottom:10px;width:calc(100% - 20px);padding:8px 10px 5px}.player-instruction p{font-size:15px}.player-transport .play-toggle{width:38px;height:38px}.player-transport{gap:3px}.player-options select{font-size:11px}.player-time{font-size:10px}}
 .cmp-open-building{align-self:flex-end;color:var(--cmp-route);font-size:14px;text-decoration:underline;min-height:32px;padding:5px 0}
-.building-tools{position:relative}.building-tools>summary{display:grid;place-items:center;min-height:42px;padding:8px 13px;border:1px solid #485d68;background:#182329;color:#edf3f5;border-radius:4px;cursor:pointer;list-style:none;font-size:14px;font-weight:600}.building-tools>summary::-webkit-details-marker{display:none}.building-tools[open]>.building-tools-content{position:absolute;right:0;top:48px;z-index:30;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px;width:210px;background:#182329;border:1px solid #52636c;border-radius:6px;box-shadow:0 10px 30px #0006}.building-tools:not([open])>.building-tools-content{display:none}.building-tools-content button{white-space:nowrap}.building-tools-content select{max-width:none;width:100%}.building-tools-content>a{display:block!important;color:#edf3f5;padding:8px}.example-requests summary{min-height:36px;display:list-item;list-style:disclosure-closed inside}.example-requests[open] summary{list-style-type:disclosure-open}
-@media(max-width:1023px){.model-toolbar{flex-wrap:nowrap;gap:4px!important}.mode-switch{gap:0;padding:3px}.mode-switch button{padding:6px 8px}.model-actions{gap:4px!important}.building-tools{position:relative}.building-tools>summary{display:grid;place-items:center;height:40px;min-width:38px;border:1px solid #485d68;background:#182329;color:#edf3f5;border-radius:4px;cursor:pointer;list-style:none;letter-spacing:2px}.building-tools>summary::-webkit-details-marker{display:none}.building-tools[open]>.building-tools-content{position:absolute;right:0;top:46px;z-index:30;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px;width:190px;background:#182329;border:1px solid #52636c;border-radius:6px;box-shadow:0 10px 30px #0006}.building-tools:not([open])>.building-tools-content{display:none}.building-tools-content select{max-width:none;width:100%}.building-tools-content>a{display:block!important;color:#edf3f5;padding:8px}.building-tools-content>button>span{display:inline!important}.stage-expanded .model-toolbar .stage-toggle{display:none}}
+@media(max-width:1023px){.model-toolbar{flex-wrap:nowrap;gap:4px!important}.mode-switch{gap:0;padding:3px}.mode-switch button{padding:6px 8px}.model-actions{gap:4px!important}.stage-expanded .model-toolbar .stage-toggle{display:none}}
 .companion-close{color:#edf3f5;background:#263941;width:36px;height:36px;display:grid;place-items:center;border-radius:4px}
 
 .speed-options{display:flex;gap:2px}.speed-options button{min-width:36px;min-height:36px;border:1px solid #68808a;color:#dfe9ec;background:#17262e}.speed-options button[aria-pressed=true]{background:#ffd45c;color:#10191d;border-color:#ffd45c}.answer-reference{padding:10px;border:1px solid #526871;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.answer-reference span{width:100%;font-weight:600}.answer-reference button{padding:7px 10px;border:1px solid #68808a}.result-list li{display:flex;gap:4px}.result-list li>button:first-child{flex:1}.result-list li>button:last-child{padding:8px}.player-options .speed-options{flex-wrap:nowrap}@media(max-width:480px){.player-transport{flex-wrap:wrap}.player-options{flex:1;justify-content:flex-end}}
@@ -382,6 +390,49 @@ body {
 .navigator-shell .model-panel .room-inspector{width:min(290px,calc(100% - 24px));max-height:calc(100% - 96px);overflow-y:auto;padding:12px;box-shadow:0 5px 18px #0003;}.room-inspector h3{font-size:20px;}.room-card-details{font-size:13px;margin-top:6px;}.room-card-details>summary{cursor:pointer;color:#b6c5cc;min-height:30px;display:list-item;}.room-card-details p{margin:4px 0;}.room-inspector .focus-room{margin:4px 0;}
 @media(max-width:640px){.navigator-shell .model-panel .room-inspector{left:10px;right:10px;width:auto;}.agent-reply{font-size:14px;}}
 
+/* ---- UI pass 2026-10-25: one visual language for toolbar, popover, focus pill and the guide player ---- */
+
+
+
+.guide-player { border:1px solid #34464f !important; border-radius:16px !important; background:#10191eef !important; backdrop-filter:blur(10px); box-shadow:0 18px 40px #000a !important; padding:12px 18px 10px !important; max-width:640px !important; }
+.player-instruction { gap:14px; } .player-instruction p { font-size:16px; line-height:1.3; margin:2px 0 0; }
+.player-instruction>div>span { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#ffd45c; }
+.player-instruction button, .player-main-controls button { border:0 !important; background:#1d2c34 !important; color:#edf3f5 !important; border-radius:50% !important; width:40px; height:40px; min-height:40px; display:grid; place-items:center; }
+.player-main-controls button:hover { background:#2a3d47 !important; }
+.player-main-controls .play-toggle { width:52px; height:52px; background:#ffd45c !important; color:#1c2226 !important; }
+.speed-options { background:#1d2c34; border-radius:999px; padding:3px; gap:0 !important; }
+.speed-options button { min-width:38px !important; min-height:30px !important; border:0 !important; border-radius:999px !important; background:transparent !important; color:#b6c5cc !important; font:600 13px var(--font-sans); }
+.speed-options button[aria-pressed="true"] { background:#ffd45c !important; color:#1c2226 !important; }
+.player-time { font:600 13px var(--font-sans); color:#b6c5cc; }
+.player-instruction p{font-size:16px !important;line-height:1.3 !important}
+
+/* floor rail: every floor shows a dot, rows are rounded like the rest of the UI */
+
 .large-text .agent-reply{font-size:17px!important;line-height:1.5;}
 
+/* floor identity colour on the rail dots; chat surface: calmer, rounder, one visual language */
+.navigation-panel form { border-top:1px solid #2b3c45; padding:10px 12px; gap:8px; }
+.navigation-panel form textarea { border-radius:14px !important; border:1px solid #34464f !important; background:#10191e !important; padding:10px 14px !important; }
+.navigation-panel form button { border-radius:50% !important; }
+.navigation-panel .overflow-x-auto button { border-radius:999px !important; border-color:#34464f !important; background:#1d2c34; }
+.conversation-scroll { gap:10px; }
+.conversation-scroll>p.border-r-4 { margin-left:auto; max-width:88%; padding:9px 14px !important; border:0 !important; border-radius:16px 16px 4px 16px; background:#2a3d47; text-align:left !important; font-size:15px; }
+.conversation-scroll .agent-reply { border:0 !important; padding:2px 2px !important; font-size:15px; line-height:1.5; }
+.turn-usage summary { color:#8fa3ab; font-size:12px; }
+
 .answer-result-group{font-size:13px;color:#b6c5cc;border-top:1px solid #34464f;padding-top:5px;}.answer-result-group summary{cursor:pointer;min-height:36px;padding:8px 0;}.answer-result-group ul{max-height:190px;overflow:auto;}.answer-result-group li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #34464f;}.answer-result-group small{display:block;font-size:12px;}.answer-result-group button{color:#8bd7ef;min-height:36px;text-decoration:underline;flex-shrink:0;}
+
+
+/* floor change in Guide me: a small caption, so the ride itself stays visible */
+.landing-transition { inset:auto !important; top:84px; left:50%; transform:translateX(-50%); width:auto !important; max-width:calc(100% - 40px); background:#10191eE6 !important; border:1px solid #34464f; border-radius:999px; flex-direction:row !important; gap:10px !important; padding:8px 18px !important; pointer-events:none; backdrop-filter:blur(8px); }
+.landing-transition>span { font-size:20px !important; }
+.landing-transition b { font-size:15px !important; }
+.landing-transition p { margin:0; color:#ffd45c; font-size:14px; }
+.landing-transition small { display:none; }
+
+/* one button language: toolbar, player and notices share radius and pill shapes */
+.model-toolbar button, .model-toolbar summary, .model-actions>button, .navigator-shell .model-panel>button { border-radius:10px !important; }
+.mode-switch { border-radius:12px; } .mode-switch button { border-radius:9px !important; }
+.player-options>button { border:0 !important; border-radius:999px !important; background:#ffd45c !important; color:#1c2226 !important; font:700 14px var(--font-sans); padding:0 18px !important; height:36px; min-height:36px; width:auto !important; }
+.model-notice { border-radius:12px; } .model-notice button { border-radius:999px; }
+.model-notice .reopen-all { margin-left:10px; padding:5px 12px; border:0; background:#ffd45c; color:#1c2226; font-weight:700; }

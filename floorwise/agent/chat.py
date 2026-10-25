@@ -65,6 +65,7 @@ Changes:
 - Tool results have result_id references: complete visual answers are already shown to the person. Do not enumerate hundreds of entities in text.
 - New doors: call add_door with confirm=false first, explain the effect, and apply with confirm=true only after the person agrees.
 - "This machine is now in room X": move_item.
+- "Wall up / remove the door between X and Y": remove_door (entrances cannot be removed). "Put a new <machine> in room X": add_item. "That machine is gone": remove_item. "Undo that" / "revert": undo_edit. After every edit say what changed and offer to undo it.
 
 Conversation quality:
 - Interpret the complete request, including follow-up clauses such as "and where". For counts plus locations use count_items once; its room groups and total answer both parts.
@@ -132,7 +133,7 @@ class ChatAgent:
 
             @tool
             def load_tools(names: list[str]) -> str:
-                """Get argument schemas for specialized tools: find_places, result_page, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, nearest, reachable_rooms, rank_rooms, set_closed, add_door, move_item, apply_fix, simulate_egress, reasoning_capabilities, run_reasoning_plan. Invoke specialized tools through run_tool; this never changes the conversation's tool definitions."""
+                """Get argument schemas for specialized tools: find_places, result_page, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, nearest, reachable_rooms, rank_rooms, set_closed, add_door, move_item, remove_door, add_item, remove_item, undo_edit, apply_fix, simulate_egress, reasoning_capabilities, run_reasoning_plan. Invoke specialized tools through run_tool; this never changes the conversation's tool definitions."""
                 unknown=[n for n in names if n not in self._tool_catalog]
                 if unknown:raise ValueError(f'Tools unavailable in this session: {unknown}')
                 return json.dumps({'tools':[self._tool_catalog[n].anthropic() for n in names],

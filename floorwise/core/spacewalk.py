@@ -228,6 +228,18 @@ def base_edges(building) -> dict[str, list[tuple[str, str, float]]]:
     return edges
 
 
+def refresh_spaces(building, space_ids) -> None:
+    """A session added or removed an opening: recompute the walking edges of the spaces it touches and drop what-if caches.
+    The on-disk copy describes the unchanged file, so only the affected spaces are redone in memory."""
+    base = base_edges(building)
+    for sid in dict.fromkeys(space_ids):
+        if sid not in building.spaces:
+            continue
+        mine = [o for o in building.openings.values() if sid in o["space_ids"]]
+        base[sid] = space_edges(building.spaces[sid], mine)
+    building.__dict__.pop("_extra_walks", None)
+
+
 def edges_with(building, space_id: str, extra: tuple[dict, ...]) -> list[tuple[str, str, float]]:
     """Edges of one space when extra openings (what-if doors) also touch it. Cached per distinct extra set."""
     mine = tuple(o for o in extra if space_id in o["space_ids"])

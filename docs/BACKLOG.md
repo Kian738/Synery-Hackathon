@@ -82,3 +82,114 @@ Still open: refresh every critical live case after the final integration, comple
 ## Consolidated UI review
 
 See UX_AUDIT_50_AND_EXPLORATION.md for the fifty repair entries and twenty contextual additions. The concurrent focus-camera prototype was rejected: moving a camera away from the validated walking path and interpolating between unverified landing coordinates does not establish collision-safe navigation. Its source is preserved locally under runs/gemini-review. General exterior views require genuine OSM references. Physical phone tests and browser visual acceptance remain open; earlier checklist entries must not imply these passed.
+
+Update 2026-10-25 (later): also done: stairs and lifts that share a space (swiss-921: lift + stairs mapped into one corridor) get separate
+compact fixtures (`slotSpace`), only real stair/lift spaces lose their floor plate, a daylight rig with soft shadows and fog
+(`SceneLighting.tsx`), edit tools with undo (see STATUS). Still open: UI buttons for undo/remove-door, floor identity colour,
+chat one-line response summary, walk-up-the-flight camera.
+
+## 2026-10-25 UI pass 3 (done) and open list
+
+Done: hidden rooms in focus mode are drawn as dim footprints and the pill says "N other rooms dimmed" with a "Show all rooms" button (hiding used to look like a bug);
+Guide me draws the whole building; floor identity colour (`lib/floorColors.ts`: wall outlines in 3D and the rail dots); toilet, sink, shower rebuilt; stairs/lifts fitted inside
+their room outline, landing at the door; lifts no longer draw a second door; duplicate walls drawn once (z-fighting); Guide me camera keeps 45 cm from walls, wider view, larger near plane;
+chat surface restyled (rounded composer, pill chips, bubble for the user); scope control and Tools popover restyled; page zoom disabled.
+
+Open, in priority order:
+1. **Testing (next focus):** frozen-snapshot gate run (the shared tree trips the source-integrity check); visual regression screenshots for 3D models (contact sheet exists, no baseline); Guide me
+   stair walk-through on real buildings; chat history test `chat stays usable through multiple replies` fails (history shows 1 of 2 turns: conversation grouping logic, not CSS); phone viewport runs of the new controls.
+2. **Whole UI design pass:** one component kit (buttons, pills, popovers, panels), tokens for radius/spacing/colour, dark/light parity, Lab and phone companion on the same kit.
+3. Chat redesign proper: one-line response summary, tool timings behind a click, streaming without layout jumps (layout fixed; real streaming not exercised without an API key).
+4. Undo / remove-door buttons in the UI (backend, REST and chat tools exist).
+5. More model polish: kitchen counter, stove, fridge, beds, wardrobes; check every footprint orientation (toilet tank beside the bowl in some buildings = asset rotation).
+6. Guide me: camera follows the real stair flight (now a smooth glide between landings); lift ride with car animation.
+7. Several buildings linked by walkways (data has single buildings).
+
+Update 2026-10-25 (lifts): `LiftShafts.tsx`: one animated car per lift travels (3.2 m/s) to the floor being looked at; landing doors are shut unless the car is on that floor and slide open on arrival.
+No door frames are drawn on stairwell openings. Test: `tests/focus-guide.spec.ts` (car travels, passes through intermediate heights). Not verified by eye: the door leaves opening/closing.
+Still open: lift ride in Guide me should move the car with the camera; stair flights cut through some oddly shaped stair spaces (another agent edits `stairBoxes`, re-check after merge).
+
+## Master list of everything asked in the 2026-10-25 UI sessions (status as of this edit)
+
+Colours and identity
+- [done] Room-type colours (`roomKinds.ts`), corridors white, no standing legend.
+- [done] Floor identity colour: wall outlines in 3D and the floor-rail dots (`floorColors.ts`).
+- [open] Floor colour also on the plan view and on the guide player chapter markers.
+- [open] Tooltip / on-demand key that names a room type colour (no space-taking legend).
+
+Focus / clarity
+- [done] Focus mode (route rooms + doors within 5 m), dimmed ghost footprints for the rest, pill "N other rooms dimmed - Show all rooms".
+- [done] Guide me draws the whole building. [open] Optional "dim the rest" toggle inside Guide me.
+- [open] Make hidden-room state obvious on the floor plan and in the exploded view too.
+- [done] Scope control (This floor / Route floors / Whole building / Spread) out of the Tools dropdown.
+
+Stairs, lifts, doors
+- [done] Stairs and lifts at real size, fitted inside their room, landing at the door, no door frames on stairwell openings.
+- [done] Lift car per lift travels to the viewed floor; landing doors shut unless the car is there.
+- [in progress] Lift looks: doubled doors (landing leaves + car door + wall frame), car visibility while moving.
+- [open] Stair flights in odd-shaped or very long shafts (CIT): clean flights, no trench, no floating wall pieces; one owner for `stairBoxes` (another agent edits it too).
+- [open] Lift car moves with the camera during a Guide me ride; stairs walked step by step.
+
+Guide me
+- [done] Camera 45 cm off walls, wider view, larger near plane, smooth glide between floors.
+- [open] Camera too close at doorways/start; pull the start back and look along the route; no clipping through wall ends.
+- [open] Player restyle finished (done: round buttons, speed segments); check phone layout.
+
+3D models
+- [done] Rounded edges, AO gradient, detailed LOD below 2500 items per floor, chair, toilet, sink, shower rebuilt.
+- [open] Kitchen counter, stove, fridge, beds, wardrobes, sofas; check orientation (toilet tank beside bowl = rotated asset).
+- [open] Visual regression baselines (contact sheet) for every type.
+
+UI system
+- [open] Whole-UI design pass: one component kit (buttons, pills, popovers, panels), radius/spacing/colour tokens, dark/light parity, Lab and phone on the same kit.
+- [open] Chat redesign proper (one-line response summary, tool timings behind a click, no layout jump while streaming).
+- [done] Page cannot scroll past the app; page zoom disabled.
+- [open] Undo / remove-door buttons in the UI.
+
+Testing (next focus)
+- [open] Frozen-snapshot gate run (shared tree trips the source-integrity check).
+- [open] Failing: `chat stays usable through multiple replies` (history shows 1 of 2 turns).
+- [open] Browser tests for lift doors open/close, guide stair walk, focus pill on phone, colour identity.
+- [open] Edit-agent paths through the live LLM (needs API key): add/remove door, add/remove/move item, undo.
+
+Update 2026-10-25 (camera path, closures):
+- [done] Guide me camera uses its own path (`cameraPolyline`): resampled, centred in corridors and doorways, smoothed, 45 cm off walls. The drawn route stays the shortest one and stays visible.
+- [done] "No route ... (closed: ...)" was a real closure (the main corridor `MI Magistrale` was closed in the session, the route itself is 65 m). A red "Closed: <name> - Reopen" chip now shows whenever anything is closed.
+- [done] Guide player end-of-route edge case (slider max rounding stopped playback 0.005 s short of "arrived").
+- [open] Guide me player/viewer REWRITE (layout, controls, chapters, captions, phone) as one component kit piece; current player is a restyle only.
+- [open] Walk DOWN/UP the real stair flight in Guide me (camera follows the flight, pitch from tread slope); today it glides straight between landings.
+- [open] Error copy for "no route": name the closed place and offer Reopen inside the message, not only the chip.
+- [open] Closures leaking in unnoticed: ask before closing a corridor from a room tap; show an undo toast.
+
+## Reported by the user, NOT fixed or NOT verified by the user (2026-10-25, last prompts)
+(Everything I called "done" above that the user has not confirmed is unverified; the items below are known broken.)
+1. Stair model looks wrong / terribly buggy (odd ramps, trench, floating walls, flights through odd-shaped shafts; in CIT and others).
+2. Lift doors look doubled and do not close when the car is elsewhere (the wooden opening frame plus our steel leaves plus data openings; my change only removed frames on lift-typed spaces, lifts mapped into corridors keep them).
+3. Lift car does not visibly animate when switching floors or during a Guide me ride.
+4. Guide me walks through walls, glitches into the elevator; the camera still follows jagged lines and swings left/right; wants a straight, centred line.
+5. Ceilings missing where a floor exists above (rule: a ceiling/roof exists exactly when there is a floor above that spot).
+6. Stairs and lifts rendered per building: clipping out of walls/bounds.
+7. Guide me: walk down/up the real stair flight; Guide me player rewrite.
+8. Whole-UI design unification; chat redesign proper; model quality for kitchen/shower/etc.; z-clipping at wall ends.
+9. Testing: frozen gates; visual baselines; lift door open/close test; guide stair walk test.
+
+## 2026-10-25 plan execution, step 1 and part of 4 (what changed, what is verified)
+Changed (verified by tests, and by screenshots only where noted):
+- Guide me camera path rebuilt (`lib/cameraPath.ts`): resample, centre, string-pull to long straight runs, rounded corners. Unit test: a zigzag route becomes <3 turns. Verified by test.
+- Camera heading: average look-ahead, eased and limited to 80 deg/s; no per-frame wall pushing. Playwright test (real-time playback): max yaw rate < 120 deg/s, few left/right reversals. Verified by test, NOT judged by the user.
+- Guide me now draws the whole building (other floors without furniture); before, only the current floor existed and descending showed a black void. Seen in screenshots.
+- The full-screen "Changing floors" card hid the ride; it is a small caption now. Seen in screenshot.
+- Ride is kept inside the stair/lift shaft outline. NOT seen working: my screenshots of the ride show a plain wall/slab, so the stairs may still not be visible during the ride.
+- Roofs from `scene.roofs` are drawn in Guide me (were not rendered at all). Not verified by eye in a building with a missing-roof case.
+Still open from the plan (not done): lift doors at the opening plane / doubled doors / car animation visibility (step 2); stair geometry rewrite (step 3); ceiling gaps between rooms and overview ceiling toggle (step 4); cramped starts (camera starts 0.4 m from a wall in small rooms; needs a pulled-back start); step 5 items.
+
+## 2026-10-25 later: door-aware camera, lift ride, notices
+Done: camera path passes every door through its midpoint, square to the wall, with straight lead-in/out (`cameraPath` + `Door`); test `camera path crosses every door through its middle`. "Reopen closed places" button inside the no-route notice (the closure on `MI Magistrale` is session state set from the UI; nothing closes it automatically; who closed it is unknown). Guide me lift ride: the car rises with the camera (`rideState`), landing doors follow it. Button language: toolbar, notices, player Finish share radii (pill/10 px).
+Seen: a stair ride at CIT t=13 s renders amber treads; overview stairs render. The user reported stairs "not rendered at all" in Guide me: not reproduced, may be a stale build or Codex's in-progress stair work (Codex owns stairs).
+Not verified by eye: lift ride in Guide me (car + camera together), door passing in a long playback, Finish button look.
+Open: camera still starts ~0.4 m from a wall in small rooms; stair ride start looks at a plain slab for ~1 s; whole-UI uniformity (many more buttons use older styles: Lab, phone companion, plan view).
+
+## 2026-10-25 UI kit rebuild (phases 1-3 partly, 4 started)
+Done and tested (`ui-kit.spec.ts`, desktop + phone): kit tokens and primitives; stage chrome as four docks; Layers and Tools popovers; floor rail compact/expanding with floor colours and route ring; focus-on-route toggle also in Guide me and the camera now applies it there; closed places listed in Layers with Reopen (badge on the button); chat panel Step-free / Read aloud / chips / primary button on the same control class; page zoom blocked (test updated); phone layout: icon-only top bar, rail on the right.
+Updated tests for the new controls: navigator, product, visual-workspace, demo capture, review-third-pass (whole building now drawn in Guide me).
+Open from the plan: Guide me walking the real stair flight (Codex owns stairs; needs `stairWalkLine`); camera start still faces a wall in tiny rooms; floor rail count badges (matches per floor); remaining screens not on the kit (Lab, phone companion, plan view controls, ExploreTools, ScenarioPanel, dialogs, composer mic/send); `!important` patch blocks still in styles.css for the guide player/notices; chat-history test still failing (grouping logic); lift/door/ceiling items above.

@@ -268,6 +268,20 @@ def door(session_id: str, body: DoorBody) -> dict:
     return call(s, "add_door" if body.confirm else "door_preview", body.first, body.second)
 
 
+@app.post("/api/sessions/{session_id}/door/remove")
+def door_remove(session_id: str, body: DoorBody) -> dict:
+    entry = session_or_404(session_id)
+    with session_write(entry):
+        return call(entry["session"], "remove_door", body.first, body.second)
+
+
+@app.post("/api/sessions/{session_id}/undo")
+def undo_edit(session_id: str) -> dict:
+    entry = session_or_404(session_id)
+    with session_write(entry):
+        return call(entry["session"], "undo")
+
+
 @app.get("/api/sessions/{session_id}/search")
 def search(session_id: str, q: str, floor: str | None = None) -> dict:
     return call(session_or_404(session_id)["session"], "search", q, floor)

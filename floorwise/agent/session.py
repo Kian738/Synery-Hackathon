@@ -48,6 +48,7 @@ class Session:
         return session
 
     default_start: str | None = None
+    _undo: list = field(default_factory=list, repr=False)
 
     # ---------- helpers ----------
 
@@ -471,31 +472,129 @@ class Session:
         if "error" in preview:
             return preview
         door = preview["door"]
-        self.building.openings[door["id"]] = door
-        self.building.data["openings"].append(door)
+        self._insert_opening(door)
         self.edits.append({"op": "add_door", "door": door})
-        from floorwise.core.walk import invalidate
-        invalidate(self.building)
+        self._undo.append(lambda: self._drop_opening(door["id"]))
+        self.last_route = None
         self.emit("edit", op="add_door", door=door)
         return {"added": door["id"], "between": preview["between"], "impact": preview["impact"]}
 
+    def _refresh(self, spaces=()) -> None:
+        from floorwise.core.spacewalk import refresh_spaces
+        from floorwise.core.walk import invalidate
+        if spaces:
+            refresh_spaces(self.building, spaces)
+        invalidate(self.building)
+        self.last_route = None
+
+    def _insert_opening(self, door: dict) -> None:
+        self.building.openings[door["id"]] = door
+        self.building.data["openings"].append(door)
+        self._refresh(door["space_ids"])
+
+    def _drop_opening(self, opening_id: str) -> None:
+        gone = self.building.openings.pop(opening_id, None)
+        self.building.data["openings"][:] = [o for o in self.building.data["openings"] if o["id"] != opening_id]
+        self._refresh(gone["space_ids"] if gone else ())
+
+    def _door_between(self, first: str, second: str) -> str | None:
+        """The opening that joins two named rooms (an opening id is accepted for either argument)."""
+        b = self.building
+        if first in b.openings and not second:
+            return first
+        a, c = self.space(first), self.space(second)
+        found = [o["id"] for o in b.openings.values() if o["kind"] in ("door", "opening") and set(o["space_ids"]) == {a, c}]
+        return found[0] if len(found) == 1 else (None if not found else found[0])
+
+    def remove_door(self, first: str, second: str = "") -> dict:
+        """Wall up a door or opening (by its id, or by the two rooms it joins)."""
+        b = self.building
+        opening_id = self._door_between(first, second)
+        if opening_id is None:
+            return {"error": "There is no door between those two rooms."}
+        opening = b.openings[opening_id]
+        if opening["kind"] == "entrance":
+            return {"error": "That is a building entrance and cannot be removed."}
+        before = self.impact_snapshot()
+        self._drop_opening(opening_id)
+        impact = self.impact(before)
+        self.edits.append({"op": "remove_door", "door": opening})
+        self._undo.append(lambda: self._insert_opening(opening))
+        self.emit("edit", op="remove_door", door=opening, impact=impact)
+        return {"removed": opening_id, "between": [b.label(s) for s in opening["space_ids"]], "impact": impact}
+
+    def add_asset(self, name: str, kind: str, room: str) -> dict:
+        """Put a new item (machine, desk, ...) in a room."""
+        b = self.building
+        space_id = self.space(room)
+        from floorwise.core.graph import anchor
+
+        x, y = anchor(b, space_id)
+        number = 1 + sum(1 for edit in self.edits if edit["op"] == "add_asset")
+        record = {"id": f"{b.spaces[space_id]['floor_id']}-A-new{number}", "name": name.strip() or kind, "category": "equipment",
+                  "type": R.normalise(kind).replace(" ", "_") or "item", "space_id": space_id,
+                  "floor_id": b.spaces[space_id]["floor_id"], "position": [round(x, 3), round(y, 3)], "source": "user"}
+        b.assets[record["id"]] = record
+        b.data["assets"].append(record)
+        self.edits.append({"op": "add_asset", "asset": record})
+        self._undo.append(lambda: self._drop_asset(record["id"]))
+        self._refresh()
+        self.emit("edit", op="add_asset", asset=record["id"], to=space_id)
+        return {"added": record["name"], "id": record["id"], "in": b.label(space_id)}
+
+    def _drop_asset(self, asset_id: str) -> None:
+        self.building.assets.pop(asset_id, None)
+        self.building.data["assets"][:] = [a for a in self.building.data["assets"] if a["id"] != asset_id]
+        self._refresh()
+
+    def remove_asset(self, asset: str) -> dict:
+        b = self.building
+        asset_id = self._asset_id(asset)
+        if isinstance(asset_id, dict):
+            return asset_id
+        record = b.assets[asset_id]
+        self._drop_asset(asset_id)
+        self.edits.append({"op": "remove_asset", "asset": record})
+        self._undo.append(lambda: (b.assets.__setitem__(record["id"], record), b.data["assets"].append(record), self._refresh()))
+        self.emit("edit", op="remove_asset", asset=asset_id)
+        return {"removed": record["name"], "from": b.label(record["space_id"])}
+
+    def undo(self) -> dict:
+        """Revert the most recent edit (door added/removed/widened, item moved/added/removed)."""
+        if not self._undo or not self.edits:
+            return {"error": "There is nothing to undo."}
+        undone = self.edits.pop()
+        self._undo.pop()()
+        self.emit("edit", op="undo", undone=undone["op"])
+        return {"undone": undone["op"], "remaining_edits": len(self.edits)}
+
+    def _asset_id(self, asset: str):
+        b = self.building
+        if asset in b.assets:
+            return asset
+        match = next((a["id"] for a in b.assets.values() if R.normalise(a["name"]) == R.normalise(asset)), None)
+        if match:
+            return match
+        found = self.search(asset)["assets"]
+        if len(found) != 1:
+            return {"error": f"Which item is '{asset}'?", "candidates": found[:8]}
+        return found[0]["id"]
+
     def move_asset(self, asset: str, to: str) -> dict:
         b = self.building
-        asset_id = asset if asset in b.assets else next(
-            (a["id"] for a in b.assets.values() if R.normalise(a["name"]) == R.normalise(asset)), None)
-        if asset_id is None:
-            found = self.search(asset)["assets"]
-            if len(found) != 1:
-                return {"error": f"Which item is '{asset}'?", "candidates": found[:8]}
-            asset_id = found[0]["id"]
+        asset_id = self._asset_id(asset)
+        if isinstance(asset_id, dict):
+            return asset_id
         space_id = self.space(to)
         from floorwise.core.graph import anchor
 
         x, y = anchor(b, space_id)
         record = b.assets[asset_id]
         old = record["space_id"]
+        previous = {k: record[k] for k in ("space_id", "floor_id", "position")}
         record.update(space_id=space_id, floor_id=b.spaces[space_id]["floor_id"], position=[round(x, 3), round(y, 3)])
         self.edits.append({"op": "move_asset", "asset": asset_id, "from": old, "to": space_id})
+        self._undo.append(lambda: (record.update(previous), self._refresh()))
         from floorwise.core.walk import invalidate
         invalidate(self.building)
         self.last_route = None
@@ -536,6 +635,7 @@ class Session:
         opening["width_m"] = width_m
         receipt = {"op": "widen_door", "opening": opening_id, "from": old, "to": width_m}
         self.edits.append(receipt)
+        self._undo.append(lambda: (opening.__setitem__("width_m", old), self._refresh()))
         self.last_route = None
         self.emit("edit", **receipt)
         return receipt

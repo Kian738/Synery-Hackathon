@@ -11,7 +11,7 @@ export function presentation(route: Route) {
   let duration = 0;
   for (let i=1;i<points.length;i++) {
     const a=points[i-1],b=points[i],transition=!!b.gap || a.floor_id!==b.floor_id;
-    const seconds=transition ? 2 : Math.hypot(b.x-a.x,b.y-a.y)/1.2;
+    const seconds=transition ? 3 : Math.hypot(b.x-a.x,b.y-a.y)/1.2;
     sections.push({a,b,start:duration,end:duration+seconds,transition}); duration+=seconds;
   }
   let previous=0;
@@ -30,13 +30,13 @@ export type Presentation = ReturnType<typeof presentation>;
 export function samplePreview(model: Presentation, seconds: number) {
   const time=Math.max(0,Math.min(seconds,model.duration));
   const section=model.sections.find(s=>time<s.end) ?? model.sections.at(-1);
-  if(!section)return {point:model.first,heading:[0,1] as const,transition:false,step:0,arrived:true};
+  if(!section)return {point:model.first,heading:[0,1] as const,transition:false,step:0,arrived:true,ride:null};
   const t=section.end===section.start?1:(time-section.start)/(section.end-section.start);
   const point=section.transition ? (t<.5?section.a:section.b) : {...section.a,x:section.a.x+(section.b.x-section.a.x)*t,y:section.a.y+(section.b.y-section.a.y)*t};
   const next=model.sections.find(s=>s.start>=section.end && !s.transition && s.a.floor_id===point.floor_id);
   const headingSection=section.transition?(next??section):section;
   let step=0;model.chapters.forEach((c,i)=>{if(c<=time+1e-7)step=i;});
-  return {point,heading:[headingSection.b.x-headingSection.a.x,headingSection.b.y-headingSection.a.y] as const,transition:section.transition&&time<model.duration,step,arrived:time>=model.duration};
+  return {point,heading:[headingSection.b.x-headingSection.a.x,headingSection.b.y-headingSection.a.y] as const,transition:section.transition&&time<model.duration,step,arrived:time>=model.duration-.011,ride:section.transition?{from:section.a,to:section.b,t}:null};
 }
 export function advancePreview(time:number,dt:number,speed:number,duration:number) {
   return Math.min(duration,Math.max(0,time+Math.max(0,dt)*speed));
