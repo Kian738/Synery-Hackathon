@@ -49,9 +49,10 @@ type Numbers = { people: number | null; rate: number | null };
 const whole = (v: string) => { const n = Math.floor(Number(v)); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 const positive = (v: string) => { const n = Number(v); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 
-export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat }: {
+export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat }: {
   onBeat?: (say: string, focus: string) => void;
   geometry: Geometry; sessionId: string; selected: Space | null; onClose: () => void;
+  quickRun?: number;
   incoming?: { n: number; report: ScenarioReport; hazard: string } | null;
   replayCmd?: { n: number; action: "play" | "pause" | "restart" | "seek"; seconds?: number } | null;
   onHighlight: (ids: Set<string>) => void; onScenario: (m: ScenarioMark | null) => void; onFloor: (id: string) => void; apply: (events: UiEvent[]) => void;
@@ -78,6 +79,7 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   // A room picked before running sets the fire room. Once a result is showing, the replay's own camera moves select rooms too, so they must not clear it.
   useEffect(() => { if (selected && !report) setHazard(selected); }, [selected]);
   useEffect(() => { setT(0); setPlaying(!!report?.evacuation?.schedule?.length); }, [report]);
+  useEffect(() => { if (quickRun > 0 && busiest && !busy) { setHazard(busiest); void run(busiest); } }, [quickRun]);
   useEffect(() => {
     if (!incoming) return;
     const h = geometry.spaces.find(x => x.id === incoming.hazard);

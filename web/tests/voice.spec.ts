@@ -11,7 +11,8 @@ test("read aloud uses the server voice when configured and falls back to the bro
     window.speechSynthesis.speak = (u: any) => (window as any).__spoken.push(u.text);
   });
   await page.goto(`${URL}/?building=swiss-1785`);
-  await page.getByRole("button", { name: "Read aloud" }).first().click();
+  const readAloud = page.getByRole("button", { name: "Read aloud" }).first();  // on by default; make sure it is on
+  if ((await readAloud.getAttribute("aria-pressed")) !== "true") await readAloud.click();
   await page.getByRole("button", { name: "Toilets" }).click();
   await expect.poll(() => asked.length, { timeout: 15000 }).toBeGreaterThan(0);
   expect(asked[0]).toContain('"text"');
@@ -25,7 +26,8 @@ test("a failing server voice drops to the browser voice", async ({ page }) => {
     window.speechSynthesis.speak = (u: any) => (window as any).__spoken.push(u.text);
   });
   await page.goto(`${URL}/?building=swiss-1785`);
-  await page.getByRole("button", { name: "Read aloud" }).first().click();
+  const readAloud = page.getByRole("button", { name: "Read aloud" }).first();  // on by default; make sure it is on
+  if ((await readAloud.getAttribute("aria-pressed")) !== "true") await readAloud.click();
   await page.getByRole("button", { name: "Toilets" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__spoken.length), { timeout: 15000 }).toBeGreaterThan(0);
 });

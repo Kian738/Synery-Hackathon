@@ -38,6 +38,7 @@ export default function Navigator() {
   const [selected, setSelected] = useState<Space | null>(null);
   const [weakOpen,setWeakOpen]=useState(false);
   const [scenarioOpen,setScenarioOpen]=useState(false);
+  const [quickRun,setQuickRun]=useState(0);
   const [exploreOpen,setExploreOpen]=useState(false);
   const [scenarioMark,setScenarioMark]=useState<ScenarioMark|null>(null);
   const scenarioZones=useMemo(()=>{const z:Record<string,string>={};Object.entries(scenarioMark?.crowd??{}).forEach(([id,n])=>{z[id]=n===2?"crowd2":"crowd1";});scenarioMark?.responder?.spaces.forEach(id=>{z[id]="responder";});return z;},[scenarioMark]);
@@ -225,6 +226,7 @@ export default function Navigator() {
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={voice.toggleReadAloud}/>}
             <IconButton label="Voice only" icon="mic" pressed={voice.voiceMode} onClick={voice.toggleVoiceMode}/>
             <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
+            {!following&&nav.sessionId&&<IconButton accent label="Fire test: run the evacuation scenario in one click" text="Fire test" icon="focus" onClick={()=>{setScenarioOpen(true);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setQuickRun(n=>n+1);}}/>}
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
               <Segmented ariaLabel="Visible floors" value={scope} onChange={chooseScope} options={[
@@ -250,7 +252,7 @@ export default function Navigator() {
         <div className={`floor-selector-host ${view==='exterior'?'hidden':''}`}><FloorRail floors={g.floors} active={displayFloor} route={nav.route} onPick={id=>{if(following)setView("3d");nav.setFloorId(id);}} here={hereFloor} /></div>
         <div className="model-viewport" ref={sceneHost}>
           <ErrorBoundary key={`${g.building.id}-${view==="2d"?"plan":"scene"}`} label="The building view needs recovery">
-            {view==='exterior'?<Suspense fallback={<p role="status">Preparing exterior map…</p>}><ExteriorView buildingId={buildingId} onEnter={enterInterior}/></Suspense>:view === "2d" ? <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult}
+            {view==='exterior'?<Suspense fallback={<p role="status">Preparing exterior map…</p>}><ExteriorView buildingId={buildingId} onEnter={enterInterior}/></Suspense>:view === "2d" ? <PlanView scenario={scenarioMark} geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult}
               pins={pins} previewDoor={nav.previewDoor} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<div className="recovery">Preparing the building model...</div>}>
                 <Building3D hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
@@ -261,7 +263,7 @@ export default function Navigator() {
         </div>
         {view!=="2d"&&view!=="exterior"&&planExpanded&&<section className="map-drawer" aria-label="Linked floor plan">
           <header><span>{g.floors.find(f=>f.id===displayFloor)?.name}</span><button aria-label="Close map" onClick={()=>setPlanExpanded(false)}><Pictogram name="close" size={18}/></button></header>
-          <PlanView geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
+          <PlanView scenario={scenarioMark} geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {exploreOpen&&<ExploreTools geometry={g} selected={selected} here={nav.here} route={nav.route} stepFree={nav.stepFree} onClose={()=>setExploreOpen(false)} onSelect={focusRoom} onHighlight={ids=>{nav.setHighlights(new Set(ids));const entity=g.assets.find(a=>a.id===ids[0]);if(entity)nav.setFloorId(entity.floor_id);}} onCompare={floor=>void nav.compareItems(floor)} onPlan={async stops=>{await nav.planStops(stops);setView('3d');}}/>}
@@ -274,7 +276,7 @@ export default function Navigator() {
           <span>Closed {nav.lastClosure.name}.</span><button className="k-ctl" onClick={() => void nav.toggleClosed(nav.lastClosure!.id)}>Undo</button>
         </div>}
         {nav.notice && !nav.closeConfirm && !nav.lastClosure && <div role="status" className="model-notice"><span>{nav.notice}</span>{/^No route/.test(nav.notice)&&nav.closed.size>0&&<button className="reopen-all" onClick={()=>[...nav.closed].forEach(id=>nav.toggleClosed(id))}>Reopen closed places</button>}<button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
-        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room)focusRoom(room);if(voiceOut&&!window.speechSynthesis?.speaking)speak(say);}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
+        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel quickRun={quickRun} onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room)focusRoom(room);if(voiceOut&&!window.speechSynthesis?.speaking)speak(say);}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
         {weakOpen&&!following&&!scenarioOpen&&<section className="stress-drawer" aria-label="Building stress test">
           <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>
           <p>Each result closes one connector independently and checks step-free routes to mapped exits.</p>
