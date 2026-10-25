@@ -23,6 +23,12 @@ import { api } from "../lib/api";
 import type { ScenarioMark } from "../lib/types";
 import { area, categories, centroid, label as labelOf, ZONE_LABEL, zoneOf } from "../lib/geometry";
 import type { BuildingRow, GuideStep, Space, VisualResult } from "../lib/types";
+import { audioStreamQueue, canListen, listen, speak, stopSpeaking } from "../lib/voice";
+import { ScenarioPanel } from "./ScenarioPanel";
+import { spokenStep } from "../lib/guide";
+import { Loader } from "../components/Loader";
+import { JourneyBanner } from "../journey/JourneyBanner";
+import { currentIndoorLeg, nextLeg, setJourneyIndex } from "../journey/journey";
 import { canListen, listen, speak, stopSpeaking } from "../lib/voice";
 import { useVoiceTour } from "./useVoiceTour";
 import { spokenStep } from "../lib/guide";
@@ -151,6 +157,168 @@ export default function Navigator() {
     return out;
   }, [g]);
   const hereFloor = g?.spaces.find((s) => s.id === nav.here)?.floor_id ?? null;
+
+  // Listen to speech start/end events to keep UI in sync
+  useEffect(() => {
+    const onStart = () => setIsAgentSpeaking(true);
+    const onEnd = () => setIsAgentSpeaking(false);
+    window.addEventListener("floorwise:speech-start", onStart);
+    window.addEventListener("floorwise:speech-end", onEnd);
+    return () => {
+      window.removeEventListener("floorwise:speech-start", onStart);
+      window.removeEventListener("floorwise:speech-end", onEnd);
+    };
+  }, []);
+
+  const clearVoiceTour = useCallback(() => {
+    voiceTourTimers.current.forEach(clearTimeout);
+    voiceTourTimers.current = [];
+    setVoiceFocusSpace(null);
+    setVoiceHighlightId(null);
+    setFocusRequest(null);
+  }, []);
+
+  const focusRoom = useCallback((space: Space) => {
+    setSelected(space);
+    nav.setFloorId(space.floor_id);
+    setVoiceFocusSpace(space);
+    setVoiceHighlightId(space.id);
+    setFocusRequest({ id: space.id, revision: Date.now() });
+  }, [nav.setFloorId]);
+
+  const tourRooms = useCallback((matchedSpaces: Space[], totalDurationMs?: number) => {
+    clearVoiceTour();
+    if (!matchedSpaces.length) return;
+    if (matchedSpaces.length === 1) {
+      focusRoom(matchedSpaces[0]);
+    } else {
+      const durationMs = totalDurationMs ?? Math.min(9000, Math.max(3000, matchedSpaces.length * 2500));
+      const interval = Math.max(1500, durationMs / matchedSpaces.length);
+      matchedSpaces.forEach((space, idx) => {
+        const timer = setTimeout(() => {
+          focusRoom(space);
+        }, idx * interval);
+        voiceTourTimers.current.push(timer);
+      });
+    }
+  }, [clearVoiceTour, focusRoom]);
+
+  // Voice camera choreography: automatically zoom in to specific rooms mentioned
+  // in speech, tour across multiple mentioned rooms, and dezoom back to the route/overview.
+  useEffect(() => {
+    const onChunk = (e: Event) => {
+      if (!voiceOut && !voiceMode) return;
+      if (!g) return;
+      const custom = e as CustomEvent<{ index: number; text: string; audio?: HTMLAudioElement }>;
+      const text = custom.detail?.text;
+      if (!text) return;
+
+      const matchedSpaces = findSpacesMentionedInText(text, g.spaces, nav.visualResult, nav.highlights);
+
+      if (matchedSpaces.length > 0) {
+        const audioDuration = custom.detail?.audio?.duration;
+        const durationMs =
+          audioDuration && isFinite(audioDuration) ? audioDuration * 1000 : Math.max(2500, text.length * 65);
+        tourRooms(matchedSpaces, durationMs);
+      } else {
+        const isRouteChunk = /\b(?:route|directions|way to|head to|walk to|take the|path|exit)\b/i.test(text);
+        if (isRouteChunk && nav.route?.polyline.length) {
+          clearVoiceTour();
+          nav.setFloorId(nav.route.polyline[0].floor_id);
+        }
+      }
+    };
+
+    const onSpeechEnd = () => {
+      clearVoiceTour();
+    };
+
+    window.addEventListener("floorwise:speech-chunk", onChunk);
+    window.addEventListener("floorwise:speech-end", onSpeechEnd);
+    return () => {
+      window.removeEventListener("floorwise:speech-chunk", onChunk);
+      window.removeEventListener("floorwise:speech-end", onSpeechEnd);
+      clearVoiceTour();
+    };
+  }, [voiceOut, voiceMode, g, nav.visualResult, nav.highlights, nav.route, nav.setFloorId, clearVoiceTour, tourRooms]);
+
+  // Response camera zoom: when an agent reply arrives (for both text and voice modes),
+  // automatically zoom and frame the room(s) discussed in the response.
+  const lastProcessedReplyId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!g) return;
+    const lastMsg = nav.messages[nav.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== "agent" || lastMsg.id === lastProcessedReplyId.current) return;
+    if (lastMsg.streaming || lastMsg.status === "streaming") return;
+
+    lastProcessedReplyId.current = lastMsg.id;
+
+    const matchedSpaces = findSpacesMentionedInText(lastMsg.text, g.spaces, nav.visualResult, nav.highlights);
+    if (matchedSpaces.length > 0) {
+      tourRooms(matchedSpaces);
+    } else {
+      const isRoute = /\b(?:route|directions|way to|head to|walk to|take the|path|exit)\b/i.test(lastMsg.text);
+      if (isRoute && nav.route?.polyline.length) {
+        clearVoiceTour();
+        nav.setFloorId(nav.route.polyline[0].floor_id);
+      }
+    }
+  }, [nav.messages, g, nav.visualResult, nav.highlights, nav.route, tourRooms, clearVoiceTour]);
+
+  // Speak new agent replies and route overviews when voice output or voice mode is on.
+  const spokenFor = useRef<string | null>(null);
+  const lastSpokenMessageId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!voiceOut && !voiceMode) {
+      lastSpokenMessageId.current = null;
+      return;
+    }
+    const lastMsg = nav.messages[nav.messages.length - 1];
+    if (lastMsg && lastMsg.role === "agent" && lastMsg.id !== lastSpokenMessageId.current) {
+      if (lastMsg.streaming || nav.busy) {
+        if (audioStreamQueue.active) {
+          setCurrentlySpeakingId(lastMsg.id);
+        }
+        return;
+      }
+      lastSpokenMessageId.current = lastMsg.id;
+      if (audioStreamQueue.hadChunks) {
+        if (audioStreamQueue.active) {
+          setCurrentlySpeakingId(lastMsg.id);
+        }
+        audioStreamQueue.onEnd(() => {
+          setCurrentlySpeakingId(null);
+        });
+      } else {
+        setCurrentlySpeakingId(lastMsg.id);
+        speak(lastMsg.text, () => {
+          setCurrentlySpeakingId(null);
+        });
+      }
+    }
+  }, [nav.messages, nav.busy, voiceOut, voiceMode]);
+
+  useEffect(() => {
+    if (!voiceOut && !voiceMode) { spokenFor.current = null; return; }
+    if (!nav.route || following) return;
+    const key = `${nav.route.length_m}-${nav.route.stops.join()}`;
+    if (spokenFor.current === key) return;
+    spokenFor.current = key;
+    // When a route is computed during an agent turn, the agent's reply already speaks the directions.
+    if (nav.busy || audioStreamQueue.hadChunks || audioStreamQueue.active) return;
+    speak(nav.route.guide.spoken);
+  }, [nav.route, voiceOut, voiceMode, following, nav.busy]);
+
+  useEffect(() => {
+    if ((voiceOut || voiceMode) && following && steps[nav.activeStep]) {
+      speak(spokenStep(steps[nav.activeStep]));
+    }
+    return () => {
+      stopSpeaking();
+    };
+  }, [voiceOut, voiceMode, following, nav.activeStep]);
 
   const pins: Pin[] = useMemo(() => {
     if (!g) return [];

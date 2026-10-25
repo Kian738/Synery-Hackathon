@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { placeMapLabels } from "../lib/mapLabels";
 import { routeRuns } from "../lib/playback";
 import { area, bounds, centroid, zoneOf } from "../lib/geometry";
 import { kindOf, kindPlan, ROOM_KIND } from "../lib/roomKinds";
@@ -134,14 +133,6 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
     geometry.connectors.filter((c) => closed?.has(c.id)).forEach((c) => c.space_ids.forEach((s) => ids.add(s)));
     return ids;
   }, [closed, geometry]);
-  const labelIds=useMemo(()=>placeMapLabels(spaces.flatMap(s=>{
-    const [x,y]=flip(s.anchor??centroid(s.polygon)),core=zoneOf(s)==="core",text=s.ref||s.name;
-    if(x<view.x||x>view.x+view.w||y<view.y||y>view.y+view.h)return [];
-    const pixels=area(s.polygon)*pxPerM*pxPerM;
-    if(s.id!==selected&&pixels<(core?500:1500))return [];
-    return [{id:s.id,x:(x-view.x)*pxPerM,y:(y-view.y)*pxPerM,width:core?22:Math.min(150,text.length*6.5),height:core?22:17,
-             priority:s.id===selected?1e9:(highlights?.has(s.id)?1e6:0)+pixels}];
-  }),compact?12:32),[spaces,view,pxPerM,selected,highlights,compact]);
   const coreIcon = (s: Space) => (/lift/.test(s.type + s.room_type) ? "lift" : "stairs");
 
   const zoom = (factor: number, cx = view.x + view.w / 2, cy = view.y + view.h / 2) =>
@@ -261,7 +252,6 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
               <title>{a.name}</title></rect>;
           })}
           {spaces.map((s) => {
-            if(!labelIds.has(s.id))return null;
             const zone = zoneOf(s);
             const [x, y] = flip(centroid(s.polygon));
             if (zone === "core") return <g key={`l-${s.id}`} transform={`translate(${x - font} ${y - font}) scale(${font / 12})`} color="var(--color-ink)" pointerEvents="none"><Pictogram name={coreIcon(s)} size={24} /></g>;
