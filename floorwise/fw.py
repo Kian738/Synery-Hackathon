@@ -6,6 +6,7 @@
   fw dev                    backend + frontend with hot reload (http://localhost:5173)
   fw check                  every offline test and eval gate (free, ~3 min)
   fw ui-test                build the web app, start a server, run Playwright on desktop + phone
+  fw private generate|run   independent local corpus and frozen holdout checks
   fw submit                 validated SUBMISSION/{BENCHMARK.md,answers.json} + legacy CSV
   fw bench B Q OUT          Sunday run: building dir B, questions file Q, answers file OUT (.json/.csv)
   fw chat [B]               talk to a building in the terminal
@@ -110,12 +111,16 @@ def ui_test(extra: list[str] | None = None) -> int:
         port = listener.getsockname()[1]
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.app:app", "--port", str(port)], cwd=ROOT)
     try:
-        for _ in range(40):
+        deadline=time.monotonic()+120
+        while time.monotonic()<deadline:
             try:
                 urllib.request.urlopen(f"http://localhost:{port}/api/lab/suites", timeout=1)
                 break
             except OSError:
                 time.sleep(0.5)
+        else:
+            print("Server did not become ready in 120 seconds; no browser tests were launched.")
+            return 1
         os.environ["FLOORWISE_URL"] = f"http://localhost:{port}"
         return run(["npx", "playwright", "test", *(extra or [])], ROOT / "web")
     finally:
@@ -163,6 +168,8 @@ def main() -> None:
         sys.exit(run([sys.executable, "-m", "floorwise.cli", *rest]))
     if command == "chat":
         sys.exit(run([sys.executable, "-m", "floorwise.agent.chat", *(rest or [str(DEFAULT_BUILDING)])]))
+    if command == "private":
+        sys.exit(run([sys.executable, "-u", "-m", "eval.private", *rest]))
     if command == "eval":
         sys.exit(run([sys.executable, "-m", "eval", *rest]))
     print(f"unknown command '{command}'\n{__doc__}")

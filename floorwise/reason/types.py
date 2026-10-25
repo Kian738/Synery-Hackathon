@@ -164,8 +164,11 @@ class Hazard:
     spaces: tuple[str, ...] = ()
     elements: tuple[str, ...] = ()
     start_s: float | None = None
+    escape_s: float | None = None  # seconds people already inside a hazard space may keep leaving; None = the engine default
 
     def __post_init__(self) -> None:
+        if self.escape_s is not None and not (math.isfinite(self.escape_s) and self.escape_s >= 0):
+            raise ValueError(f"hazard escape_s must be a finite number of seconds >= 0, got {self.escape_s!r}")
         if not self.spaces and not self.elements:
             raise ValueError("hazard needs spaces or elements")
         if self.start_s is not None and not (math.isfinite(self.start_s) and self.start_s >= 0):
@@ -252,7 +255,7 @@ class ScenarioSpec:
         occupants = raw.get("occupants")
         responders = raw.get("responders")
         return cls(
-            hazards=tuple(_build(Hazard, h, spaces=_tuple, elements=_tuple, start_s=_float) for h in raw.get("hazards", ())),
+            hazards=tuple(_build(Hazard, h, spaces=_tuple, elements=_tuple, start_s=_float, escape_s=_float) for h in raw.get("hazards", ())),
             capacities=tuple(_build(Capacity, c, value=_float) for c in raw.get("capacities", ())),
             occupants=None if occupants is None else _build(
                 OccupantSpec, occupants, overrides=_overrides),

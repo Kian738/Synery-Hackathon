@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "corpora": [
+    {
+      "local_corpus": "initial-v2",
+      "generation": "0d1f8456f979ad9d",
+      "counts": {
+        "analytic_references": 20,
+        "buildings": 200,
+        "image_cases": 600,
+        "questions": 10000,
+        "raster_images": 1197
+      },
+      "manifest_sha256": "70a8552b6e366d130a08a07865036b48bcde8c5133fd422e56f7d85f0a2184a1",
+      "generator_sha256": "2643240d436bb3c869b7a9cedb9d6436bedc76cabb0460c5f3651c178d004a90",
+      "profile": "initial",
+      "parent_manifest_sha256": "ccc3efa4e69a38042c4e53dc061054b3e8fbd077b2458c1b1777a6d640ae5d1a",
+      "privacy": "Raw geometry, seed, question text and expected answers excluded from this receipt."
+    },
+    {
+      "local_corpus": "expanded-v2",
+      "generation": "9bbb67b843ef4b74",
+      "counts": {
+        "analytic_references": 20,
+        "buildings": 2000,
+        "image_cases": 6000,
+        "questions": 100000,
+        "raster_images": 11997
+      },
+      "manifest_sha256": "e306e1669755fee3266c3982e1db261321733c13a0164440b9466a2a88fc547a",
+      "generator_sha256": "2643240d436bb3c869b7a9cedb9d6436bedc76cabb0460c5f3651c178d004a90",
+      "profile": "expanded",
+      "parent_manifest_sha256": "05f52d33a4d75f87cc54fa6c7777d34ae20122fd6c734c3a01a28551b4bd9f10",
+      "privacy": "Raw geometry, seed, question text and expected answers excluded from this receipt."
+    },
+    {
+      "local_corpus": "industrial-v1",
+      "generation": "94457c4a58eb2daa",
+      "counts": {
+        "analytic_references": 20,
+        "buildings": 200,
+        "image_cases": 600,
+        "questions": 10000,
+        "raster_images": 1197
+      },
+      "manifest_sha256": "288c8dabbe05b96a9e3b5a391359cce4a499d74dd0bc3f27f9d7db09131ba777",
+      "generator_sha256": "5017fa6cd37082b23e6c8ce0a0c793f7c4d3c76df496eb13ddad99174bf3f3ca",
+      "profile": "industrial",
+      "parent_manifest_sha256": null,
+      "privacy": "Raw geometry, seed, question text and expected answers excluded from this receipt."
+    },
+    {
+      "local_corpus": "fresh-initial-v3",
+      "generation": "43444d70fd2d930a",
+      "counts": {
+        "analytic_references": 20,
+        "buildings": 200,
+        "image_cases": 600,
+        "questions": 10000,
+        "raster_images": 1197
+      },
+      "manifest_sha256": "75edfd06aeb1001fb747fb678488abb4335d1d56b46d8302fcd8d9a50b6ba6e5",
+      "generator_sha256": "f2b642c68d3bf932989a098678d12c1be98ff558790a1d540bbd0142e907830c",
+      "profile": "initial",
+      "parent_manifest_sha256": null,
+      "privacy": "Raw geometry, seed, question text and expected answers excluded from this receipt."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "source_fingerprint": "b3ce9bee378d0cb87a5e",
+  "snapshot_source_receipt_sha256": "427b0d336f0c0b29320933691ccf88c716a978c3555c08678782288f0b9d3fe6",
+  "live_parser_models": {
+    "chat": "claude-opus-5-5",
+    "parser": "claude-haiku-5-5",
+    "judge": "claude-opus-5-5"
+  },
+  "dataset_fingerprint": "fa7b71e429b52786b57a",
+  "note": "Private validation is tied to this source snapshot. Subsequent app integration and CSS fixes have separate browser/core checks."
+}

@@ -188,7 +188,7 @@ class Session:
                                  'kind': 'room' if identifier in b.spaces else 'asset' if identifier in b.assets else 'opening'})
         measurements=dict(measurements or {})
         values={r['id']:r.get('count',r.get('area_m2')) for r in rows or [] if 'id' in r and isinstance(r.get('count',r.get('area_m2')), (int,float))}
-        if values:measurements['entity_values']=values
+        if values and kind!='comparison':measurements['entity_values']=values
         result = {'id': uuid.uuid4().hex[:12], 'kind': kind, 'title': title, 'entities': entities,
                   'floor_ids': sorted({e['floor_id'] for e in entities}), 'measurements': measurements or {},
                   'rows': rows or [], 'lines': lines or [], 'warnings': warnings or [],
@@ -250,11 +250,18 @@ class Session:
     def count_items(self, item_type: str, floor: str | None = None, room: str | None = None, *, exact: bool = False) -> dict:
         from floorwise.core.analytics import count_items
         result = count_items(self.building, item_type, floor, room, inclusive=not exact)
+        self.last_item_type=item_type
+        maximum=max((r['count'] for r in result['per_room']),default=0)
+        leaders=[r for r in result['per_room'] if r['count']==maximum]
+        result.update(maximum_per_room=maximum,top_tie_count=len(leaders),leading_rooms=leaders[:5])
         visual = self.publish_visual('count', f"{result['count']} {item_type}", result['ids'],
                                      {k:v for k,v in result.items() if k not in ('ids','per_room')}, result['per_room'])
         return {k:v for k,v in result.items() if k not in ('ids','per_room')} | {'result_id': visual['id'], 'rooms': result['per_room'][:12]}
 
     def rank_by_items(self, item_type: str, floor: str | None = None, room_type: str | None = None, offset: int = 0, limit: int = 12) -> dict:
+        if R.normalise(item_type) in ('all','everything','all items','all types'):
+            return self.compare_item_leaders(floor)
+        self.last_item_type=item_type
         from floorwise.core.analytics import rank_by_items
         if offset<0 or not 1<=limit<=100:
             raise ValueError('Invalid page; offset >= 0 and limit 1 to 100 required.')
@@ -263,6 +270,15 @@ class Session:
                                      {**{k:v for k,v in result.items() if k!='rows'}, 'primary_ids':[r['id'] for r in result['rows'][:result['top_ties']]]}, result['rows'])
         return {k:v for k,v in result.items() if k!='rows'} | {'rows': result['rows'][offset:offset+limit], 'result_id': visual['id'],
                 'next_offset': offset+limit if offset+limit<len(result['rows']) else None}
+
+    def compare_item_leaders(self,floor=None,compare_floor=None):
+        from floorwise.core.analytics import item_leaders
+        result=item_leaders(self.building,floor,compare_floor)
+        ids=list(dict.fromkeys(sid for row in result['rows'] for scope in row['scopes'] for sid in scope['leader_ids']))
+        visual=self.publish_visual('comparison','Which places have the most of each item?',ids,
+                                   {k:v for k,v in result.items() if k!='rows'},result['rows'])
+        return {k:v for k,v in result.items() if k!='rows'} | {'result_id':visual['id'],
+                'presentation':'Complete compact comparison table is visible. Each type has total, maximum and all tied leading places.'}
 
     def filter_rooms(self, requirements: list[dict], floor: str | None = None, room_type: str | None = None) -> dict:
         from floorwise.core.analytics import filter_rooms

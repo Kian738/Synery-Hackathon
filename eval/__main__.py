@@ -5,7 +5,7 @@ import importlib
 import os
 import sys
 
-SUITES = ["atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "sunday", "generated", "rules", "roundtrip", "walls", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "rehearse", "report"]
+SUITES = ["scenarios","unseen","private","chat_regressions","atlas", "routes", "solver", "parser", "e2e", "e2e_basic", "sunday", "generated", "rules", "roundtrip", "walls", "robust", "metamorphic", "walkability", "build", "interaction", "differential", "rehearse", "report"]
 GATES = [
     ["routes", "--split", "train,dev"],
     ["solver", "--split", "train,dev"],
@@ -48,6 +48,10 @@ def main() -> None:
                 if len(created) != 1:
                     raise SystemExit(f"Gate {gate[0]} did not produce exactly one summary")
                 summary = json.loads(created.pop().read_text(encoding="utf-8"))
+                if summary.get("source_changed") or summary.get("incomplete") or any(
+                    summary.get("outcomes", {}).get(outcome, 0) for outcome in ("error", "skipped", "incomplete")
+                ):
+                    raise SystemExit(f"FAILED {gate[0]}: source changed, required cases skipped, or evaluation incomplete")
                 threshold = {"walls": 0.98}.get(gate[0], 1.0)  # walls: data oddities at entrances leave about 1 %; strict: only diagnosed misses (eval/known_issues.json) may remain
                 explained = summary.get("known_failures", 0)
                 if summary["total"] and summary["total"] > explained:

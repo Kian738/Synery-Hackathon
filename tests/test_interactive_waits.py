@@ -96,8 +96,8 @@ def test_failed_model_turn_does_not_poison_next_request(monkeypatch,provider):
     assert conversation.messages[-1]['content']=='retry'
 
 
-def test_dynamic_claude_tools_preserve_history_and_allow_invalid_binding_drop(monkeypatch):
-    """A deferred tool changes the signed prefix inside a tool-use turn."""
+def test_stable_claude_tools_preserve_signed_history_and_binding_policy(monkeypatch):
+    """Specialized schemas are tool evidence; the advertised prefix stays stable."""
     from floorwise.llm.loop import Conversation, THINKING_BINDING_BETA
     from floorwise.llm.tools import tool
     requests=[]
@@ -112,15 +112,15 @@ def test_dynamic_claude_tools_preserve_history_and_allow_invalid_binding_drop(mo
     @tool
     def enable() -> str:
         """Load the operation."""
-        conversation.tools.append(specialized)
-        conversation.by_name[specialized.name]=specialized
-        return 'enabled'
+        import json
+        return json.dumps({'tools':[specialized.anthropic()]})
 
     def create(**kwargs):
         requests.append(kwargs)
         if len(requests)==1:
             return SimpleNamespace(content=[signed,SimpleNamespace(type='tool_use',id='load',name='enable',input={})],stop_reason='tool_use',usage=usage)
-        assert [t['name'] for t in kwargs['tools']]==['enable','specialized']
+        assert [t['name'] for t in kwargs['tools']]==['enable']
+        assert kwargs['tools']==requests[0]['tools']
         assert THINKING_BINDING_BETA in kwargs['betas']
         assert kwargs['thinking']['block_binding']['prefix_mismatch_behavior']=='drop_block'
         # Do not filter/rewrite signed assistant content or lose the actual tool result.

@@ -4,6 +4,7 @@ from dataclasses import replace
 from floorwise.core import ops, resolve
 from floorwise.core.analytics import shared_wall_lines
 from floorwise.llm.tools import tool
+from floorwise.reason.report import scenario_report
 
 
 def make_insight_tools(session, allow_edits=True, exact_items=False):
@@ -69,6 +70,11 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
     def capabilities() -> str:
         """State exactly what data is supplied and which queries are supported; never infer access rules or availability."""
         return '{"supported":["counts","room item rankings","compound contents","areas","routes","closures","shared walls","stacking","3D distance"],"unavailable":["bookings","live position","seat capacity","opening hours","window geometry","surveyed stair flights"]}'
+
+    @tool
+    def compare_item_leaders(floor: str | None = None, compare_floor: str | None = None) -> str:
+        """Compare EVERY recorded item type in one call, with complete totals, maximum counts and all tied leading places. Omit floor for whole building; compare_floor adds a side-by-side floor scope (e.g. Ground floor). Shows a compact interactive table; no invented 'all' item type."""
+        return guarded(session.compare_item_leaders)(floor,compare_floor)
 
     @tool
     def shared_walls(room: str) -> str:
@@ -147,4 +153,22 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         # Explicit tool arguments remain validated by the deterministic session operation.
         return guarded(session.widen_door)(opening_id, width_m)
 
-    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points] + ([apply_fix] if allow_edits else [])
+    @tool
+    def plan_scenario(hazard_rooms: list[str], occupants: dict[str,int] | None = None, passage_rate_per_minute: float | None = None, audience: str = "safety_officer", responders: bool = True) -> str:
+        """Requires explicit occupants by room and assumed passage_rate_per_minute (people/minute per opening); ask for missing inputs. Evacuation with a hazard in the named rooms: exact evacuation time, exits used, the bottleneck, a responder route that does not clash with evacuees, and verified door fixes. Every number is re-solved by checked steps; if a step cannot be answered the reply names it. Audience: occupant, safety_officer, builder or regulator."""
+        if not occupants or passage_rate_per_minute is None:
+            return '{"needs_input":["explicit occupants by room","assumed passage rate in people/minute per opening"],"note":"Do not infer occupancy or capacity from chairs."}'
+        if any(isinstance(n,bool) or not isinstance(n,int) or n<0 for n in occupants.values()) or sum(occupants.values())>1000 or not 0<passage_rate_per_minute<=10000:
+            raise ValueError('Supply nonnegative whole occupancy up to 1000 people and a positive bounded passage rate.')
+        def run():
+            spaces = [resolve.resolve_space(session.building, room).id for room in hazard_rooms]
+            spec = {"hazards": [{"spaces": spaces}], "responders": {"auto": True} if responders else None,
+                    "occupants":{"source":"user","overrides":{session.space(room):n for room,n in occupants.items()}},
+                    "capacities":[{"element":o,"kind":"rate_persons_per_s","value":passage_rate_per_minute/60} for o in session.building.openings]}
+            report = scenario_report(session.building, "evacuation", {"spec": spec}, audience)
+            if report["evacuation"]:  # the per-step movement table is for the 3D replay, not for the model's context
+                report["evacuation"] = {k: v for k, v in report["evacuation"].items() if k != "schedule"}
+            return report
+        return guarded(run)()
+
+    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, compare_item_leaders, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario] + ([apply_fix] if allow_edits else [])

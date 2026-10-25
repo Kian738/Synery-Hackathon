@@ -26,6 +26,19 @@ DEFAULT_ROOM_TYPE = {"room": "generic_room", "corridor": "corridor", "hall": "ha
 
 def palette_label(colour: tuple[int, int, int]) -> dict:
     entry = PALETTE.get("#%02x%02x%02x" % colour)
+    if entry is None:
+        # Compression/antialiasing can move an otherwise known fill by a few
+        # levels. Accept a close training-palette colour only when its type is
+        # unambiguous among equally close colours.
+        nearby=[]
+        for key,candidate in PALETTE.items():
+            if candidate['n']<10:continue
+            rgb=tuple(int(key[i:i+2],16) for i in (1,3,5))
+            if max(abs(a-b) for a,b in zip(colour,rgb))<=7:
+                nearby.append((math.dist(colour,rgb),candidate))
+        nearby.sort(key=lambda pair:pair[0])
+        if nearby and len({e['type'] for d,e in nearby if d<=nearby[0][0]+2.})==1:
+            entry=nearby[0][1]
     if entry is None or entry["n"] < 10:
         return {"type": "room", "room_type": "generic_room"}
     space_type = entry["type"]
@@ -42,44 +55,58 @@ def cores(floor_scan: FloorScan, labels: dict, level: int) -> list[tuple[str, tu
     return out
 
 
-def stack_transforms(scans: list[tuple[int, FloorScan]], labels: dict, metres_per_pixel: float) -> dict[int, tuple[float, float, float]]:
-    """Per level: (metres_per_pixel, dx_px, dy_px) mapping that floor's pixels into the base floor's pixels."""
-    base_level, base_scan = min(scans, key=lambda item: abs(item[0]))
-    base_cores = cores(base_scan, labels, base_level)
-    transforms = {base_level: (metres_per_pixel, 0.0, 0.0)}
-    for level, floor_scan in scans:
-        if level == base_level:
-            continue
-        own = cores(floor_scan, labels, level)
-        scale_ratio, dx, dy = 1.0, 0.0, 0.0
-        pairs = []
-        for kind, centre, area in own:
-            same = [c for c in base_cores if c[0] == kind]
-            if same:
-                pairs.append(((kind, centre, area), same))
-        if pairs:
-            # Scale from core sizes, then offset from the best one-to-one core matching.
-            ratios = [math.sqrt(min(s[2] for s in same) / area) for (_, _, area), same in pairs if area > 0]
-            ratios = sorted(ratios)
-            scale_ratio = ratios[len(ratios) // 2] if ratios else 1.0
-            best = None
-            for (_, centre, _), same in pairs:
-                for candidate in same:
-                    ox = candidate[1][0] - centre[0] * scale_ratio
-                    oy = candidate[1][1] - centre[1] * scale_ratio
-                    error = 0.0
-                    for (k2, c2, _), same2 in pairs:
-                        error += min(math.dist((c2[0] * scale_ratio + ox, c2[1] * scale_ratio + oy), s[1]) for s in same2)
-                    if best is None or error < best[0]:
-                        best = (error, ox, oy)
-            _, dx, dy = best
-        transforms[level] = (metres_per_pixel * scale_ratio, dx, dy)
+def stack_transforms(scans: list[tuple[int, FloorScan]], labels: dict, metres_per_pixel: float,
+                     base_level: int | None = None, issues: list[str] | None = None) -> dict[int, tuple[float, float, float]]:
+    """One-to-one core registration. No source coordinates enter this calculation."""
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+    issues = issues if issues is not None else []
+    if base_level is None:base_level=scans[0][0]
+    base_scan=dict(scans)[base_level]
+    base_cores=cores(base_scan,labels,base_level)
+    transforms={base_level:(metres_per_pixel,0.,0.)}
+    for level,floor_scan in scans:
+        if level==base_level:continue
+        own=cores(floor_scan,labels,level);hypotheses=[]
+        for kind,centre,area in own:
+            for bk,bc,ba in base_cores:
+                if bk!=kind or area<=0:continue
+                ratio=math.sqrt(ba/area)
+                dx,dy=bc[0]-centre[0]*ratio,bc[1]-centre[1]*ratio
+                cost=np.full((len(own),len(base_cores)),1e6)
+                for i,(k,c,a) in enumerate(own):
+                    for j,(kk,cc,aa) in enumerate(base_cores):
+                        if k==kk:
+                            location=math.dist((c[0]*ratio+dx,c[1]*ratio+dy),cc)
+                            size=abs(math.sqrt(a)*ratio-math.sqrt(aa))
+                            cost[i,j]=location+size
+                rows,cols=linear_sum_assignment(cost)
+                tolerance=max(3.,math.sqrt(ba)*.20)
+                pairs=[(i,j) for i,j in zip(rows,cols) if cost[i,j]<=tolerance]
+                error=sum(cost[i,j] for i,j in pairs)/max(1,len(pairs))
+                hypotheses.append((-len(pairs),error,ratio,dx,dy))
+        if not hypotheses:
+            issues.append(f'Floor {level}: no common labelled core; alignment is unverified.')
+            transforms[level]=(metres_per_pixel,0.,0.);continue
+        hypotheses.sort();best=hypotheses[0]
+        alternatives=[h for h in hypotheses[1:] if h[0]==best[0] and h[1]<=best[1]+.5 and math.dist(h[3:5],best[3:5])>3.]
+        if alternatives:
+            issues.append(f'Floor {level}: several core alignments fit; confirm registration.')
+        transforms[level]=(metres_per_pixel*best[2],best[3],best[4])
     return transforms
 
 
 def build(images: dict[int, Path], width_m: float | None = None, metres_per_pixel: float | None = None,
           name: str = "New building", building_id: str = "built", vision: bool = False) -> tuple[dict, dict]:
+    if not images:raise ValueError('Supply at least one floor-plan image')
+    if metres_per_pixel is None and (width_m is None or not math.isfinite(width_m) or width_m<=0):
+        raise ValueError('Supply one real plan width; absolute scale is not present in an image')
+    if metres_per_pixel is not None and (not math.isfinite(metres_per_pixel) or metres_per_pixel<=0):
+        raise ValueError('Metres per pixel must be finite and positive')
     scans = [(level, scan(path)) for level, path in sorted(images.items())]
+    if any(not floor_scan.regions for _,floor_scan in scans):
+        raise ValueError('No recoverable rooms on one or more floors; a reviewed plan or clearer image is needed')
+    issues=[]
     labels = {(level, r.index): palette_label(r.colour) for level, s in scans for r in s.regions}
     if vision:
         from floorwise.build.label import label_with_vision
@@ -88,11 +115,12 @@ def build(images: dict[int, Path], width_m: float | None = None, metres_per_pixe
             floor_scan = dict(scans)[level]
             for index, label in label_with_vision(path, floor_scan).items():
                 labels[(level, index)].update({k: v for k, v in label.items() if v})
-    base_level, base_scan = min(scans, key=lambda item: abs(item[0]))
+    base_level=next(iter(images))
+    base_scan=dict(scans)[base_level]
     if metres_per_pixel is None:
         xs = [x for r in base_scan.regions for x, _ in r.polygon_px]
         metres_per_pixel = (width_m / (max(xs) - min(xs))) if width_m else 0.1
-    transforms = stack_transforms(scans, labels, metres_per_pixel)
+    transforms = stack_transforms(scans, labels, metres_per_pixel, base_level, issues)
     # Bring every floor into the base floor's pixel frame, then one scale to metres.
     for level, floor_scan in scans:
         floor_mpp, dx, dy = transforms[level]
@@ -106,37 +134,51 @@ def build(images: dict[int, Path], width_m: float | None = None, metres_per_pixe
             marker.centre_px = (marker.centre_px[0] * ratio + dx, marker.centre_px[1] * ratio + dy)
         floor_scan.height = base_scan.height
     building = to_building(scans, metres_per_pixel, building_id=building_id, name=name, labels=labels)
-    link_cores(building)
-    return building, validate(building)
+    # Uncertain registration must not invent traversable inter-floor links.
+    if not any('alignment' in issue or 'registration' in issue for issue in issues):
+        link_cores(building)
+    unknown=sum(palette_label(r.colour)['room_type']=='generic_room' for _,floor_scan in scans for r in floor_scan.regions)
+    if unknown and not vision:issues.append(f'{unknown} room labels/types could not be inferred; confirm their meaning.')
+    report=validate(building)
+    report.update({'status':'draft','review_required':bool(issues),'warnings':issues,
+                   'provenance':{'geometry':'image segmentation','scale':'caller supplied dimension',
+                                 'registration':'one-to-one labelled core matching',
+                                 'semantics':'vision labels' if vision else 'training palette; unrecognized colours remain generic'},
+                   'inferred_fields':['Opening widths default to 0.9 m; verify physical clearance.',
+                                      'Opening accessibility defaults to step-free and is unverified; confirm it before accessible guidance.',
+                                      'Floor elevations use the supplied/default floor height.']})
+    return building, report
 
 
 def link_cores(building: dict) -> None:
-    by_floor = {}
-    levels = {f["id"]: f["level"] for f in building["floors"]}
-    for space in building["spaces"]:
-        if space["type"] in CORE_TYPES:
-            by_floor.setdefault(levels[space["floor_id"]], []).append(space)
-    chains: list[list[dict]] = []
-    for level in sorted(by_floor):
-        for space in by_floor[level]:
-            polygon = Polygon(space["polygon"])
-            for chain in chains:
-                last = chain[-1]
-                if levels[last["floor_id"]] == level - 1 and last["type"] == space["type"]:
-                    other = Polygon(last["polygon"])
-                    if polygon.intersection(other).area > 0.3 * min(polygon.area, other.area):
-                        chain.append(space)
-                        break
-            else:
-                chains.append([space])
-    for number, chain in enumerate(c for c in chains if len(c) > 1):
-        kind = "lift" if chain[0]["type"] == "lift" else "stairs"
-        building["vertical_connectors"].append({
-            "id": f"{building['building']['id']}-V{number + 1:02d}", "kind": kind,
-            "name": f"{'Lift' if kind == 'lift' else 'Staircase'} {number + 1}",
-            "floor_ids": [s["floor_id"] for s in chain], "space_ids": [s["id"] for s in chain],
-            "step_free": kind == "lift", "synthetic": True,
-        })
+    """Assign every core at most once per floor; stairs never jump missing levels."""
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+    levels={f['id']:f['level'] for f in building['floors']}
+    chains=[]
+    for level in sorted(set(levels.values())):
+        own=[s for s in building['spaces'] if levels[s['floor_id']]==level and s['type'] in CORE_TYPES]
+        existing=[c for c in chains if levels[c[-1]['floor_id']]<level and
+                  (c[-1]['type']=='lift' or levels[c[-1]['floor_id']]==level-1)]
+        costs=np.zeros((len(existing),len(own)))
+        for i,chain in enumerate(existing):
+            p=Polygon(chain[-1]['polygon'])
+            for j,s in enumerate(own):
+                if s['type']==chain[-1]['type']:
+                    q=Polygon(s['polygon']);costs[i,j]=p.intersection(q).area/max(min(p.area,q.area),1e-9)
+        assigned=set()
+        if costs.size:
+            rows,cols=linear_sum_assignment(-costs)
+            for i,j in zip(rows,cols):
+                if costs[i,j]>.3:
+                    existing[i].append(own[j]);assigned.add(int(j))
+        chains.extend([[s] for j,s in enumerate(own) if j not in assigned])
+    for number,chain in enumerate(c for c in chains if len(c)>1):
+        kind='lift' if chain[0]['type']=='lift' else 'stairs'
+        building['vertical_connectors'].append({'id':f"{building['building']['id']}-V{number+1:02d}",
+            'kind':kind,'name':f"{'Lift' if kind=='lift' else 'Staircase'} {number+1}",
+            'floor_ids':[s['floor_id'] for s in chain],'space_ids':[s['id'] for s in chain],
+            'step_free':kind=='lift','synthetic':True})
 
 
 def validate(building: dict) -> dict:

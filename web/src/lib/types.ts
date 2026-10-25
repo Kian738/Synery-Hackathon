@@ -50,7 +50,7 @@ export interface Asset {
 }
 
 export interface Geometry {
-  building: { id: string; name: string; source: string };
+  building: { id: string; name: string; source: string; source_ref?:{osm?:string}; attribution?:string; license?:string };
   scene?: { revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
@@ -137,7 +137,7 @@ export interface BuildingRow {
 
 export interface VisualResult {
   id:string;
-  kind:"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
+  kind:"comparison"|"matches"|"count"|"ranking"|"area"|"shared_walls"|"stacking"|"distance"|"reachability"|"intervention";
   title:string;
   entities:{id:string;floor_id:string;kind:string}[];
   floor_ids:string[];
@@ -146,3 +146,17 @@ export interface VisualResult {
   warnings:string[];
   provenance:string;
 }
+
+export type Audience = "safety_officer" | "occupant" | "builder" | "regulator";
+export interface ScenarioStep { id: string; op: string; ok: boolean; summary: string; reason: string | null; ms: number }
+export interface ScenarioFinding { severity: "blocker" | "risk" | "improve" | "info"; title: string; detail: string; evidence: string[]; tier: string; suggestion: string | null }
+export interface ScenarioFix { element: string; width_m: number; previous_width_m: number; between: string[]; T_before_s: number; T_after_s: number }
+export interface ScenarioReport {
+  steps: ScenarioStep[];
+  abstained: { step?: string; reason?: string } | string | null;
+  answer: { fixes?: ScenarioFix[] } | null;
+  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null } | null;
+  findings: ScenarioFinding[];
+}
+
+export interface RobustReport { before: { lost_exit: string | null; evacuated: number; T_s: number }[]; after: { lost_exit: string | null; evacuated: number; T_s: number }[]; verified: boolean; fixes: { element: string; name: string; width_m: number }[] }

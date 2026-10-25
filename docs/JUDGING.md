@@ -1,5 +1,7 @@
 # Floorwise evidence map
 
+Historical evidence below must be checked against STATUS.md and the Lab fingerprint. The latest exterior/toolkit layout has not passed browser inspection because localhost access remains blocked.
+
 Floorwise turns a supplied building model into grounded answers, indoor routes, closure consequences and verified hypothetical repairs. Run locally with `uv run fw start` and check it with `uv run fw check`. No hidden evaluation instructions are used.
 
 | Capability | Evidence command | Observed result | Implementation |
@@ -7,13 +9,15 @@ Floorwise turns a supplied building model into grounded answers, indoor routes, 
 | Exact benchmark route model | fw eval routes --split train,dev | 2130/2130 | core/graph.py |
 | Geometry and aggregate calculations | fw eval solver --split train,dev | 655/655 | core/ops.py |
 | Question text to benchmark answer | fw eval e2e --split train,dev | 653/655 | agent/answer.py |
-| Basic questions from text | fw eval e2e_basic --split train,dev | 2124/2130 | agent/spec.py |
+| Basic questions from text | fw eval e2e_basic --split train,dev | 2122/2130 | agent/spec.py |
 | Independent router comparison | fw eval differential | 7200/7200 comparisons over 240 train/dev buildings, including closure cases | eval/differential.py |
 | Step-free closure consequence | pytest tests/test_insights.py | Office lift cuts off 29 of 56 step-free rooms; general cut-off count is 0 | agent/session.py |
 | Verified width repair | pytest tests/test_insights.py | campus O0015 0.9 to 1.1 m; preview does not mutate | core/fixes.py |
 | Human walking geometry | fw eval walkability --split dev --pairs 4 | 134 validated routes; 26/160 sampled pairs withheld; no invalid emitted route in this sample | core/walk.py |
 | UI, chat recovery and interventions | fw ui-test | 46/46 desktop + phone at milestone 2 | web/tests/navigator.spec.ts |
-| Live Claude route and closure | fw eval rehearse | five repetitions, both state checks pass; unsupported/dangerous prompts also reviewed | eval/rehearse.py |
+| Unseen test split has no ambiguous or near-tie questions; independent router agrees on test buildings | uv run python -m eval unseen; uv run python -m eval differential --split test | 145/145; 3348/3348 comparisons | eval/unseen.py |
+| Verified multi-hop scenario (hazard, exits, responders, door fixes) | pytest tests/test_scenario_api.py tests/test_reason_findings.py; uv run python -m eval scenarios; uv run python -m eval.sensitivity | 7 API/tool tests; dataset stress test 479/479 checks; top door fix identical in 6/6 flow cases up to the estimated occupancy on campus-dev-000 (changes at 1.5x occupancy) | reason/, evacuation/, server/scenario.py |
+| Live Claude route and closure (earlier key, before v1.1.0; not repeated on the current setup) | fw eval rehearse | five repetitions, both state checks pass; unsupported/dangerous prompts also reviewed | eval/rehearse.py |
 
 ## Demo
 

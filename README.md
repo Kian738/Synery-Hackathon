@@ -7,7 +7,7 @@ Synera Track 01, Industrial Agents Hackathon 2026. You give Floorwise a floor pl
 ```
  voice/text ─► Claude (parse · link · ask back · explain) ─► Session ─► spatial core ─► answer + map events
                                                                       │ scene graph: building → floor → space → item
-                                                                      │ door graph (exact dataset route model)
+                                                                      │ door graph (dataset route model v1.1.0)
                                                                       │ wall adjacency · vertical stacking · constraints
                                                                       │ what-if edits with impact diff
  floor plan images ─► CV regions + doors + entrances ─► Claude vision labels ─► stacked building.json
@@ -17,17 +17,20 @@ Synera Track 01, Industrial Agents Hackathon 2026. You give Floorwise a floor pl
 
 | Gate | What | Score |
 |---|---|---|
-| L0 `routes` | route model vs 2,130 warm-up answers (to the cm) | 2130/2130 |
+| L0 `routes` | route model v1.1.0 vs 2,130 warm-up answers (to the cm; recomputed by the organisers, 1,314 changed) | 2130/2130 |
 | L1 `solver` | gold inputs → solver → official scorer, train+dev | 655/655 |
 | L2 `parser` | question text → resolved ids vs gold, train+dev / test coverage | 655/655 · 145/145 |
 | L3 `e2e` | full pipeline via the kit's `benchmark.evaluate` on dev | **138/138** |
 | L3 `e2e` | train+dev | 653/655 (2 misses: 9 rooms all named "Büro") |
 | L3b `e2e_basic` | locate/count/route/step-free/closure/tour from text | 2124/2130 (remaining misses: duplicate OSM names) |
 | L4 `robust` | perturbed wording (case, floor synonyms, ref-only rooms, typos) | 630/630 dev |
+| L6 `unseen` | test questions (no gold): rule-parsed, one reading, no errand near-tie, no new kind | 145/145 |
 | L5 `metamorphic` | translate/shuffle/rotate invariance + route properties | 898/898 |
 | L7 `build` | floors rebuilt from plan images (procedural buildings) | rooms 1.00 · IoU 0.98 · doors 1.00 |
 
-Test submission: `submissions/team_floorwise_test.csv` (145 answers, $0 API cost).
+Test submission: `submissions/team_floorwise_test.csv` (145 answers, regenerated under route model v1.1.0, offline, $0 API cost).
+
+**Live-LLM status.** Every gate above runs offline and needs no model. Live Claude checks (`rehearse`, `interaction`, parser comparisons) were last run on an earlier key and before the v1.1.0 change; one live call has since been verified on AWS Bedrock (Claude Sonnet 4.6, EU inference profile, 2 requests, about 3.8k tokens): asked about a fire in a named room, Claude called `plan_scenario` and its answer repeated the solver's numbers exactly (358 people, 345 out through 2 exits in 155 s, 13 stranded in the hazard room, door fix 155 s to 145 s). The check script is not part of the gates; the older `rehearse` and `interaction` runs have not been repeated.
 
 ## Run
 
@@ -63,9 +66,13 @@ uv run --env-file .env uvicorn server.app:app --port 8000     # app at http://lo
 floorwise/core     model, graph (route model + constraints), geometry, ops, routing (directions), resolve (entity linking)
 floorwise/agent    spec (QuerySpec), parse_rules, parse_llm, solve, answer (benchmark entry), session, tools, chat
 floorwise/build    from_image (CV), builder (multi-floor stacking), label (Claude vision), palette (learned)
+floorwise/reason   verified multi-hop: typed operators, plan DAG, per-step checks, abstention, templates, findings (suggestions re-solved)
+floorwise/evacuation  exact evacuation as flows over time, responder routes, door synthesis, N-1 robust doors
+floorwise/llm      provider-neutral tool loop, budget, structured output
 floorwise/cli.py   run_benchmark
 eval/              ledger + suites L0–L7 + report
 server/app.py      FastAPI: geometry, sessions, route/close/door, SSE chat, build-from-plans
+server/scenario.py POST /api/sessions/{id}/scenario (run a scenario) and /scenario/ask (the one missing input)
 web/               React + Vite: 2D plan, 3D floor stack, animated routes, chat with understanding cards, voice
 ```
 
@@ -77,3 +84,14 @@ Data under `docs/` is from the kit. OSM-derived buildings are ODbL 1.0 (© OpenS
 ## Verified building demo
 
 The cinematic Navigator includes schematic 3D, first-person route preview, profile-aware closure impact, and verified hypothetical door-width repairs. See [judging evidence](docs/JUDGING.md), [demo script](docs/DEMO.md), [product brief](PRODUCT.md), and [design direction](DESIGN.md). Run `uv run fw eval differential` for the independent official-router comparison and `uv run fw eval rehearse` for bounded live Claude checks. Image-derived buildings require review; voice hardware is not yet verified.
+
+## Multi-hop scenarios (fire, evacuation, door fixes)
+
+Ask "fire in room X: who gets out how fast, how do responders get in without meeting evacuees, which door should we add?" and Floorwise plans a chain of typed steps (hazard, people, exits, evacuation, bottleneck, responders, door candidates, best door), checks each step's postcondition and names the step that fails instead of guessing. Claude plans and words; the numbers come from the solver, and a suggested fix is only shown after the engine re-solved the edited building. The chat tool is `plan_scenario`; the UI endpoint is `/api/sessions/{id}/scenario`.
+
+- Re-solved means the engine re-ran its own model on the edited building. It is self-consistency, not validation against Pathfinder, PyroSim or a real drill.
+- Interactive capacity scenarios and the chat tool require explicit occupancy and assumed passage rates. Legacy template diagnostics can use a seat-count estimate; that is not measured occupancy. There is no fire or smoke model, and this is not a compliance check.
+- People already inside the hazard room get `escape_s` seconds to leave (default 30 s, an assumption you can set per hazard; 0 means none, and then they are reported as stranded).
+- Sensitivity: `uv run python -m eval.sensitivity` re-runs one scenario at specific flow 1.0, 1.316 and 1.6 persons/s/m and occupancy x0.5, x1, x1.5. On campus-dev-000 (Canteen 0.28, 358 people, 30 s escape window) the same door is the top fix in all 6 cases up to the estimated occupancy; at x1.5 occupancy it is a different door at flow 1.0, none at 1.316, and the first door again at 1.6. Absolute seconds move (145 to 175 s at x1), so the fix ranking is only stable up to the estimated headcount.
+- How good is the plan: on campus-dev-000 the exact plan takes 155 s (110 s walking plus 45 s queueing). Against the classic CCRP heuristic (165 s) it is about 6% faster; against everyone using their nearest exit (260 s) it is 40% faster. The second figure compares to a naive baseline, so quote the first for state-of-the-art claims.
+- Stress test across the dataset: `uv run python -m eval scenarios` (determinism, people conserved, exact never slower than the CCRP heuristic, every suggested fix verified and better). It tests robustness on generated and inferred kit data, not real buildings.

@@ -1,4 +1,4 @@
-import type { BuildingRow, Geometry, Route, UiEvent } from "./types";
+import type {BuildingRow, Geometry, Route, UiEvent } from "./types";
 
 export class ApiError extends Error {
   candidates: { id: string; label?: string }[];
@@ -64,7 +64,8 @@ export async function readEvents<T>(response: Response, onEvent: (e: T) => void)
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
+  let ended=false;
+  try { for (;;) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
     buffer = buffer.replace(/\r\n/g, "\n");
@@ -80,12 +81,16 @@ export async function readEvents<T>(response: Response, onEvent: (e: T) => void)
         onEvent(event);
       }
     }
-    if (done) break;
-  }
+    if (done) {ended=true;break;}
+  }} finally {if(!ended)await reader.cancel().catch(()=>{});reader.releaseLock();}
 }
 
-export const chat = (sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null,requestId?:string,signal?:AbortSignal) =>
-  fetch(`/api/sessions/${sessionId}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,selected_space:selectedSpace??null,request_id:requestId}),signal}).then((r) => readEvents(r, onEvent));
+export const chat = async(sessionId: string, text: string, onEvent: (e: ChatEvent) => void,selectedSpace?:string|null,requestId?:string,signal?:AbortSignal) => {
+  let finished=false;
+  const response=await fetch(`/api/sessions/${sessionId}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,selected_space:selectedSpace??null,request_id:requestId}),signal});
+  await readEvents<ChatEvent>(response,e=>{if(e.type==='done')finished=true;onEvent(e);});
+  if(!finished)throw new ApiError('Connection ended before the answer completed. Your partial answer and computed results remain available.');
+};
 
 export const cancelChat=(session:string,request_id:string)=>post(`/api/sessions/${session}/chat/cancel`,{request_id});
 

@@ -78,3 +78,7 @@ The base is in place: `web/src/components/Building3D.tsx` renders the building i
 Supersedes earlier todo labels where they conflict: normal chat is Claude-first; token-free dispatch is not the product policy. Streaming and result reopening are implemented and covered by offline transport/UI contracts. Speed choices are visible segmented buttons (0.5×/1×/2×/4×). Tools groups secondary controls, including explicit-input scenarios. The Lab tracks raw scores and historical evidence rather than a guessed overall grade.
 
 Still open: refresh every critical live case after the final integration, complete three graded uninterrupted rehearsals, independent general-polygon wall/stacking oracles beyond gold/hand cases, general plan import quality, physical phone/audio/projector validation, and three unfamiliar teammate trials. These must not be marked done from a backend-only test or a different source fingerprint. See TESTING_GUIDE.md for the exact profiles and challenge prompts.
+
+## Consolidated UI review
+
+See UX_AUDIT_50_AND_EXPLORATION.md for the fifty repair entries and twenty contextual additions. The concurrent focus-camera prototype was rejected: moving a camera away from the validated walking path and interpolating between unverified landing coordinates does not establish collision-safe navigation. Its source is preserved locally under runs/gemini-review. General exterior views require genuine OSM references. Physical phone tests and browser visual acceptance remain open; earlier checklist entries must not imply these passed.

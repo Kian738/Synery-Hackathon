@@ -46,7 +46,7 @@ test("ten identical tools form one inspectable evidence group",async({page})=>{
     return route.fulfill({contentType:"text/event-stream",body:events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join("")});
   });
   await page.goto("/?building=proc-campus-dev-000");await page.getByRole("textbox",{name:"Message"}).fill("Count chairs by floor");await page.getByRole("button",{name:"Send",exact:true}).click();
-  const trace=page.locator(".tool-trace");await expect(trace).toHaveCount(1);await expect(trace.locator(":scope > summary")).toContainText("10 calls");
+  const trace=page.locator(".tool-trace");await expect(trace).toHaveCount(1);await expect(trace.locator(":scope > summary")).toContainText("10 checks");
   await trace.locator(":scope > summary").click();await expect(trace.locator(":scope > details")).toHaveCount(1);
   await expect(trace.locator(":scope > details > summary")).toContainText("×10");
   await expect(page.getByText("All counts were computed.")).toBeVisible();

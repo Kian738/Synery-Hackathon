@@ -86,7 +86,7 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 2. **No building-specific code.** Never put building IDs, room names or test-set strings in `floorwise/`. Test questions have no answers; never hand-label them (that is against the rules). The Sunday building is unseen.
 3. **Semantics are settled against gold, then frozen.** Examples: "rooms" in reach counts means `type == "room"` including the start; shared walls exclude corridors, stairs and lifts but include halls. If you change one, re-run L1 on train+dev.
 4. **LLM code must work on both providers.** Use `floorwise.llm` (`Conversation`, `structured.parse`, `tool`). Never import `anthropic` or `openai` outside `floorwise/llm/`, except in the build-vision labeller.
-5. **Secrets live only in `.env`** (gitignored). The Groq key is for testing until Claude credits arrive.
+5. **Secrets live only in `.env`** (gitignored). The Groq key is for testing; one live Claude call was verified on AWS Bedrock (plan_scenario, numbers matched the solver); Anthropic API or AWS Bedrock only, never Vertex.
 6. **Keep docs true.** After a change, update `docs/STATUS.md`, and also this file if paths or commands change.
 7. **UI work follows `docs/UX_PLAN.md`** and the design rules in it, not generic dashboard defaults.
 
@@ -97,3 +97,9 @@ uv run fw eval <suite> ...   # one suite (docs/EVALS.md)
 - **Route model (kit 1.1.0, README section 3):** walking is door to door inside each space, 15 cm off the walls, round corners, never through walls; a door lands 30 cm inside the space. Stairs cost **2 m per metre climbed**, a lift **15 m once per ride plus 1 m per metre climbed** (lifts join every pair of stops). Furniture is never an obstacle for distances. **There is no way round the outside**: entrances are door nodes of one space, and two parts that only meet outside have no route (`reachable: false`). `Constraints(outside="exits")` exists only for exit-distance analyses (what-if door, weak points).
 - LLM spend is capped per process (`FLOORWISE_MAX_TOKENS`, default 400k) with request timeouts. Lab jobs time out after 20 min and can be cancelled.
 - OSM buildings repeat names (e.g. 9 × "Büro" on one floor). The benchmark path then solves every reading and votes; chat asks back.
+
+## Independent reconstruction validation
+
+`fw eval build --mode both` separates assisted geometry, actual import floors and complete-building exit/topology assessments. `fw private generate|run|live|retire` manages ignored independent corpora and frozen holdout lifecycle. Protocol: `docs/PRIVATE_VALIDATION.md`; current evidence: `docs/RECONSTRUCTION_VALIDATION_RESULTS.md`. Never tune against an opened holdout and then reuse its success as unseen evidence. Review-required imports and missing-scale clarification are not automatic reconstruction successes.
+
+Consolidation note: `server/exterior.py` resolves only recorded OSM way references; never infer a geographic placement. `web/src/components/ExploreTools.tsx` holds contextual exploration/share controls. `uv run --env-file .env fw eval chat_regressions` is an explicitly paid five-turn provider regression; it is not the full live readiness pack. New browser acceptance remains pending the saved localhost permission gate.
