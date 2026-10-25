@@ -158,6 +158,7 @@ def _compile(content: str) -> dict:
     walls=apply_rails(data, walls)
     overlap_list=compile_overlaps(data)
     walls=drop_overlap_walls(data, walls, overlap_list)
+    open_air={w['space_id'] for w in walls if w.get('rail') and w.get('space_id')}  # bridges and stairs in the open: no roof over them
     # Actual upper-floor footprints form ceilings below. Missing coverage stays open.
     from shapely import constrained_delaunay_triangles, make_valid
     from shapely.geometry import Polygon
@@ -174,7 +175,7 @@ def _compile(content: str) -> dict:
     roofs = []
     ordered = sorted(data['floors'], key=lambda f: f.get('level', f.get('elevation_m', 0)))
     indoor = {f['id']: unary_union([make_valid(Polygon(sp['polygon'])) for sp in data['spaces']
-                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and len(sp['polygon']) >= 3]) for f in ordered}
+                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and sp['id'] not in open_air and len(sp['polygon']) >= 3]) for f in ordered}
     for index, floor in enumerate(ordered):
         cover = indoor[floor['id']]
         if cover.is_empty:
