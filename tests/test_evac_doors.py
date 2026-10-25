@@ -149,3 +149,13 @@ def test_pruning_changes_nothing_but_the_work_done(name, monkeypatch):
     assert [(f.kind, f.element, f.T_after_s) for f in pruned.fixes] == [(f.kind, f.element, f.T_after_s)
                                                                        for f in exhaustive.fixes]
     assert pruned.T_after_s == exhaustive.T_after_s
+
+
+def test_a_zero_budget_still_checks_one_candidate_and_says_the_search_was_cut_short():
+    building = two_room_building()
+    full = best_doors(building, occupants(), max_fixes=1)
+    cut = best_doors(building, occupants(), max_fixes=1, budget_s=0.0)
+    assert full.complete and not cut.complete
+    assert cut.evaluated == 1 < full.evaluated
+    assert all(fix.verified for fix in cut.fixes)                    # a truncated search never proposes an unchecked fix
+    assert cut.T_after_s <= cut.T_before_s == full.T_before_s

@@ -106,6 +106,9 @@ def _doors(trace: Trace, evacuation, audience: str, building=None) -> list[Findi
                              + "." + _capacity_math(building, evacuation, evacuation.bottleneck[0]),
                              ("bn",), "computed"))
     plan = _result(trace, "best_door")
+    if plan is not None and not getattr(plan, "complete", True):
+        found.append(Finding("info", f"Door search stopped at its time limit: {plan.evaluated} of {plan.crossing_cut} candidate doors checked",
+                             "Every proposed fix is still re-solved exactly; a better door may exist among the unchecked ones.", ("best",), "computed"))
     for fix in getattr(plan, "fixes", ()):
         verb = "Add a door" if fix.kind == "add" else f"Widen {_name(building, fix.element)} from {fix.previous_width_m} m"
         where = " and ".join(_name(building, x) for x in fix.between)

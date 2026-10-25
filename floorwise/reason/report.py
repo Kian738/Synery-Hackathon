@@ -25,7 +25,7 @@ def _summary(r) -> str:
         "bottleneck": lambda: f"{len(v)} doors limit the flow",
         "responder_route": lambda: f"Responders reach the hazard (+{g(v, 'delay_s', 0)} s for evacuees)",
         "door_candidates": lambda: "Candidate doors screened against the minimum cut",
-        "best_door": lambda: f"{len(v.fixes)} fix: {v.T_before_s} s -> {v.T_after_s} s",
+        "best_door": lambda: f"{len(v.fixes)} fix: {v.T_before_s} s -> {v.T_after_s} s" + ("" if getattr(v, "complete", True) else f" (checked {v.evaluated} of {v.crossing_cut} doors)"),
     }
     return lines.get(r.op, lambda: f"{r.op} checked")()
 
@@ -43,10 +43,20 @@ def resolve_exit(building: Building, text: str) -> str:
     return exits[0]
 
 
-def scenario_report(building: Building, template: str, params: dict, audience: str, on_step=None) -> dict:
-    """on_step receives {id, op, ok, summary} for each step the moment it finishes (the live reasoning line)."""
+def _notify(on_step, on_partial):
+    def notify(r):
+        if on_step:
+            on_step({"id": r.id, "op": r.op, "ok": r.ok, "summary": _summary(r)})
+        if on_partial and r.op == "evacuate" and r.ok:
+            on_partial(to_dict(r.value))
+    return notify
+
+
+def scenario_report(building: Building, template: str, params: dict, audience: str, on_step=None, on_partial=None) -> dict:
+    """on_step receives {id, op, ok, summary} for each step the moment it finishes (the live reasoning line). on_partial receives
+    the evacuation as a dict the moment it is solved, so a client can start the replay while the responder and door steps still run."""
     trace = run_plan(building, instantiate(template, **params),
-                     (lambda r: on_step({"id": r.id, "op": r.op, "ok": r.ok, "summary": _summary(r)})) if on_step else None)
+                     _notify(on_step, on_partial) if (on_step or on_partial) else None)
     evacuation = next((r.value for r in trace.results if r.op == "evacuate" and r.ok), None)
     return {
         "template": template,

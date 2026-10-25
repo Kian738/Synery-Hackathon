@@ -14,6 +14,10 @@ from floorwise.reason.types import Abstain, ScenarioSpec, World
 # Assumption, not a measurement: people already inside the hazard space get this long to leave, then it is closed.
 # Without it a fire at t=0 would count its own occupants as trapped, which is not what the scenario asks.
 DEFAULT_ESCAPE_S = 30.0
+# Interactive answers must arrive in seconds on any building size: each search checks its likeliest candidates first and stops
+# after this compute time (at least one candidate is always checked). The result says when a search was cut short.
+RESPONDER_BUDGET_S = 6.0
+DOOR_BUDGET_S = 10.0
 
 
 def _hazards(world: World, spec: ScenarioSpec) -> list[ev.Hazard]:
@@ -52,7 +56,7 @@ def _responder_route(world, spec, evacuation):
         raise Abstain("responders need a target space, and the scenario names no hazard space")
     entrances = None if not wanted or wanted.auto else wanted.entrances
     plan = ev.with_responders(world.building, _people(world, spec),
-                              _hazards(world, spec), _capacities(spec), responders=ev.Responders(target, entrances))
+                              _hazards(world, spec), _capacities(spec), responders=ev.Responders(target, entrances, budget_s=RESPONDER_BUDGET_S))
     if plan.status == "no_route":
         raise Abstain("no responder route reaches the target from a usable entrance")
     return plan
@@ -68,7 +72,7 @@ def _door_candidates(world, evacuation, bottleneck):
 
 def _best_door(world, candidates, spec, evacuation):
     occupants = _people(world, spec)
-    plan = ev.best_doors(world.building, occupants, _hazards(world, spec), _capacities(spec))
+    plan = ev.best_doors(world.building, occupants, _hazards(world, spec), _capacities(spec), budget_s=DOOR_BUDGET_S)
     if not plan.fixes:
         raise Abstain("no door or widening shortens the evacuation")
     return plan
