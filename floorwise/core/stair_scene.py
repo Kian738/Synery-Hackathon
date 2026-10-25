@@ -60,3 +60,36 @@ def compile_stair_shafts(data):
                         'footprint':footprint,'basis':'common_all_stops' if shared else 'common_floor_pair',
                         'warning':None if footprint else 'No safe common shaft footprint; illustrative flight withheld.'})
     return out
+
+
+HOLE_MARGIN_M = 0.05
+
+
+def compile_stair_plates(data, shafts):
+    """Floor plates of the floor a flight arrives on, with the flight's footprint cut out, so no floor stands inside a staircase.
+
+    Display only. Returns {space_id: [{"exterior": ring, "holes": [ring, ...]}, ...]} for the spaces the footprint touches; spaces
+    the flights do not touch keep their plain polygon. Flights without a safe footprint (withheld) cut nothing."""
+    spaces_by_floor = {}
+    for space in data['spaces']:
+        if len(space['polygon']) >= 3:
+            spaces_by_floor.setdefault(space['floor_id'], []).append(space)
+    cuts = {}
+    for shaft in shafts:
+        if shaft.get('footprint'):
+            cuts.setdefault(shaft['to_floor'], []).append(Polygon(shaft['footprint']).buffer(HOLE_MARGIN_M, join_style=2))
+    plates = {}
+    for floor_id, holes in cuts.items():
+        hole = reduce(lambda a, b: a.union(b), holes)
+        for space in spaces_by_floor.get(floor_id, []):
+            if space.get('type') in ('stair', 'lift'):
+                continue  # whole stair/lift spaces are removed by the viewer (shaft voids)
+            shape = make_valid(Polygon(space['polygon']))
+            if not shape.intersects(hole):
+                continue
+            rest = shape.difference(hole)
+            pieces = [g for g in (rest.geoms if hasattr(rest, 'geoms') else [rest]) if g.geom_type == 'Polygon' and g.area > 0.01]
+            plates[space['id']] = [{'exterior': [list(p) for p in piece.exterior.coords[:-1]],
+                                    'holes': [[list(p) for p in ring.coords[:-1]] for ring in piece.interiors]} for piece in pieces]
+    return plates
+

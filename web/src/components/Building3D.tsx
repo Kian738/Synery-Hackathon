@@ -27,28 +27,35 @@ import type { Asset, Geometry, Opening, Route, Space, VisualResult, XY } from ".
 
 const COLORS: Record<string,string> = {circulation:"#647a83", hall:"#586b70", office:"#82969b", lab:"#668e89", service:"#7b7d8c", core:"#435c66"};
 const frame = (x:number,y:number,h:number) => new THREE.Vector3(x,h,-y);
-function floorShape(space: Space) {
-  const shape = new THREE.Shape();
-  space.polygon.forEach(([x,y],i) => i ? shape.lineTo(x,y) : shape.moveTo(x,y));
-  const g = new THREE.ShapeGeometry(shape);
-  g.rotateX(-Math.PI/2);
-  return g;
+type Plates=Record<string,{exterior:XY[];holes:XY[][]}[]>|undefined;
+/** The floor plate of one space. Where a stair flight arrives, the scene supplies the plate with the flight's footprint cut out, so
+ *  no floor stands inside a staircase; every other space is its plain polygon. */
+function floorShape(space: Space, plates?: Plates) {
+  const pieces=plates?.[space.id]??[{exterior:space.polygon,holes:[]}];
+  const parts=pieces.map(piece=>{
+    const shape=new THREE.Shape();
+    piece.exterior.forEach(([x,y],i) => i ? shape.lineTo(x,y) : shape.moveTo(x,y));
+    for(const ring of piece.holes){const hole=new THREE.Path();ring.forEach(([x,y],i)=>i?hole.lineTo(x,y):hole.moveTo(x,y));shape.holes.push(hole);}
+    const g=new THREE.ShapeGeometry(shape);g.rotateX(-Math.PI/2);return g.toNonIndexed();
+  });
+  if(parts.length===1)return parts[0];
+  const merged=mergeGeometries(parts);parts.forEach(p=>p.dispose());return merged;
 }
 
 const ZONE_COLORS:Record<string,string>={hazard:"#e5484d",responder:"#3b82c4",crowd1:"#b99a3c",crowd2:"#f2b705",highlight:"#ffd45c"};
 
-function Floors({spaces,elevation,highlights,hazard,zones,onPick}:{spaces:Space[];elevation:number;highlights:Set<string>;hazard?:string;zones?:Record<string,string>;onPick?:(s:Space)=>void}) {
+function Floors({spaces,elevation,highlights,hazard,zones,onPick,plates}:{plates?:Plates;spaces:Space[];elevation:number;highlights:Set<string>;hazard?:string;zones?:Record<string,string>;onPick?:(s:Space)=>void}) {
   const batches = useMemo(() => {
     const groups = new Map<string,Space[]>();
     spaces.forEach(s => {const key=s.id===hazard?"hazard":zones?.[s.id]==="responder"?"responder":highlights.has(s.id)?"highlight":zones?.[s.id]??kindOf(s); groups.set(key,[...(groups.get(key)??[]),s]);});
     return [...groups].map(([zone,rooms]) => {
       let triangles=0;
       const ranges:{end:number;space:Space}[]=[];
-      const pieces=rooms.map(s=>{const g=floorShape(s).toNonIndexed();triangles+=g.getAttribute("position").count/3;ranges.push({end:triangles,space:s});return g;});
+      const pieces=rooms.map(s=>{const g=floorShape(s,plates);triangles+=g.getAttribute("position").count/3;ranges.push({end:triangles,space:s});return g;});
       const geometry=mergeGeometries(pieces); pieces.forEach(p=>p.dispose());
       return {zone,geometry,ranges};
     });
-  },[spaces,highlights,hazard,zones]);
+  },[spaces,highlights,hazard,zones,plates]);
   useEffect(()=>()=>batches.forEach(b=>b.geometry?.dispose()),[batches]);
   return <group position={[0,elevation,0]}>{batches.map((b,index)=>b.geometry&&<mesh key={b.zone} geometry={b.geometry} receiveShadow
     onAfterRender={renderer=>{renderer.domElement.dataset.scenePainted="true";}}
@@ -138,7 +145,7 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
   const height=geometry.floors.find(f=>f.id===floorId)?.height_m??3;
   const roomHighlights=highlights;
   return <group>
-        <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} hazard={hazard} zones={zones} onPick={onSpaceClick}/>
+        <Floors spaces={spaces} elevation={elevation} highlights={roomHighlights} hazard={hazard} zones={zones} onPick={onSpaceClick} plates={geometry.scene?.plates}/>
         {hidden.length>0&&<GhostFloors spaces={hidden} elevation={elevation}/>}
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} relevant={relevant}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening} relevant={relevant}/>

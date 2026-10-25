@@ -187,9 +187,10 @@ def _compile(content: str) -> dict:
         roofs.append({'floor_id': floor['id'], 'vertices': vertices, 'area_m2': cover.area,
                       'elevation_m': float(floor.get('elevation_m') or 0.0) + float(floor.get('height_m') or 3.0)})
     unmatched = sorted(o['id'] for o in data['openings'] if any(s != 'outside' and (o['id'], s) not in matched for s in o['space_ids']))
-    from floorwise.core.stair_scene import compile_stair_shafts
+    from floorwise.core.stair_scene import compile_stair_plates, compile_stair_shafts
     shafts=compile_stair_shafts(data)
-    return {'stair_shafts':shafts, 'revision': hashlib.sha256(('scene-v3:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    plates=compile_stair_plates(data,shafts)
+    return {'stair_shafts':shafts,'plates':plates, 'revision': hashlib.sha256(('scene-v3:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
             'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
