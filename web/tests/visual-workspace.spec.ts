@@ -44,6 +44,8 @@ test("floor scope and linked plan stay usable through preview",async({page},info
   await page.goto(`${campus}&at=proc-campus-dev-000-F2-S008&to=Canteen%200.28`);
   const scene=page.getByTestId("building-scene");await expect(scene).toBeVisible();
   await expect(page.getByRole("region",{name:"Route"})).toBeVisible();  // the deep-link route must be loaded before the scope is changed
+  const readAloud=page.getByRole("button",{name:"Read aloud"});  // spoken steps start a camera tour that would override the floor scope under test
+  if(await readAloud.getAttribute("aria-pressed")==="true")await readAloud.click();
   await expect(page.locator(".building-tools")).toBeAttached();
   if(await page.locator(".building-tools > summary").isVisible() && !(await page.locator(".building-tools").getAttribute("open")!==null))await page.getByLabel("Building tools",{exact:true}).click();
   await page.getByRole("combobox",{name:"Visible floors"}).selectOption("route");
