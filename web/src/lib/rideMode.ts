@@ -11,16 +11,20 @@ export interface RideStep {
 }
 const LEG_MAX = 0.6, STOP_GAP_MAX = 1.5;
 
-export function rideMode(step: RideStep): RideMode {
-  if (step.kind !== "stairs") return "interlude";
+/** Product decision: the walking animation is never shown. Every floor change gets the StairInterlude cutout ("Taking the stairs/lift").
+ *  `isCleanFlight` keeps the old test for a clean walkable flight in case walking returns. */
+export function rideMode(_step: RideStep): RideMode { return "interlude"; }
+
+export function isCleanFlight(step: RideStep): boolean {
+  if (step.kind !== "stairs") return false;
   const f = step.flight;
-  if (!f || f.length < 2) return "interlude";
+  if (!f || f.length < 2) return false;
   const ok = (v: number) => Number.isFinite(v);
-  if (![step.from.x, step.from.y, step.to.x, step.to.y].every(ok) || !f.every(p => ok(p.x) && ok(p.y))) return "interlude";
-  if (Math.hypot(step.to.x - step.from.x, step.to.y - step.from.y) > STOP_GAP_MAX) return "interlude";
+  if (![step.from.x, step.from.y, step.to.x, step.to.y].every(ok) || !f.every(p => ok(p.x) && ok(p.y))) return false;
+  if (Math.hypot(step.to.x - step.from.x, step.to.y - step.from.y) > STOP_GAP_MAX) return false;
   const d = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
   const start = f[0], end = f[f.length - 1];
   // either direction: the legs before and after the flight must be short, or they cut through treads / float over the hole
   const up = Math.max(d(step.from, start), d(step.to, end)), down = Math.max(d(step.from, end), d(step.to, start));
-  return Math.min(up, down) <= LEG_MAX ? "walk" : "interlude";
+  return Math.min(up, down) <= LEG_MAX;
 }
