@@ -10,7 +10,7 @@ export function Loader({ label, phrases = PHRASES }: { label?: string; phrases?:
   useEffect(() => { const t = setInterval(() => setI(v => (v + 1) % phrases.length), 1800); return () => clearInterval(t); }, [phrases.length]);
   return (
     <div className="k-loader" role="status" aria-live="polite">
-      <svg viewBox="0 0 120 110" width="132" aria-hidden="true">
+      <svg viewBox="0 -14 120 128" width="132" aria-hidden="true" style={{ overflow: "visible" }}>
         {[0, 1, 2, 3].map(level => {
           const y = 78 - level * 17;
           return (

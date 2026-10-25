@@ -53,12 +53,12 @@ export default function Navigator() {
   const selectSpace=useCallback((space:Space)=>{setSelected(space);setPlanExpanded(false);setWeakOpen(false);nav.setFloorId(space.floor_id);},[nav.setFloorId]);
   const [stepMode, setStepMode] = useState(false);
   const [view, setView] = useState<"2d" | "3d" | "guide" | "follow" | "exterior">(params.get("view") === "2d" ? "2d" : "3d");
-  const [scope, setScope] = useState<"current"|"route"|"building">("building");
-  const scopeTouched = useRef(false);
-  /** Opening a map shows the whole building; a new route switches to "Route floors" (or this floor) with focus on. Choosing a view by hand wins until the next route or map. */
-  const chooseScope = (v: "current"|"route"|"building") => { scopeTouched.current = true; setScope(v); };
+  /** What is drawn: this floor or the whole building, and independently "route only" (just what the route needs; with a route it is on by
+   *  default, and a new route turns it on again). Opening a map shows the whole building. */
+  const [scope, setScope] = useState<"current"|"building">("building");
+  const [focusOn, setFocusOn] = useState(true);
   const [exploded,setExploded]=useState(true);
-  const [focusOn,setFocusOn]=useState(true),[guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
+  const [guideFocus,setGuideFocus]=useState(false),[layersOpen,setLayersOpen]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
   const [stageExpanded,setStageExpanded]=useState(params.get("explore")==="1");
   const [seekRequest,setSeekRequest]=useState(0);
@@ -72,13 +72,13 @@ export default function Navigator() {
     const stride = Math.max(1, Math.ceil(pts.length / 400));
     return pts.filter((_, i) => i % stride === 0 || i === pts.length - 1).map(p => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100] as [number, number]);
   }, [nav.route, nav.activeStep]);
-  useEffect(() => { if (!nav.route) return; scopeTouched.current = false; setScope(nav.route.floors.length > 1 ? "route" : "current"); setFocusOn(true); }, [nav.route]);
+  useEffect(() => { if (!nav.route) return; setScope(nav.route.floors.length > 1 ? "building" : "current"); setFocusOn(true); }, [nav.route]);
   const [picking, setPicking] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [buildingImport, setBuildingImport] = useState(() => params.get("import") === "1"); // no visible button: building from a plan stays reachable by URL and tests
 
   useEffect(() => { api.buildings().then(setBuildings).catch(() => {}); }, []);
-  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("building");scopeTouched.current=false;setFocusOn(true);setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);linked.current=false; }, [buildingId]);
+  useEffect(() => { setSelected(null); setStepMode(false);setView(params.get("view")==="2d"?"2d":"3d");setPreviewPosition(null);setPlanExpanded(false);setStageExpanded(params.get("explore")==="1");setScope("building");setFocusOn(true);setWeakOpen(false);setQuestionOpen(false);setFocusRequest(null);setPhoneOpen(false);setToolsOpen(false);setScenarioOpen(false);linked.current=false; }, [buildingId]);
   // Deep link (shareable, QR at a door): ?building=…&at=<space id>&to=<place>&step_free=1
   const linked = useRef(false);
   useEffect(()=>{document.documentElement.classList.toggle('high-contrast',readLocal<unknown>('floorwise:contrast',false)===true);document.documentElement.classList.toggle('large-text',readLocal<unknown>('floorwise:large-text',false)===true);},[]);
@@ -233,12 +233,11 @@ export default function Navigator() {
             <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
               <div className="k-pop-title">Show</div>
-              <Segmented ariaLabel="Visible floors" value={scope} onChange={chooseScope} options={[
+              <Segmented ariaLabel="Visible floors" value={scope} onChange={(v:string)=>setScope(v==="current"?"current":"building")} options={[
                 {value:"current",label:"This floor",ariaLabel:"This floor"},
-                {value:"route",label:"Route",ariaLabel:"Route floors",disabled:!nav.route},
-                {value:"building",label:"Building",ariaLabel:"Whole building"}]}/>
+                {value:"building",label:"Whole building",ariaLabel:"Whole building"}]}/>
+              {!!nav.route&&<button aria-pressed={focusOn} onClick={()=>setFocusOn(v=>!v)}><Pictogram name="focus" size={18}/>Route only</button>}
               {scope!=="current"&&<button aria-pressed={exploded} onClick={()=>setExploded(!exploded)}><Pictogram name="spread" size={18}/>Spread floors apart</button>}
-              {!!nav.route&&scope!=="building"&&<button aria-pressed={focusOn} onClick={()=>setFocusOn(v=>!v)}><Pictogram name="focus" size={18}/>Focus on route</button>}
               {nav.closed.size>0&&<><div className="k-pop-title">Closed places</div>{[...nav.closed].map(id=><div className="k-closed" key={id}><span>{g.spaces.find(x=>x.id===id)?.name??g.connectors.find(x=>x.id===id)?.name??"Door"}</span><button onClick={()=>nav.toggleClosed(id)}>Reopen</button></div>)}</>}
             </Popover>}
             <Popover label="Building tools" icon="tools" open={toolsOpen} onOpenChange={setToolsOpen} className="building-tools">

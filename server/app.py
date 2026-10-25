@@ -405,6 +405,7 @@ async def chat(session_id: str, body: ChatBody) -> StreamingResponse:
             except Exception as error:  # noqa: BLE001 - surface every failure to the UI
                 message = ('Request stopped. Computed results remain available.' if cancelled.is_set() or isinstance(error, InterruptedError) else
                            'The language service timed out. Please retry. Computed map results remain available.' if 'timeout' in type(error).__name__.lower() else
+                           'The language service has no valid API key: start the server with `uv run --env-file .env uvicorn server.app:app`. Routes, maps and edits still work.' if type(error).__name__ in ('CredentialsError', 'AuthenticationError', 'PermissionDeniedError') else
                            'The language service could not complete this request. Please retry; computed results remain available.')
                 diagnostic=str(getattr(error,'body',{}).get('error',{}).get('message','')) if isinstance(getattr(error,'body',None),dict) else ''
                 for key,value in os.environ.items():
