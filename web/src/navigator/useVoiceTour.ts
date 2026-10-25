@@ -10,7 +10,9 @@ function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function findSpacesMentionedInText(
+export const isStairSpace = (s: Space) => /stair|escalier|stairwell|cage/i.test(`${s.type} ${s.room_type} ${s.name}`);
+
+function findSpacesMentionedInText(
   text: string,
   spaces: Space[],
   visualResult?: VisualResult | null,
@@ -20,6 +22,7 @@ export function findSpacesMentionedInText(
   const addedIds = new Set<string>();
 
   const add = (s: Space) => {
+    if (isStairSpace(s)) return;
     if (!addedIds.has(s.id)) {
       addedIds.add(s.id);
       found.push(s);
