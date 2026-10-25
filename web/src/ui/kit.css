@@ -295,7 +295,7 @@
 .k-guide-now { display:grid !important; grid-template-columns:auto 1fr auto auto; align-items:center; gap:14px; min-height:76px; }
 .k-guide-icon { display:grid; place-items:center; width:56px; height:56px; border-radius:var(--r-lg, 16px); background:var(--accent, #ffd45c); color:#1a1405; }
 .k-guide-icon svg { width:30px; height:30px; }
-.k-guide-body { display:grid; gap:2px; min-width:0; }
+.k-guide-body { display:grid; gap:0; min-width:0; }  /* the card must stay under 160 px (review-third-pass): four lines, no extra gaps */
 .k-guide-body small { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#9fb3bb; }
 .k-guide-body strong { font-size:22px; line-height:1.15; color:#f4f8f9; }
 .k-guide-target { font-size:15px; color:#d6e2e6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -397,3 +397,6 @@ button, [role="button"], a { -webkit-tap-highlight-color:transparent; }
 .k-guide-icon { width:46px; height:46px; } .k-guide-icon svg { width:26px; height:26px; }
 .k-guide-body strong { font-size:19px; } .k-guide-target { font-size:14px; } .k-guide-meter { padding:4px 12px; } .k-guide-meter i { font-size:26px; }
 .guide-player .player-progress { height:22px; margin-top:2px; }
+
+/* Phone: icon, text, distance and the speak button share one row. Three columns pushed the button onto a second row and the card past 160 px. */
+@media (max-width:640px) { .guide-player .k-guide-now { grid-template-columns:auto minmax(0,1fr) auto auto; } .guide-player .k-guide-icon { width:40px; height:40px; } .guide-player .player-transport .play-toggle { width:44px; height:44px; min-height:0; } }

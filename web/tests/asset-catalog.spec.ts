@@ -6,7 +6,7 @@ import { contactSheetSvg, partHalfExtents } from "../src/scene-assets/contact-sh
 import type { Lod } from "../src/scene-assets/parts";
 
 // Pure data tests: no browser, no server. They read the supplied (gitignored, read-only) building files.
-const DATA = path.resolve(process.cwd(), "../docs/industrial-agents-hackathon-2026/data");
+const DATA = path.resolve(process.env.FLOORWISE_KIT ?? path.resolve(process.cwd(), "../docs/industrial-agents-hackathon-2026"), "data");  // FLOORWISE_KIT as on the Python side
 
 interface Seen { categories: Set<string>; sizes: [number, number][]; count: number }
 function inventory(): Map<string, Seen> {
