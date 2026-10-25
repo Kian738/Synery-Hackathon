@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import type { Asset } from "../lib/types";
-import { facingTable } from "../lib/facing";
+import { FACING_OFFSET_DEG } from "../lib/facing";
 import { getAssetVisual, DEFAULT_FOOTPRINT_M, type AssetPart } from "../scene-assets/catalog";
 
-type Part=AssetPart & {asset:Asset;facing:number};
+type Part=AssetPart & {asset:Asset};
 
 // Orientation lives in lib/facing.ts: the dataset's rotation 0 puts an item's front toward the wall behind it (measured by `eval.orientation`);
 // seating is turned toward the nearest table or screen because its dataset rotation carries no signal.
@@ -40,7 +40,7 @@ function Instances({parts,shape,elevation,highlighted,muted,near}:{parts:Part[];
       const p=parts[i],a=p.asset,f=a.footprint;
       const width=f&&Number.isFinite(f.width_m)&&f.width_m>0?f.width_m:DEFAULT_FOOTPRINT_M;
       const depth=f&&Number.isFinite(f.depth_m)&&f.depth_m>0?f.depth_m:DEFAULT_FOOTPRINT_M;
-      parent.position.set(a.position[0],0,-a.position[1]);parent.rotation.set(0,THREE.MathUtils.degToRad(p.facing),0);parent.updateMatrix();
+      parent.position.set(a.position[0],0,-a.position[1]);parent.rotation.set(0,THREE.MathUtils.degToRad((f?.rotation_deg??0)+FACING_OFFSET_DEG),0);parent.updateMatrix();
       local.position.set(p.position[0]*width,p.position[1]+0.005,p.position[2]*depth);
       local.rotation.set(...(p.rotation??[0,0,0]));local.scale.set(p.scale[0]*width,p.scale[1],p.scale[2]*depth);local.updateMatrix();
       mesh.setMatrixAt(i,parent.matrix.clone().multiply(local.matrix));
@@ -58,8 +58,7 @@ export function SceneAssets({assets,elevation,highlighted=false,muted=false,inte
   const groups=useMemo(()=>{
     const groups:{box:Part[];cylinder:Part[];sphere:Part[]}={box:[],cylinder:[],sphere:[]};
     const lod=interior||near?"interior":"overview";
-    const facing=facingTable(assets);
-    assets.forEach(asset=>getAssetVisual(asset,lod).parts.forEach(p=>groups[p.shape].push({...p,asset,facing:facing.get(asset.id)??0})));
+    assets.forEach(asset=>getAssetVisual(asset,lod).parts.forEach(p=>groups[p.shape].push({...p,asset})));
     return groups;
   },[assets,interior,near]);
   return <>{(["box","cylinder","sphere"] as const).map(shape=><Instances key={shape} shape={shape} parts={groups[shape]} elevation={elevation} highlighted={highlighted} muted={muted} near={interior||near}/>)}</>;

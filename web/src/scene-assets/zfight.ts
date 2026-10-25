@@ -34,30 +34,50 @@ export function coplanarFaces(parts: AssetPart[], w: number, d: number): Coplana
   return out;
 }
 
-export const ZFIGHT_PUSH_M = 0.003;
+export const ZFIGHT_STEP_M = 0.0022;
 const volume = (b: Box) => (b.hi[0] - b.lo[0]) * (b.hi[1] - b.lo[1]) * (b.hi[2] - b.lo[2]);
 
-/** Guard rail for every model: where two differently coloured boxes still share a face plane, the larger one is recessed 3 mm on that face
- *  (the detail stays on the footprint edge; a part thinner than 1 cm grows 3 mm outward instead). */
+/** Guard rail for every model. Parts that share one face plane (same axis, same side, different colours) form a group. Details (parts thinner
+ *  than 4 cm along that axis: door fronts, panels, labels) keep their faces; the bodies step back 2.2 mm behind the innermost detail
+ *  face, all by the same amount, so same-coloured neighbours stay flush. Two passes at most; a part never changes by more than a few mm.
+ *  Parts too thin to step back are left alone (the audit test reports them). */
 export function separateCoplanar(parts: AssetPart[], w: number, d: number): AssetPart[] {
-  const out = parts.map(p => ({ ...p, position: [...p.position] as AssetPart["position"], scale: [...p.scale] as AssetPart["scale"] }));
-  for (let pass = 0; pass < 8; pass++) {
-    const hits = coplanarFaces(out, w, d);
-    if (!hits.length) break;
-    const done = new Set<number>();
-    for (const h of hits) {
-      const k = "xyz".indexOf(h.axis), size = k === 0 ? w : k === 2 ? d : 1, dir = h.side === "+" ? 1 : -1;
-      const ba = boxOf(out[h.a], w, d)!, bb = boxOf(out[h.b], w, d)!;
-      const larger = volume(ba) > volume(bb) || (volume(ba) === volume(bb) && h.a < h.b) ? h.a : h.b;
-      const smaller = larger === h.a ? h.b : h.a;
-      const thin = (i: number) => out[i].scale[k] * size < 0.01;
-      const [mover, sign] = thin(larger) ? [smaller, 1] : [larger, -1];
-      const key = mover * 6 + k * 2 + (dir > 0 ? 1 : 0);
-      if (done.has(key)) continue;
-      done.add(key);
-      const p = out[mover];
-      p.position[k] = Math.round((p.position[k] + (sign * dir * ZFIGHT_PUSH_M) / 2 / size) * 1e5) / 1e5;
-      p.scale[k] = Math.round((p.scale[k] + (sign * ZFIGHT_PUSH_M) / size) * 1e5) / 1e5;
+  let out = parts.map(p => ({ ...p, position: [...p.position] as AssetPart["position"], scale: [...p.scale] as AssetPart["scale"] }));
+  for (let pass = 0; pass < 4; pass++) out = separatePass(out, w, d);
+  return out;
+}
+
+function separatePass(out: AssetPart[], w: number, d: number): AssetPart[] {
+  const hits = coplanarFaces(out, w, d);
+  if (!hits.length) return out;
+  const boxes = out.map(p => boxOf(p, w, d));
+  const parent = new Map<string, string>();
+  const find = (x: string): string => { let r = x; while ((parent.get(r) ?? r) !== r) r = parent.get(r)!; parent.set(x, r); return r; };
+  const key = (i: number, h: Coplanar) => `${h.axis}${h.side}:${i}`;
+  for (const h of hits) { const a = find(key(h.a, h)), b = find(key(h.b, h)); if (a !== b) parent.set(a, b); }
+  const groups = new Map<string, number[]>();
+  for (const h of hits) for (const i of [h.a, h.b]) {
+    const root = find(key(i, h)), list = groups.get(root) ?? [];
+    if (!list.includes(i)) list.push(i);
+    groups.set(root, list);
+  }
+  for (const [root, members] of groups) {
+    const k = "xyz".indexOf(root[0]), plus = root[1] === "+", dir = plus ? 1 : -1, size = k === 0 ? w : k === 2 ? d : 1;
+    const plane = (i: number) => (plus ? boxes[i]!.hi[k] : boxes[i]!.lo[k]);
+    const thick = (i: number) => boxes[i]!.hi[k] - boxes[i]!.lo[k];
+    // details (door fronts, panels, labels: thinner than 4 cm along this axis, else the single thinnest part) keep their faces;
+    // everything else steps back 2.2 mm behind the innermost detail face, together, so same-coloured neighbours stay flush with each other
+    const thin = members.filter(i => thick(i) <= 0.04);
+    const details = thin.length && thin.length < members.length ? thin
+      : [members.reduce((best, i) => (thick(i) < thick(best) - 1e-9 || (Math.abs(thick(i) - thick(best)) <= 1e-9 && volume(boxes[i]!) < volume(boxes[best]!)) ? i : best))];
+    const innermost = details.map(plane).reduce((m, v) => (plus ? Math.min(m, v) : Math.max(m, v)));
+    const target = innermost - dir * ZFIGHT_STEP_M;
+    for (const i of members) {
+      if (details.includes(i)) continue;
+      const delta = target - plane(i), next = out[i].scale[k] + (plus ? delta : -delta) / size;
+      if (Math.abs(delta) < 1e-9 || next * size < 0.004) continue;
+      out[i].position[k] = Math.round((out[i].position[k] + delta / 2 / size) * 1e5) / 1e5;
+      out[i].scale[k] = Math.round(next * 1e5) / 1e5;
     }
   }
   return out;
