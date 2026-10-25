@@ -7,7 +7,7 @@ import { rideState } from "./LiftShafts";
 export function StairInterlude({ kind, from, to, reduced }: { kind: string; from: string; to: string; reduced?: boolean }) {
   const lift = kind === "lift";
   return <div className={`k-interlude${reduced ? " k-interlude-static" : ""}`} role="status" aria-live="polite"
-    style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "grid", placeItems: "center", background: "rgba(10,14,18,.9)",
+    style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "grid", placeItems: "center", background: "#0e1319",
       animation: reduced ? undefined : "k-interlude .35s ease-out both" }}>
     <div className="k-interlude-card" style={{ textAlign: "center", color: "#fff" }}>
       <Pictogram name={lift ? "lift" : "stairs"} size={40}/>
