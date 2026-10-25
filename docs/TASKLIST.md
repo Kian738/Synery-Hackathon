@@ -53,3 +53,8 @@ Status: `done` (verified), `open`, `partial` (works, a part is not verified by e
 - `cameraPolyline` in `web/src/lib/focus.ts` is only used by one test (the camera uses `lib/cameraPath.ts`).
 - `docs/parallel/*` are code-referenced contracts (phone, assets, benchmark): keep. `scenario-handoff.md` and `codex-third-pass-handoff.md` can be archived once their links are fixed.
 - `SUBMISSION/BENCHMARK.md` duplicates `BENCHMARK.md`: keep both, add an equality test.
+
+## Stairs analysis 2026-10-25
+- 464 flights had no safe footprint in 87 buildings; a relaxed second fit (4 cm clearance, 0.8 x 1.1 m) brings it to 350 in 79. The rest (139 storey pairs: 114 with no overlap at all, 25 under 0.8 m2) are stair spaces on consecutive floors that do not stand above each other in the data (centroids up to 15 m apart), so no honest flight exists; they keep the stair icon and a glide. val.audit_all lists them.
+- Ride measured by web/tests/stair-ride.spec.ts in 6 buildings: eye inside the stair space, 0.28 m off walls, feet within the stair's height range, no jumps.
+
