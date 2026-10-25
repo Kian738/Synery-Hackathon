@@ -1,15 +1,19 @@
 import type { Asset } from "./types";
 
-/** Orientation of items whose dataset rotation is noise. Everything else keeps the measured rotation + 180 (`eval.orientation`).
- *  - Chairs turn to the nearest desk or table, but only to one of that desk's own four axes (a chair never points at a desk corner),
- *    and only when a desk edge is within CHAIR_REACH_M.
- *  - Lecture rows in one room are made parallel (the dataset mixes two orthogonal rotations in one hall) and turn their front (the desk side,
- *    where the people look) toward the lectern or board of the room when there is one. */
+/** Orientation of items whose dataset rotation is unreliable. Everything else keeps the measured rotation + 180 (`eval.orientation`).
+ *  - Wall-backed furniture (vending machines, shelves, cabinets, appliances, boards ...): the dataset leaves some at rotation 0 whatever the
+ *    wall does (CIT's Magistrale vending machines face along the wall). When the measured back is not on the nearest wall of the room, the item
+ *    turns square to that wall with its back against it. Items that already stand right are untouched.
+ *  - Chairs tucked within CHAIR_REACH_M of a desk turn to that desk's own axis (never to a corner).
+ *  Lecture rows are NOT touched: halls are round, fan-shaped or mixed, and the measured rotations are the best information. */
 export const FACING_OFFSET_DEG = 180;
-export const CHAIR_REACH_M = 1.0;
+export const CHAIR_REACH_M = 0.7;
+export const WALL_REACH_M = 0.9;
+export const WALL_TOLERANCE_DEG = 35;
+const WALL_BACKED = new Set(["vending_machine", "bookshelf", "shelf", "paper_shelf", "wardrobe", "fridge", "stove", "tv_stand", "nightstand", "filing_cabinet", "locker", "coffee_machine", "microwave", "dishwasher", "washing_machine", "whiteboard", "display_screen", "projector_screen", "coat_rack", "shoe_cabinet", "tool_cabinet", "chemical_cabinet", "fire_extinguisher", "electrical_panel", "printer", "multifunction_printer", "hand_dryer", "water_dispenser", "atm", "ups_unit", "defibrillator", "eyewash_station", "sofa"]);
+// Not here, measured: kitchen counters 46 %, server racks 37 %, built-in wardrobes 48 % would change (islands, aisles, fitted runs): the dataset rotation stays.
 const CHAIRS = new Set(["chair", "office_chair", "dining_chair", "outdoor_chair"]);
 const SURFACES = new Set(["desk", "dining_table", "seminar_table", "meeting_table", "reading_table", "canteen_table", "workbench", "lab_bench", "outdoor_table", "reception_desk", "assembly_station", "packing_station"]);
-const FOCUS = new Set(["lectern", "whiteboard", "projector_screen", "display_screen"]);
 
 const rad = (d: number) => (d * Math.PI) / 180;
 const norm = (d: number) => ((d % 360) + 360) % 360;
@@ -44,47 +48,49 @@ function chairYaw(chair: Asset, room: Asset[]): number {
   return yawFor(snap[0], snap[1]);
 }
 
-function rowYaws(rows: Asset[], room: Asset[]): Map<string, number> {
-  const out = new Map<string, number>();
-  if (rows.length < 3) return out;
-  // majority long-axis direction (the row's local x), in 15 degree bins modulo 180
-  const bins = new Map<number, number>();
-  for (const r of rows) { const b = Math.round(norm(r.footprint?.rotation_deg ?? 0) % 180 / 15) % 12; bins.set(b, (bins.get(b) ?? 0) + 1); }
-  const bin = [...bins.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
-  const major = norm(rows.find(r => Math.round(norm(r.footprint?.rotation_deg ?? 0) % 180 / 15) % 12 === bin)!.footprint?.rotation_deg ?? 0) % 180;
-  const focus = room.filter(o => FOCUS.has(o.type));
-  const fx = focus.length ? focus.reduce((s, o) => s + o.position[0], 0) / focus.length : null;
-  const fy = focus.length ? focus.reduce((s, o) => s + o.position[1], 0) / focus.length : null;
-  // one common side for the whole hall, from the middle of the rows toward the board
-  const cx = rows.reduce((q, r) => q + r.position[0], 0) / rows.length, cy = rows.reduce((q, r) => q + r.position[1], 0) / rows.length;
-  let axis = major;
-  if (fx !== null && fy !== null) { // people face the board: the rows' long axis is the common axis (or its quarter turn) that is most nearly square to the board
-    const vx = fx - cx, vy = fy - cy, along = (deg: number) => Math.abs(-Math.sin(rad(deg)) * vx + Math.cos(rad(deg)) * vy);
-    if (along(major + 90) > along(major)) axis = major + 90;
+type Ring = [number, number][];
+
+/** Nearest wall of the room: distance, the unit normal pointing into the room, and the wall point. */
+function nearestWall(ring: Ring, x: number, y: number) {
+  let best = { d: Infinity, nx: 0, ny: 0, px: 0, py: 0 };
+  const cx = ring.reduce((s, p) => s + p[0], 0) / ring.length, cy = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = ring[i], [bx, by] = ring[(i + 1) % ring.length], ex = bx - ax, ey = by - ay, len2 = ex * ex + ey * ey;
+    if (len2 < 1e-9) continue;
+    const u = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / len2)), px = ax + u * ex, py = ay + u * ey, d = Math.hypot(x - px, y - py);
+    if (d < best.d) {
+      const len = Math.sqrt(len2); let nx = -ey / len, ny = ex / len;
+      const toward = (x - px) * nx + (y - py) * ny || (cx - px) * nx + (cy - py) * ny; // item on the wall line: the side of the room centre
+      if (toward < 0) { nx = -nx; ny = -ny; }
+      best = { d, nx, ny, px, py };
+    }
   }
-  const px = -Math.sin(rad(axis)), py = Math.cos(rad(axis)); // plan direction of the row's local +y (perpendicular to its long axis)
-  let sign = 1;
-  if (fx !== null && fy !== null) sign = (fx - cx) * px + (fy - cy) * py >= 0 ? 1 : -1;
-  else sign = rows.reduce((q, r) => q + (-Math.sin(rad(own(r))) * px + Math.cos(rad(own(r))) * py), 0) >= 0 ? 1 : -1;
-  for (const r of rows) out.set(r.id, yawFor(px * sign, py * sign));
-  return out;
+  return best;
 }
 
-/** Y rotation (degrees) of one asset's model: front is local -Z. `room` holds the assets of the same space. */
-export function facingDegrees(asset: Asset, room: Asset[]): number {
+function wallYaw(asset: Asset, ring: Ring | undefined): number {
+  const measured = own(asset);
+  if (!ring || ring.length < 3) return measured;
+  const w = nearestWall(ring, asset.position[0], asset.position[1]);
+  if (w.d > WALL_REACH_M) return measured;
+  const r = rad(measured), backX = Math.sin(r), backY = -Math.cos(r);             // plan direction of the measured back
+  const toWallX = -w.nx, toWallY = -w.ny;                                          // from the item into the wall
+  const angle = (Math.acos(Math.max(-1, Math.min(1, backX * toWallX + backY * toWallY))) * 180) / Math.PI;
+  return angle <= WALL_TOLERANCE_DEG ? measured : yawFor(w.nx, w.ny);              // front into the room, back on the wall
+}
+
+/** Y rotation (degrees) of one asset's model: front is local -Z. `room` holds the assets of the same space, `ring` its polygon. */
+export function facingDegrees(asset: Asset, room: Asset[], ring?: Ring): number {
   if (CHAIRS.has(asset.type)) return chairYaw(asset, room);
-  if (asset.type === "lecture_seating_row") return rowYaws(room.filter(o => o.type === "lecture_seating_row"), room).get(asset.id) ?? own(asset);
+  if (WALL_BACKED.has(asset.type)) return wallYaw(asset, ring);
   return own(asset);
 }
 
-/** Rotation per asset id for one list of assets, grouped by room. Rows are resolved once per room. */
-export function facingTable(assets: Asset[]): Map<string, number> {
+/** Rotation per asset id, grouped by room. `rings` maps a space id to its polygon. */
+export function facingTable(assets: Asset[], rings?: Map<string, Ring>): Map<string, number> {
   const rooms = new Map<string, Asset[]>();
   for (const a of assets) { const r = rooms.get(a.space_id); if (r) r.push(a); else rooms.set(a.space_id, [a]); }
   const out = new Map<string, number>();
-  for (const room of rooms.values()) {
-    const rows = rowYaws(room.filter(o => o.type === "lecture_seating_row"), room);
-    for (const a of room) out.set(a.id, CHAIRS.has(a.type) ? chairYaw(a, room) : (rows.get(a.id) ?? own(a)));
-  }
+  for (const [space, room] of rooms) for (const a of room) out.set(a.id, facingDegrees(a, room, rings?.get(space)));
   return out;
 }

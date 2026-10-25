@@ -54,13 +54,13 @@ function Instances({parts,shape,elevation,highlighted,muted,near}:{parts:Part[];
     <meshStandardMaterial vertexColors roughness={.62} metalness={.1}/>
   </instancedMesh></group>;
 }
-export function SceneAssets({assets,context,elevation,highlighted=false,muted=false,interior=false,near=true}:{assets:Asset[];context?:Asset[];elevation:number;highlighted?:boolean;muted?:boolean;interior?:boolean;near?:boolean}){
+export function SceneAssets({assets,context,rings,elevation,highlighted=false,muted=false,interior=false,near=true}:{assets:Asset[];context?:Asset[];rings?:Map<string,[number,number][]>;elevation:number;highlighted?:boolean;muted?:boolean;interior?:boolean;near?:boolean}){
   const groups=useMemo(()=>{
     const groups:{box:Part[];cylinder:Part[];sphere:Part[]}={box:[],cylinder:[],sphere:[]};
     const lod=interior||near?"interior":"overview";
-    const facing=facingTable(context??assets);
+    const facing=facingTable(context??assets,rings);
     assets.forEach(asset=>getAssetVisual(asset,lod).parts.forEach(p=>groups[p.shape].push({...p,asset,facing:facing.get(asset.id)??0})));
     return groups;
-  },[assets,context,interior,near]);
+  },[assets,context,rings,interior,near]);
   return <>{(["box","cylinder","sphere"] as const).map(shape=><Instances key={shape} shape={shape} parts={groups[shape]} elevation={elevation} highlighted={highlighted} muted={muted} near={interior||near}/>)}</>;
 }

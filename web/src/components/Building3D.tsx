@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber"
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { SceneAssets } from "./SceneAssets";
+import { orientedRect } from "./Connectors3D";
 import { floorColor } from "../lib/floorColors";
 import { relevantSpaces, shaftVoids, ease } from "../lib/focus";
 import { cameraPath, type Door } from "../lib/cameraPath";
@@ -131,6 +132,7 @@ function Doorways({geometry,floorId,elevation,follow,activeOpening,relevant}:{ge
 const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,hazard,zones,connectorSpaces,labelFloor,activeOpening,relevant,voids,bare,near}:{near:boolean;hazard?:string;zones?:Record<string,string>;bare?:boolean;relevant?:Set<string>|null;voids:Set<string>;geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
   const spaces=useMemo(()=>geometry.spaces.filter(s=>s.floor_id===floorId&&!voids.has(s.id)&&(!relevant||relevant.has(s.id))),[geometry,floorId,relevant,voids]);
   const assets=useMemo(()=>bare?[]:geometry.assets.filter(a=>a.floor_id===floorId&&(!relevant||relevant.has(a.space_id))),[geometry,floorId,relevant,bare]);
+  const rings=useMemo(()=>new Map(geometry.spaces.filter(s=>s.floor_id===floorId).map(s=>[s.id,s.polygon as [number,number][]])),[geometry,floorId]);
   const hidden=useMemo(()=>relevant?geometry.spaces.filter(s=>s.floor_id===floorId&&!voids.has(s.id)&&!relevant.has(s.id)):[],[geometry,floorId,relevant,voids]);
   const height=geometry.floors.find(f=>f.id===floorId)?.height_m??3;
   const roomHighlights=highlights;
@@ -140,8 +142,8 @@ const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights
         <Walls geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} relevant={relevant}/>
         <Doorways geometry={geometry} floorId={floorId} elevation={elevation} follow={follow} activeOpening={activeOpening} relevant={relevant}/>
 
-        <SceneAssets interior={follow} near={near} context={assets} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false}/>
-        <SceneAssets interior={follow} near={near} context={assets} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
+        <SceneAssets interior={follow} near={near} context={assets} rings={rings} assets={assets.filter(a=>!highlights.has(a.id))} elevation={elevation} highlighted={false}/>
+        <SceneAssets interior={follow} near={near} context={assets} rings={rings} assets={assets.filter(a=>highlights.has(a.id))} elevation={elevation} highlighted/>
   </group>;
 });
 
@@ -361,7 +363,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
       {geometry.openings.filter(o=>visibleFloors.has(o.floor_id)&&(closed.has(o.id)||previewDoor?.id===o.id)).map(o=><mesh key={o.id} position={[o.position[0],elevation(o.floor_id)+.6,-o.position[1]]}>
         <boxGeometry args={[Math.max(o.width_m,.3),1.2,.15]}/><meshStandardMaterial color={closed.has(o.id)?"#ff8a8f":"#ffd45c"} emissive={closed.has(o.id)?"#9c202c":"#7c5612"}/></mesh>)}
       {geometry.connectors.filter(c=>closed.has(c.id)).flatMap(c=>c.space_ids.map(id=>geometry.spaces.find(s=>s.id===id)).filter((s):s is Space=>!!s&&visibleFloors.has(s.floor_id))).map(s=>{
-        const b=bounds(s.polygon);return <mesh key={s.id} position={[(b.minX+b.maxX)/2,elevation(s.floor_id)+.8,-(b.minY+b.maxY)/2]}><boxGeometry args={[Math.max(b.maxX-b.minX,.5),1.6,Math.max(b.maxY-b.minY,.5)]}/><meshStandardMaterial color="#ff8a8f" transparent opacity={.65}/></mesh>;
+        const r=orientedRect(s.polygon);return <mesh key={s.id} position={[r.cx,elevation(s.floor_id)+.7,-r.cy]} rotation={[0,Math.atan2(r.uy,r.ux),0]}><boxGeometry args={[Math.max(r.length-.1,.5),1.4,Math.max(r.width-.1,.5)]}/><meshStandardMaterial color="#ff8a8f" transparent opacity={.5} depthWrite={false}/></mesh>;
       })}
       {here&&geometry.spaces.filter(s=>s.id===here&&visibleFloors.has(s.floor_id)).map(s=>{const point=route?.stops[0]===here?route.polyline[0]:null;const b=bounds(s.polygon);return <group key={s.id} position={[point?.x??s.anchor?.[0]??(b.minX+b.maxX)/2,elevation(s.floor_id)+.08,-(point?.y??s.anchor?.[1]??(b.minY+b.maxY)/2)]}><mesh rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.14,.22,24]}/><meshBasicMaterial color="#65d7ac" side={THREE.DoubleSide} depthTest={false}/></mesh><mesh position={[0,.12,0]}><sphereGeometry args={[.1,12,8]}/><meshStandardMaterial color="#65d7ac" emissive="#1e7a4c"/></mesh>{heading!==undefined&&<group rotation={[0,-heading*Math.PI/180,0]}><mesh position={[0,.15,-.65]} rotation={[-Math.PI/2,0,0]}><coneGeometry args={[.2,.5,3]}/><meshBasicMaterial color="#65d7ac"/></mesh></group>}</group>;})}
       {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&previewMode&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report} lookOffset={lookOffset}/>

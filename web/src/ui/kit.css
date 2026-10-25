@@ -187,6 +187,7 @@
 .k-room-more { font:500 13px var(--font-sans); color:var(--k-mute); } .k-room-more summary { cursor:pointer; padding:4px 0; } .k-room-more p { margin:4px 0; color:var(--k-ink); }
 .k-room-close[aria-pressed="true"] { background:#2a1a1c; border-color:#7a3b3b; color:#ffd2d2; }
 .k-room-close { width:100%; }
+.k-room-close[aria-pressed="true"]:hover, .k-room-close[aria-pressed="true"]:focus-visible { background:#3a2326; border-color:#b25a5a; color:#fff0f0; }
 @media (max-width:640px) { .k-room { left:var(--gap-group); right:var(--gap-group); width:auto; bottom:var(--gap-group); } .k-info { display:none; } }
 
 .k-picker { display:flex; flex-direction:column; gap:var(--gap); padding-top:var(--gap); }
