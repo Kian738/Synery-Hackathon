@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { placeMapLabels } from "../lib/mapLabels";
 import { routeRuns } from "../lib/playback";
 import { area, bounds, centroid, zoneOf } from "../lib/geometry";
+import { kindOf, kindPlan, ROOM_KIND } from "../lib/roomKinds";
+import { floorColor } from "../lib/floorColors";
 import type { Geometry, Opening, Route, ScenarioMark, Space, XY, VisualResult } from "../lib/types";
 import { Pictogram } from "./Pictogram";
 
@@ -119,6 +121,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
       <svg aria-label="Floor plan" role="img"
         ref={svg}
         className="h-full w-full touch-none cursor-grab active:cursor-grabbing"
+        style={{ boxShadow: `inset 0 0 0 3px ${floorColor(geometry.floors.find(f => f.id === floorId)?.level ?? 0)}` }}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
         onWheel={(e) => {
@@ -163,12 +166,12 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
               <polygon
                 data-space-id={s.id}
                 points={pts(s.polygon)}
-                fill={isClosed ? "#f3d9dd" : ZONE_FILL[zone]}
+                fill={isClosed ? "#f3d9dd" : kindPlan(s)}
                 stroke="var(--color-ink)"
                 strokeWidth={scale * 0.14}
                 className="cursor-pointer transition-[fill] duration-150 hover:fill-white"
               >
-                <title>{`${s.name} — ${s.room_type.replace(/_/g, " ")}, ${area(s.polygon).toFixed(1)} m²`}</title>
+                <title>{`${s.name} — ${ROOM_KIND[kindOf(s)].label}, ${area(s.polygon).toFixed(1)} m²`}</title>
               </polygon>
               {crowd && <polygon points={pts(s.polygon)} fill="var(--color-mark)" fillOpacity={crowd === 2 ? 0.8 : 0.4} pointerEvents="none" />}
               </g>
