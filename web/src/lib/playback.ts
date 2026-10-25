@@ -30,14 +30,14 @@ function speedProfile(points: RoutePoint[], auto: boolean): number[] {
   });
 }
 
-export function presentation(route: Route, auto = true) {
+export function presentation(route: Route, auto = true, rideSeconds?: (fromFloor: string, toFloor: string, fromNode: string, toNode: string) => number) {
   const sections: PreviewSection[] = [];
   const points = route.polyline.filter((p, i, all) => !i || p.gap || p.floor_id !== all[i-1].floor_id || Math.hypot(p.x-all[i-1].x,p.y-all[i-1].y)>1e-7);
   let duration = 0;
   const speeds = speedProfile(points, auto);
   for (let i=1;i<points.length;i++) {
     const a=points[i-1],b=points[i],transition=!!b.gap || a.floor_id!==b.floor_id;
-    const seconds=transition ? 3 : Math.hypot(b.x-a.x,b.y-a.y)/speeds[i-1];
+    const seconds=transition ? (rideSeconds&&a.floor_id!==b.floor_id?rideSeconds(a.floor_id,b.floor_id,a.node,b.node):3) : Math.hypot(b.x-a.x,b.y-a.y)/speeds[i-1];
     sections.push({a,b,start:duration,end:duration+seconds,transition}); duration+=seconds;
   }
   let previous=0;

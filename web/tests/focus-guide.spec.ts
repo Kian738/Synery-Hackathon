@@ -243,3 +243,28 @@ test("camera path crosses every door through its middle, square to the wall", as
   }
   expect(crossings).toBeGreaterThan(0);
 });
+
+test("Guide me walks down the real stair flights: height only falls, in many small steps", async ({ page }) => {
+  const building = "osm-way27917482";
+  await page.goto(`/?building=${building}&at=${building}-F3-S069&to=00.05.058`);
+  await page.getByRole("button", { name: "Guide me", exact: true }).click();
+  const slider = page.getByRole("slider", { name: "Preview progress" });
+  await expect(slider).toBeAttached({ timeout: 20_000 });
+  const canvas = page.locator("canvas");
+  const ys: number[] = [];
+  const max = Number(await slider.getAttribute("max"));
+  for (let i = 0; i <= 140; i++) {
+    await slider.evaluate((el: HTMLInputElement, v: number) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, String(v));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }, (i / 140) * max);
+    await page.waitForTimeout(70);
+    const pos = JSON.parse((await canvas.getAttribute("data-camera-position")) ?? "null");
+    if (pos) ys.push(pos[1]);
+  }
+  const rises = ys.slice(1).filter((y, i) => y > ys[i] + 0.06).length;
+  expect(rises).toBe(0);
+  expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(3);
+  const intermediate = new Set(ys.map(y => Math.round(y * 4) / 4).filter(y => y > Math.min(...ys) + 0.3 && y < Math.max(...ys) - 0.3));
+  expect(intermediate.size).toBeGreaterThan(6); // many distinct heights while on the stairs, not one jump
+});

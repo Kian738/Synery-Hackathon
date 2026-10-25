@@ -162,6 +162,56 @@ export function liftBoxes(space: Space, base: number, doorSide: XY | null, carHe
   return boxes;
 }
 
+export interface WalkPoint { x: number; y: number; h: number }
+
+/** The line a person walks up (or down) a stair, from the same layout as stairBoxes: flight, landing, flight. Heights are tread tops above `base`. */
+export function stairWalkLine(space: Space, base: number, rise: number, alignment: XY | OrientedRect | null = null): WalkPoint[] {
+  let r = alignment && !Array.isArray(alignment) ? alignment : orientedRect(space.polygon);
+  if (Array.isArray(alignment) && ((alignment[0] - r.cx) * r.ux + (alignment[1] - r.cy) * r.uy) < 0) r = { ...r, ux: -r.ux, uy: -r.uy };
+  const L = Math.max(0.8, r.length - 2 * WALL), W = Math.max(0.7, r.width - 2 * WALL);
+  const vx = -r.uy, vy = r.ux;
+  const at = (s0: number, t: number, h: number): WalkPoint => ({ x: r.cx + s0 * r.ux + t * vx, y: r.cy + s0 * r.uy + t * vy, h });
+  const straight = W < 2.4 && L >= 5.5, flights = straight ? 1 : 2;
+  const gap = flights === 2 ? GAP : 0, fw = (W - gap) / flights;
+  const landing = flights === 2 ? Math.min(fw + 0.25, 1.5, L * 0.35) : 0;
+  const run = L - landing, perFlight = rise / flights;
+  const n = Math.max(2, Math.min(Math.round(perFlight / RISER), Math.floor(run / MIN_TREAD)));
+  const rs = perFlight / n, ts = run / n;
+  const out: WalkPoint[] = [at(-L / 2 - 0.4, flights === 1 ? 0 : -(fw + gap) / 2, base)];
+  for (let f = 0; f < flights; f++) {
+    const t = flights === 1 ? 0 : (f === 0 ? -1 : 1) * (fw + gap) / 2, dir = f === 0 ? 1 : -1;
+    const startS = f === 0 ? -L / 2 : -L / 2 + run, lowY = base + f * perFlight;
+    for (let k = 0; k <= n; k++) out.push(at(startS + dir * k * ts, t, lowY + Math.min(k + 0.5, n) * rs));
+    if (f === 0 && flights === 2) out.push(at(-L / 2 + run + landing / 2, 0, base + perFlight));
+  }
+  const last = out[out.length - 1], prev = out[out.length - 2];
+  const d = Math.hypot(last.x - prev.x, last.y - prev.y) || 1;
+  out.push({ x: last.x + ((last.x - prev.x) / d) * 0.5, y: last.y + ((last.y - prev.y) / d) * 0.5, h: base + rise });
+  return out;
+}
+
+/** The walk for one connector between two floors (every storey in between), ascending order; null if the connector is not a drawn stair. */
+export function stairWalkFor(geometry: Geometry, fromFloor: string, toFloor: string, nodeA: string, nodeB: string): WalkPoint[] | null {
+  const c = (geometry.connectors as Connector[]).find(k => k.kind === "stairs" && k.space_ids.includes(nodeA) && k.space_ids.includes(nodeB));
+  if (!c) return null;
+  const floors = new Map(geometry.floors.map(f => [f.id, f]));
+  const spaces = new Map(geometry.spaces.map(sp => [sp.id, sp]));
+  const stops = c.floor_ids.map((fid, i) => ({ floor: floors.get(fid)!, space: spaces.get(c.space_ids[i]) })).filter(x => x.floor && x.space).sort((a, b) => a.floor.level - b.floor.level);
+  const lo = Math.min(floors.get(fromFloor)?.level ?? 0, floors.get(toFloor)?.level ?? 0), hi = Math.max(floors.get(fromFloor)?.level ?? 0, floors.get(toFloor)?.level ?? 0);
+  const line: WalkPoint[] = [];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i], b = stops[i + 1];
+    if (a.floor.level < lo || b.floor.level > hi) continue;
+    const shaft = geometry.scene?.stair_shafts?.find(sh => sh.connector_id === c.id && sh.from_floor === a.floor.id && sh.to_floor === b.floor.id);
+    if (!shaft?.footprint) return null;
+    const lower = geometry.openings.filter(o => o.floor_id === a.floor.id && o.space_ids.includes(a.space!.id)).map(o => o.position);
+    const upper = geometry.openings.filter(o => o.floor_id === b.floor.id && o.space_ids.includes(b.space!.id)).map(o => o.position);
+    const frame = alignStairFrame(orientedRect(shaft.footprint), lower, upper);
+    line.push(...stairWalkLine(a.space!, a.floor.elevation_m + 0.02, b.floor.elevation_m - a.floor.elevation_m, frame));
+  }
+  return line.length > 1 ? line : null;
+}
+
 function Instances({ boxes }: { boxes: Box[] }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   useLayoutEffect(() => {

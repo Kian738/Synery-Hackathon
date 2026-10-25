@@ -10,7 +10,7 @@ import { SceneLighting } from "./SceneLighting";
 import { Roofs } from "./Ceilings";
 import { Dock, IconButton } from "../ui/kit";
 import { LiftShafts, rideState } from "./LiftShafts";
-import { Connectors3D, inside as insidePolygon } from "./Connectors3D";
+import { Connectors3D, inside as insidePolygon, stairWalkFor, type WalkPoint } from "./Connectors3D";
 import { SceneLabels, type SceneLabel, type ProjectedLabel } from "./SceneLabels";
 import { GuidePlayer } from "./GuidePlayer";
 import { ExploreCamera } from "./ExploreCamera";
@@ -165,7 +165,7 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors,cas
 
 
 function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number}}){
-  const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const heading=useRef<THREE.Vector3|null>(null);const lastTick=useRef(performance.now());
+  const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const heading=useRef<THREE.Vector3|null>(null);const walkCache=useRef(new Map<string,WalkPoint[]|null>());const lastTick=useRef(performance.now());
   useLayoutEffect(()=>{lastTick.current=performance.now();},[playing]);
   useEffect(()=>{first.current=true;invalidate();},[seekVersion,model,invalidate]);
   useEffect(()=>{invalidate();},[lookOffset,invalidate]);
@@ -174,19 +174,29 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
     if(playing)clock.current=advancePreview(clock.current,elapsed,speed,model.duration);
     const sample=samplePreview(model,clock.current),p=sample.point;if(!p)return;
     const height=geometry.floors.find(f=>f.id===p.floor_id)?.elevation_m??0;
-    const ride=sample.ride;let rideDelta=0;
+    const ride=sample.ride;let rideDelta=0;let rideTan:THREE.Vector3|null=null;
     if(ride){
       // Ride the connector: glide between the two landings instead of cutting between floors.
       const e=ease(ride.t),h0=geometry.floors.find(f=>f.id===ride.from.floor_id)?.elevation_m??0,h1=geometry.floors.find(f=>f.id===ride.to.floor_id)?.elevation_m??0;
       rideDelta=h1-h0;
       // Stay inside the stair or lift shaft while climbing: pull each position toward the shaft centre until it is inside its outline.
       const shaft=[ride.from.node,ride.to.node].map(id=>geometry.spaces.find(sp=>sp.id===id)?.polygon).filter((q):q is XY[]=>!!q&&q.length>2);
-      let rx=ride.from.x+(ride.to.x-ride.from.x)*e,ry=ride.from.y+(ride.to.y-ride.from.y)*e;
+      const key=`${ride.from.floor_id}|${ride.to.floor_id}|${ride.from.node}|${ride.to.node}`;
+      if(!walkCache.current.has(key))walkCache.current.set(key,stairWalkFor(geometry,ride.from.floor_id,ride.to.floor_id,ride.from.node,ride.to.node));
+      let line=walkCache.current.get(key);
+      if(line&&h1<h0)line=[...line].reverse();
+      let rx=ride.from.x+(ride.to.x-ride.from.x)*e,ry=ride.from.y+(ride.to.y-ride.from.y)*e,rh=h0+(h1-h0)*e;
+      if(line){ // walk the real flights: position, height and heading come from the stair's own line
+        const len=line.slice(1).reduce((a,q,i)=>a+Math.hypot(q.x-line![i].x,q.y-line![i].y),0);let want=len*e,acc=0,k=0;
+        while(k<line.length-2&&acc+Math.hypot(line[k+1].x-line[k].x,line[k+1].y-line[k].y)<want){acc+=Math.hypot(line[k+1].x-line[k].x,line[k+1].y-line[k].y);k++;}
+        const a=line[k],b=line[k+1],seg=Math.hypot(b.x-a.x,b.y-a.y)||1,u=Math.max(0,Math.min(1,(want-acc)/seg));
+        rx=a.x+(b.x-a.x)*u;ry=a.y+(b.y-a.y)*u;rh=a.h+(b.h-a.h)*u;rideTan=new THREE.Vector3(b.x-a.x,0,-(b.y-a.y));
+      }
       if(shaft.length&&!shaft.some(q=>insidePolygon(q,rx,ry))){
         const near=shaft[e<.5?0:shaft.length-1],cx=near.reduce((a,q)=>a+q[0],0)/near.length,cy=near.reduce((a,q)=>a+q[1],0)/near.length;
         for(let k=0;k<12&&!insidePolygon(near,rx,ry);k++){rx+=(cx-rx)*.35;ry+=(cy-ry)*.35;}
       }
-      camera.position.copy(frame(rx,ry,h0+(h1-h0)*e+1.65));
+      camera.position.copy(frame(rx,ry,rh+1.65));
       const lift=geometry.connectors.some(c=>c.kind==="lift"&&c.space_ids.includes(ride.from.node)&&c.space_ids.includes(ride.to.node));
       rideState.lift=lift?{nodes:[ride.from.node,ride.to.node],y:h0+(h1-h0)*e+.02}:null;
     }else{
@@ -204,6 +214,7 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       }
     }
     if(target.lengthSq()<1e-6)target.set(sample.heading[0],0,-sample.heading[1]);
+    if(rideTan&&rideTan.lengthSq()>1e-8)target.copy(rideTan);
     target.y=0;if(target.lengthSq()<1e-6)target.set(0,0,-1);target.normalize();
     if(first.current||!heading.current)heading.current=target.clone();
     else{ // turn toward the target: eased, but never faster than 80 degrees per second
@@ -247,7 +258,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   const pick=useCallback((space:Space)=>{if(!follow&&!gesture.current.moved)onSpaceClick?.(space);},[onSpaceClick,follow]);
   const [fitVersion,setFitVersion]=useState(0);
   const [playing,setPlaying]=useState(false),[time,setTime]=useState(0),[speed,setSpeed]=useState(1),[seekVersion,setSeekVersion]=useState(0);
-  const clock=useRef(0), model=useMemo(()=>route?presentation(follow?{...route,polyline:cameraPath(route.polyline,geometry.scene?.walls??[],doorsOf(geometry))}:route,autoSpeed):null,[route,follow,geometry,autoSpeed]);
+  const clock=useRef(0), model=useMemo(()=>route?presentation(follow?{...route,polyline:cameraPath(route.polyline,geometry.scene?.walls??[],doorsOf(geometry))}:route,autoSpeed,(fa,fb,na,nb)=>{const l=stairWalkFor(geometry,fa,fb,na,nb);if(!l)return 3;return Math.max(3,l.slice(1).reduce((t,q,i)=>t+Math.hypot(q.x-l[i].x,q.y-l[i].y),0)/0.9);}):null,[route,follow,geometry,autoSpeed]);
   const sample=model?samplePreview(model,time):null;
   const connectorSpaces=useMemo(()=>new Set([...(route?.polyline.map(p=>p.node)??[]),...(selected?[selected]:[])]),[route,selected]);
   const activeOpening=useMemo(()=>{
