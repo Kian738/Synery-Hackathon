@@ -136,32 +136,6 @@ export function stairBoxes(space: Space, base: number, rise: number, lit: boolea
   return boxes;
 }
 
-/** A lift car in its shaft: car body, door leaves facing the nearest opening, and a lit floor indicator. */
-export function liftBoxes(space: Space, base: number, doorSide: XY | null, carHere: boolean, lit: boolean): Box[] {
-  const r = orientedRect(space.polygon), yaw = Math.atan2(r.uy, r.ux), vx = -r.uy, vy = r.ux;
-  const L = Math.max(0.9, r.length - 0.5), W = Math.max(0.9, r.width - 0.5);
-  const boxes: Box[] = [];
-  const at = (s: number, t: number) => ({ x: r.cx + s * r.ux + t * vx, z: -(r.cy + s * r.uy + t * vy) });
-  // landing door on every stop: two steel leaves in the wall nearest the supplied opening
-  let side = 1;
-  if (doorSide) side = ((doorSide[0] - r.cx) * r.ux + (doorSide[1] - r.cy) * r.uy) >= 0 ? 1 : -1;
-  const frontS = side * (r.length / 2 - 0.1);
-  if (!doorSide) for (const lat of [-0.28, 0.28]) {
-    const p = at(frontS, lat * Math.min(W, 1.6));
-    boxes.push({ x: p.x, y: base + 1.05, z: p.z, sx: 0.05, sy: 2.1, sz: Math.min(W, 1.6) * 0.28, yaw, tilt: 0, color: lit ? "#ffe39a" : "#b9c6ca" });
-  }
-  const sign = at(frontS, 0);
-  boxes.push({ x: sign.x, y: base + 2.3, z: sign.z, sx: 0.06, sy: 0.14, sz: 0.5, yaw, tilt: 0, color: "#74e0b2", emissive: true });
-  if (carHere) {
-    const cl = Math.min(L, 2.1), cw = Math.min(W, 1.7);
-    const c = at(side * (L / 2 - cl / 2 - 0.2) , 0);
-    boxes.push({ x: c.x, y: base + 1.2, z: c.z, sx: cl, sy: 2.3, sz: cw, yaw, tilt: 0, color: "#9fb2b8" });
-    const inner = at(side * (L / 2 - 0.3), 0);
-    boxes.push({ x: inner.x, y: base + 1.05, z: inner.z, sx: 0.04, sy: 2.0, sz: cw * 0.8, yaw, tilt: 0, color: "#2a3b42" });
-  }
-  return boxes;
-}
-
 export interface WalkPoint { x: number; y: number; h: number }
 
 /** The line a person walks up (or down) a stair, from the same layout as stairBoxes: flight, landing, flight. Heights are tread tops above `base`. */

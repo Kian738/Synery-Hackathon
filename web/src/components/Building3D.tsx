@@ -128,16 +128,6 @@ function Doorways({geometry,floorId,elevation,follow,activeOpening,relevant}:{ge
   return <group position={[0,elevation,0]}><instancedMesh ref={ref} args={[undefined,undefined,parts.length]}><boxGeometry/><meshStandardMaterial roughness={.7} metalness={.15}/></instancedMesh></group>;
 }
 
-function UpperContext({geometry,above}:{geometry:Geometry;above:number}) {
-  const surfaces=useMemo(()=>(geometry.scene?.slabs??[]).flatMap(s=>{
-    const floor=geometry.floors.find(f=>f.id===s.floor_id);if(!floor||floor.elevation_m<=above+.05)return [];
-    const mesh=new THREE.BufferGeometry();mesh.setAttribute("position",new THREE.Float32BufferAttribute(s.vertices.flatMap(p=>[p[0],floor.elevation_m,-p[1]]),3));mesh.computeVertexNormals();
-    return [{floor,mesh}];
-  }),[geometry,above]);
-  useEffect(()=>()=>surfaces.forEach(s=>s.mesh.dispose()),[surfaces]);
-  return <>{surfaces.map(({floor,mesh})=><group key={floor.id}><mesh geometry={mesh}><meshStandardMaterial color="#b2bcb9" roughness={1} side={THREE.DoubleSide}/></mesh><Walls geometry={geometry} floorId={floor.id} elevation={floor.elevation_m} follow/></group>)}</>;
-}
-
 const FloorScene=memo(function FloorScene({geometry,floorId,elevation,highlights,onSpaceClick,follow,ceiling,span,hazard,zones,connectorSpaces,labelFloor,activeOpening,relevant,voids,bare,near}:{near:boolean;hazard?:string;zones?:Record<string,string>;bare?:boolean;relevant?:Set<string>|null;voids:Set<string>;geometry:Geometry;floorId:string;elevation:number;highlights:Set<string>;onSpaceClick?:(s:Space)=>void;follow:boolean;ceiling:boolean;span:number;connectorSpaces:Set<string>;labelFloor:string;activeOpening?:string}) {
   const spaces=useMemo(()=>geometry.spaces.filter(s=>s.floor_id===floorId&&!voids.has(s.id)&&(!relevant||relevant.has(s.id))),[geometry,floorId,relevant,voids]);
   const assets=useMemo(()=>bare?[]:geometry.assets.filter(a=>a.floor_id===floorId&&(!relevant||relevant.has(a.space_id))),[geometry,floorId,relevant,bare]);

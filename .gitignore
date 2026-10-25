@@ -11,3 +11,6 @@ docs/industrial-agents-hackathon-2026/
 buildings/
 .playwright-mcp/
 .cache/
+
+web/tsconfig.tsbuildinfo
+web/test-results/
