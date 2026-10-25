@@ -400,3 +400,11 @@ button, [role="button"], a { -webkit-tap-highlight-color:transparent; }
 
 /* Phone: icon, text, distance and the speak button share one row. Three columns pushed the button onto a second row and the card past 160 px. */
 @media (max-width:640px) { .guide-player .k-guide-now { grid-template-columns:auto minmax(0,1fr) auto auto; } .guide-player .k-guide-icon { width:40px; height:40px; } .guide-player .player-transport .play-toggle { width:44px; height:44px; min-height:0; } }
+
+/* Demo comparison: three thin bars, scaled to the longest, the planned one in the accent colour. */
+.k-bars { display:grid; gap:var(--gap); margin:0; padding:0; list-style:none; }
+.k-bar { display:grid; grid-template-columns:1fr auto; gap:4px var(--gap); font:var(--k-font); color:var(--k-ink); }
+.k-bar i { grid-column:1 / -1; display:block; height:6px; border-radius:var(--r-pill); background:var(--k-mute); }
+.k-bar.planned i { background:var(--k-accent); }
+.k-bar span:last-child { color:var(--k-mute); }
+.k-bar.planned span:last-child { color:var(--k-accent); }

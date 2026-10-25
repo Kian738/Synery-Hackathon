@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ScenarioCapacity } from "../lib/api";
 import { stopSpeaking } from "../lib/voice";
 import { IconButton, Segmented } from "../ui/kit";
+import { CompareBars } from "./CompareBars";
+import { useDemoRun, type DemoRequest } from "./useDemoRun";
+import { demoLabels } from "../lib/demo";
 import type { Audience, Geometry, RobustReport, ScenarioMark, ScenarioReport, Space, UiEvent } from "../lib/types";
 
 const AUDIENCES: { value: Audience; label: string; ariaLabel: string }[] = [
@@ -20,6 +23,7 @@ export function headline(r: ScenarioReport): string {
 }
 
 const REPLAY_SECONDS = 15;
+const DEMO_REPLAY_SECONDS = 10;
 
 /** People out, and people left in each room, at time t. Rooms are 1 (some) or 2 (many, over half the busiest the room gets). */
 export function crowdAt(e: NonNullable<ScenarioReport["evacuation"]>, t: number): { out: number; crowd: Record<string, 1 | 2> } {
@@ -49,8 +53,9 @@ type Numbers = { people: number | null; rate: number | null };
 const whole = (v: string) => { const n = Math.floor(Number(v)); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 const positive = (v: string) => { const n = Number(v); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 
-export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat }: {
+export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat, demo, onNarrate, onDemoActive, onFocus }: {
   onBeat?: (say: string, focus: string) => void;
+  demo?: DemoRequest | null; onNarrate?: (text: string) => Promise<void>; onDemoActive?: (on: boolean) => void; onFocus?: (id: string) => void;
   geometry: Geometry; sessionId: string; selected: Space | null; onClose: () => void;
   quickRun?: number;
   incoming?: { n: number; report: ScenarioReport; hazard: string } | null;
@@ -99,7 +104,7 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     let raf = 0, last = performance.now();
     const tick = (now: number) => {
       const dt = (now - last) / 1000; last = now;
-      setT(v => { const n = Math.min(T, v + dt * T / REPLAY_SECONDS); if (n >= T) setPlaying(false); return n; });
+      setT(v => { const n = Math.min(T, v + dt * T / (demo ? DEMO_REPLAY_SECONDS : REPLAY_SECONDS)); if (n >= T) setPlaying(false); return n; });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -141,13 +146,26 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
   useEffect(() => { beatIdx.current = 0; lastT.current = 0; lastBeatAt.current = 0; setBeatText(""); }, [report]);
   useEffect(() => { if (!playing) stopSpeaking(); }, [playing]);
   useEffect(() => () => { stopSpeaking(); }, []);
+  const fix = report?.answer?.fixes?.[0];
+  const applyFix = async () => {
+    if (!fix) return;
+    const { events } = await api.widen(sessionId, fix.element, fix.width_m);
+    apply(events); const after = await run(hazard, audience); setApplied(true); return after;
+  };
+  const liveRef = useRef({ report, playing, done: false });
+  liveRef.current = { report, playing, done: !playing && T > 0 && t >= T };
+  const demoRun = useDemoRun(demo, { geometry, run: s => run(s), applyFix, focus: id => onFocus?.(id), live: () => liveRef.current, narrate: onNarrate, onActive: onDemoActive });
+  const stage = demoRun.stage;
   const lastMark = useRef("");
   useEffect(() => {
     if (!report || !hazard || !replay) return;
-    const mark: ScenarioMark = { hazard: hazard.id, doors: report.evacuation?.bottleneck ?? [], responder: report.responder, crowd: replay.crowd };
+    const fixDoor = report.answer?.fixes?.[0]?.element;
+    const shown = !stage || stage.cut ? report.evacuation?.bottleneck ?? [] : [];
+    const mark: ScenarioMark = { hazard: hazard.id, doors: stage?.fix && fixDoor ? [...shown, fixDoor] : shown, responder: !stage || stage.responders ? report.responder : null, crowd: replay.crowd,
+      labels: stage ? demoLabels(geometry, report, stage) : undefined };
     const key = JSON.stringify(mark);
     if (key !== lastMark.current) { lastMark.current = key; onScenario(mark); }
-  }, [report, hazard, replay]);
+  }, [report, hazard, replay, stage]);
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     return q ? geometry.spaces.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6) : [];
@@ -166,10 +184,12 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       setUsed(mine); setReport(r);
       onHighlight(new Set([h.id, ...(r.evacuation?.bottleneck ?? [])]));
       onFloor(h.floor_id);
+      setBusy(false);
+      return r;
     } catch (e) { setError(e instanceof Error ? e.message : "Scenario failed"); }
     setBusy(false);
   };
-  const pick = (s: Space) => { setHazard(s); setReport(null); setLimit(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); };
+  const pick = (s: Space) => { demoRun.reset(); setHazard(s); setReport(null); setLimit(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); };
   // One-click first result: start the fire in the room with the most seats (the same occupant estimate the solver uses).
   const busiest = useMemo(() => {
     const seats = new Map<string, number>();
@@ -178,7 +198,6 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     return top ? geometry.spaces.find(x => x.id === top[0]) : undefined;
   }, [geometry.assets, geometry.spaces]);
   const findings = report ? [...report.findings].sort((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity)).slice(0, more ? 99 : 3) : [];
-  const fix = report?.answer?.fixes?.[0];
   const suggested = fix && report?.findings.some(f => f.suggestion);
   const abstain = report?.abstained ? report.steps.find(s => !s.ok) : null;
   const reason = abstain?.reason ?? (typeof report?.abstained === "string" ? report.abstained : report?.abstained?.reason);
@@ -209,8 +228,9 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       <IconButton label="Close scenario" icon="close" onClick={onClose} />
     </header>
     <p className="k-hint">{hazard ? <>Fire room: <b>{hazard.name}</b></> : "Click a room on the map, or search, to set where the fire starts."}</p>
-    {!hazard && busiest && <IconButton accent label={`Quick fire test: ${busiest.name} (most seats)`} text={`Quick fire test: ${busiest.name}`} disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }} />}
-    {!report && inputs}
+    {demoRun.stage && <p className="k-hint">Prepared scenario. Exact flow over time, every number re-solved.</p>}
+    {!hazard && busiest && !demoRun.stage && <IconButton accent label={`Quick fire test: ${busiest.name} (most seats)`} text={`Quick fire test: ${busiest.name}`} disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }} />}
+    {!report && !demoRun.stage && inputs}
     {error && <p role="alert" className="k-sheet-alert">Could not run: {error}</p>}
     <div aria-live="polite">{busy && <p className="k-hint">{liveStep || "Checking the evacuation…"}</p>}</div>
     {report && <>
@@ -227,10 +247,10 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
         </div>
         <p className="k-hint">Red: fire. Blue: responders. Amber: slow door. Darker rooms hold more people.</p>
       </div>}
-      {ev?.nearest_exit && ev.nearest_exit.T_s > ev.T_s && <p className="k-hint">Everyone using their nearest exit instead: {ev.nearest_exit.T_s} s ({ev.nearest_exit.T_s - ev.T_s} s slower). Exits are planned together here.</p>}
+      <CompareBars report={report} />
       {report.abstained && !ev ? <p>Stopped at {abstain ? `step ${abstain.id}: ` : "a step: "}{reason ?? "A step could not be completed."}</p> : <>
         {suggested && fix && <IconButton accent label={applied ? "Applied to model" : `Apply to model (widen door to ${fix.width_m} m)`} text={applied ? "Applied to model" : `Apply to model: widen door to ${fix.width_m} m`} disabled={applied}
-          onClick={async () => { const { events } = await api.widen(sessionId, fix.element, fix.width_m); apply(events); await run(hazard, audience); setApplied(true); }} />}
+          onClick={() => void applyFix()} />}
         {findings.map((f, i) => <details key={i} className="k-sheet-finding" data-severity={f.severity}><summary><b>{SEVERITY[f.severity]}</b><span>{f.title}</span></summary><small>{f.detail}</small></details>)}
         {report.findings.length > 3 && <IconButton label={more ? "Show fewer" : "Show more"} text={more ? "Show fewer" : "Show more"} onClick={() => setMore(v => !v)} />}
         <details className="k-sheet-more"><summary>What if</summary>

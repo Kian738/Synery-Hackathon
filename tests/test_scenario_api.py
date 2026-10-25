@@ -160,3 +160,12 @@ def test_the_stream_sends_each_checked_step_as_it_finishes_then_the_same_report(
 
 def test_a_bad_stream_request_is_refused_before_streaming(client, session):
     assert client.post(f"/api/sessions/{session}/scenario/stream", json={"template": "nope"}).status_code == 422
+
+
+def test_demo_scenario_endpoint_serves_the_committed_file(client, monkeypatch):
+    body = client.get("/api/demo/scenario").json()
+    assert {"building_id", "room_id", "room", "people", "T_s", "ccrp_s", "nearest_exit_s", "fix_before_s", "fix_after_s"} <= set(body)
+    from server import scenario
+    monkeypatch.setattr(scenario, "DEMO_FILE", scenario.DEMO_FILE.with_name("missing.json"))
+    missing = client.get("/api/demo/scenario")
+    assert missing.status_code == 503 and "demo_scenario.json" in missing.json()["detail"]

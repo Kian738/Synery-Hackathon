@@ -164,12 +164,14 @@ export interface ScenarioFix { element: string; width_m: number; previous_width_
 export interface ScenarioMove { depart_s: number; element: string; from_space: string; to_space: string; persons: number; arrive_s: number }
 export interface ScenarioResponder { entrance: string; spaces: string[]; elements: string[]; arrival_s: number; delay_s: number }
 /** What the plan and 3D view draw for a scenario: hazard, slow doors, responder route, and replay crowd level per room (1 some, 2 many). */
-export interface ScenarioMark { hazard: string; doors: string[]; responder?: ScenarioResponder | null; crowd?: Record<string, 1 | 2> }
+export interface DoorLabel { text: string; tone: "amber" | "accent" | "responder" }
+export interface ScenarioMark { hazard: string; doors: string[]; responder?: ScenarioResponder | null; crowd?: Record<string, 1 | 2>; labels?: Record<string, DoorLabel> }
+export interface DemoScenario { building_id: string; room_id: string; room: string; people: number; floors: number; T_s: number; ccrp_s: number; nearest_exit_s: number; fix_before_s: number; fix_after_s: number }
 export interface ScenarioReport {
   steps: ScenarioStep[];
   abstained: { step?: string; reason?: string } | string | null;
   answer: { fixes?: ScenarioFix[] } | null;
-  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null; schedule?: ScenarioMove[] } | null;
+  evacuation?: { T_s: number; total: number; evacuated: number; stranded: Record<string, number>; by_exit: Record<string, number>; bottleneck: string[]; nearest_exit?: { T_s: number; evacuated: number } | null; ccrp?: { T_s: number } | null; params?: { specific_flow?: number; boundary_m?: number }; schedule?: ScenarioMove[] } | null;
   responder?: ScenarioResponder | null;
   findings: ScenarioFinding[];
 }
