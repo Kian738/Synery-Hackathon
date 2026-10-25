@@ -67,7 +67,8 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const T = report?.evacuation?.T_s ?? 0;
-  useEffect(() => { if (selected) { setHazard(selected); setReport(null); setLimit(null); } }, [selected]);
+  // A room picked before running sets the fire room. Once a result is showing, the replay's own camera moves select rooms too, so they must not clear it.
+  useEffect(() => { if (selected && !report) setHazard(selected); }, [selected]);
   useEffect(() => { setT(0); setPlaying(!!report?.evacuation?.schedule?.length); }, [report]);
   useEffect(() => {
     if (!incoming) return;

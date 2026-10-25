@@ -4,7 +4,7 @@ import pytest
 from floorwise.agent.solve import solve
 from floorwise.cli import structured
 from floorwise.core.graph import DOOR_PREFIX, Constraints, RouteGraph
-from floorwise.core.model import Building
+from floorwise.core.model import OUTSIDE, Building
 from floorwise.paths import DATA
 
 TOLERANCE_M = 0.01
@@ -36,17 +36,13 @@ def test_node_path_is_a_real_walk_through_the_route_graph(campus, route):
     nodes, graph = node_path(result), RouteGraph(campus, Constraints())
     assert nodes[0] == start and nodes[-1] == end
     assert any(node.startswith(DOOR_PREFIX) for node in nodes)
-    walked = sum(min(e["weight"] for e in graph.graph[a][b].values()) for a, b in zip(nodes, nodes[1:], strict=False))
-    assert abs(walked - result["length_m"]) <= TOLERANCE_M * len(result["legs"])
+    walked = graph.path_length(nodes)
+    assert abs(walked - result["length_m"]) <= TOLERANCE_M
 
 
-def test_space_path_lists_every_space_passed_through(campus, route):
-    """Door-to-door steps cross spaces that are not nodes of their own; they still belong in the space path."""
+def test_space_path_is_the_node_path_without_door_nodes(route):
     _, _, result, _ = route
-    graph = RouteGraph(campus, Constraints())
-    crossed = [n for n in graph.expand(node_path(result)) if not n.startswith(DOOR_PREFIX)]
-    assert result["space_path"] == [n for i, n in enumerate(crossed) if not i or n != crossed[i - 1]]
-    assert len(result["space_path"]) > len([n for n in node_path(result) if not n.startswith(DOOR_PREFIX)])
+    assert result["space_path"] == [n for n in node_path(result) if not n.startswith(DOOR_PREFIX)]
 
 
 def test_answers_entry_carries_all_route_readings(route):
@@ -55,3 +51,4 @@ def test_answers_entry_carries_all_route_readings(route):
     assert entry["route"][0] == start and entry["route"][-1] == end
     assert entry["route_nodes"] == node_path(result)
     assert entry["route_elements"] == [e for leg in result["legs"] for e in leg["element_path"]]
+    assert OUTSIDE not in entry["route"] or entry["route"].count(OUTSIDE) == 1

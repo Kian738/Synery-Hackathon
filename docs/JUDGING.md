@@ -19,7 +19,7 @@ Floorwise turns a supplied building model into grounded answers, indoor routes, 
 
 ## Demo
 
-Use campus-dev-000: step-free Lab 2.17 to Lab 4.26 is 49.7 horizontal walking metres; close Lift 2 and the alternative is 96.1 m. Floor transitions are explicit. These numbers were remeasured after collision validation and replace the handoff PDF's older values.
+Use campus-dev-000: step-free Lab 2.17 to Lab 4.26 is 60.15 m under the judges' route rules (door to door, stairs 2 m per metre, lifts 15 m + 1 m per metre); close Lift 3, which that route uses, and the alternative via Lift 2 is 73.00 m. Floor transitions are explicit. Remeasured after the kit 1.1.0 rule change; older figures (49.7 / 96.1 m) belonged to the superseded model.
 
 For the impact shock shot, use factory-dev-003 and close Office lift: 29/56 rooms lose step-free exit access. For repair, request Main lobby to Print room 0.16 for a 1.1 m trolley. A verified hypothetical widening is offered; Apply changes the session's model, not a physical door.
 

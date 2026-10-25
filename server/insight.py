@@ -1,6 +1,7 @@
 """Session-scoped insight endpoints; helpers are injected to avoid importing app twice."""
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+from typing import Literal
 
 
 class WidenBody(BaseModel):
@@ -12,6 +13,7 @@ class ProfileBody(BaseModel):
     step_free: bool | None = None
     min_door_width_m: float | None = Field(default=None, gt=0, le=20)
     location: str | None = None
+    location_source: Literal['default','declared','link'] | None = None
 
 
 def insight_router(get_session, call):
@@ -39,6 +41,7 @@ def insight_router(get_session, call):
             location_changed=body.location is not None and session.place(body.location)!=session.profile.location
             if body.location is not None:
                 session.profile.location = session.place(body.location)
+                session.profile.location_source = body.location_source or 'declared'
             if body.step_free is not None:
                 session.profile.step_free = body.step_free
             if 'min_door_width_m' in body.model_fields_set:

@@ -50,15 +50,13 @@ def test_compound_filters_use_and_and_validated_minima(session):
     with pytest.raises(ValueError):session.result_page('missing',-1)
 
 
-def test_simple_chat_uses_no_model_and_emits_complete_visuals(session):
-    with patch('floorwise.llm.client',side_effect=AssertionError('No model allowed')):
-        agent=ChatAgent(session)
+def test_deterministic_helpers_remain_available_without_models(session):
+    from floorwise.agent.local import dispatch
+    with patch('floorwise.llm.client',side_effect=AssertionError('Helpers called a model')):
         for text in ['How many chairs are there?', 'Which room has the most chairs?',
                      'Show me all chairs on the ground floor', 'How big is Main lobby?']:
-            events=[];reply=agent.ask(text,lambda kind,data:events.append((kind,data)))
-            assert reply and agent.turn_usage['dispatch']=='deterministic'
-            assert not agent.usage
-            assert any(k=='ui' and d['type']=='visual_result' for k,d in events)
+            assert dispatch(session,text)
+            assert any(e['type']=='visual_result' for e in session.events)
 
 
 def test_result_pages_are_session_scoped_and_bounded():
@@ -124,22 +122,18 @@ def test_configured_pricing_and_per_turn_zero_usage(session,monkeypatch):
     assert estimate([{'model':'unknown','usage':{'input_tokens':10}}]) is None
     monkeypatch.setenv('FLOORWISE_MODEL_PRICES_JSON','{"fixture":{"input":2,"output":4,"cache_read":0.2,"cache_write":2.5}}')
     assert estimate([{'model':'fixture','usage':{'input_tokens':1000,'output_tokens':100,'cache_read_input_tokens':1000}}])==.0026
-    agent=ChatAgent(session)
-    agent.ask('How many chairs are there?')
-    agent.ask('How big is Main lobby?')
-    assert agent.turn_usage['input_tokens']==agent.turn_usage['output_tokens']==0
-    assert agent.turn_usage['estimated_cost_usd']==0
 
 
-def test_chat_api_works_without_a_model_key_for_supported_questions(monkeypatch):
+def test_chat_without_key_reports_error_and_completes_stream(monkeypatch):
     for name in ('ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','GROQ_API_KEY','OPENROUTER_API_KEY'):
         monkeypatch.delenv(name,raising=False)
     client=TestClient(app)
     sid=client.post('/api/sessions',json={'building_id':'proc-campus-dev-000'}).json()['session_id']
     response=client.post(f'/api/sessions/{sid}/chat',json={'text':'Which room has the most chairs?'})
     assert response.status_code==200
-    assert 'visual_result' in response.text and '"dispatch": "deterministic"' in response.text
-    assert '"type": "error"' not in response.text
+    assert '"type": "error"' in response.text
+    assert '"type": "done"' in response.text
+    assert '"dispatch": "deterministic"' not in response.text
 
 
 def test_selected_room_and_single_result_support_follow_up_without_a_model(session):

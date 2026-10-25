@@ -13,6 +13,15 @@ from floorwise.paths import ROOT
 RUNS = ROOT / "runs"
 
 
+def known_issues() -> dict:
+    """Ids of questions diagnosed as unanswerable from their wording (eval/known_issues.json)."""
+    path = Path(__file__).with_name("known_issues.json")
+    try:
+        return {k: v for k, v in json.loads(path.read_text(encoding="utf-8")).items() if not k.startswith("_")}
+    except (OSError, ValueError):
+        return {}
+
+
 def git_sha() -> str:
     try:
         return subprocess.run(
@@ -30,6 +39,11 @@ class Ledger:
         self.directory = RUNS / f"{stamp}_{suite}{'_' + name if name else ''}_{uuid.uuid4().hex[:8]}"
         self.directory.mkdir(parents=True, exist_ok=False)
         self.suite, self.config = suite, dict(config)
+        import os
+        if os.environ.get('FLOORWISE_LAB_JOB_ID'):
+            self.config['job_id'] = os.environ['FLOORWISE_LAB_JOB_ID']
+        from eval.evidence import fingerprint
+        self.fingerprint = fingerprint()
         import os
 
         if os.environ.get("FLOORWISE_OFFLINE") != "1":
@@ -60,13 +74,25 @@ class Ledger:
             by_source[row.get("source", "?")][outcome] += 1
         from eval.stats import clustered, wilson
 
+        known = known_issues()
+        failures = [row for row in self.rows if row.get("correct") is False]
+        explained = [row for row in failures if row.get("id") in known]
+        unexplained = [row for row in failures if row.get("id") not in known]
         total = len(self.rows)
         correct = sum(1 for row in self.rows if row.get("correct"))
         cluster_ci = clustered(self.rows)
+        from eval.evidence import fingerprint, compatible
+        source_changed=not compatible(self.fingerprint, fingerprint())
         summary = {
             "suite": self.suite,
             "config": self.config,
             "git": git_sha(),
+            "fingerprint": self.fingerprint,
+            "source_changed": source_changed,
+            "incomplete": any(row.get('outcome') == 'incomplete' for row in self.rows),
+            "outcomes": dict(Counter(row.get('outcome', 'passed' if row.get('correct') else 'failed') for row in self.rows)),
+            "coverage": {"passed": [r.get('id') for r in self.rows if r.get('correct') and r.get('outcome') not in ('withheld','unavailable','skipped')],
+                         "failed": [r.get('id') for r in self.rows if not r.get('correct')]},
             "seconds": round(time.time() - self.started, 1),
             "total": total,
             "correct": correct,
@@ -77,7 +103,17 @@ class Ledger:
             "by_kind": {k: dict(v) for k, v in sorted(by_kind.items())},
             "by_source": {k: dict(v) for k, v in sorted(by_source.items())},
             "usage": dict(self.usage),
+            # A miss is "known" only when eval/known_issues.json has a diagnosis for that exact id.
+            "known_failures": len(explained),
+            "unexplained_failures": len(unexplained),
+            "unexplained_ids": [row.get("id") for row in unexplained][:50],
         }
+        if self.suite in ('walls','walkability'):
+            withheld=sum(r.get('outcome')=='withheld' for r in self.rows)
+            unavailable=sum(r.get('outcome')=='unavailable' or r.get('kind')=='no route in the building model (not walked)' for r in self.rows)
+            emitted=[r for r in self.rows if r.get('outcome') not in ('withheld','unavailable') and r.get('kind')!='no route in the building model (not walked)']
+            summary['navigation']={'sampled':total,'emitted':len(emitted),'safe':sum(bool(r.get('correct')) for r in emitted),
+                                   'unavailable':unavailable,'withheld':withheld}
         (self.directory / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
         self.completed.append(self.directory / "summary.json")
         if not quiet:
@@ -93,5 +129,8 @@ def print_summary(summary: dict) -> None:
         for key, counts in table.items():
             right, wrong = counts.get("correct", 0), counts.get("wrong", 0)
             print(f"    {key:28s} {right:4d}/{right + wrong:<4d}" + ("" if not wrong else "   <-- misses"))
+    if summary.get("known_failures") or summary.get("unexplained_failures"):
+        print(f"  misses: {summary.get('known_failures', 0)} known (diagnosed), {summary.get('unexplained_failures', 0)} unexplained"
+              + (f" -> {', '.join(summary['unexplained_ids'][:6])}" if summary.get("unexplained_ids") else ""))
     if summary.get("usage"):
         print(f"  usage: {summary['usage']}")

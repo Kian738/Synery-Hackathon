@@ -53,13 +53,18 @@ def test_unknown_conversation_still_reaches_the_model_instead_of_a_canned_greeti
     assert agent.ask('hello')=='Real model response fixture'
 
 
-def test_common_count_commands_do_not_need_a_model():
+def test_normal_chat_does_not_use_dispatch_or_structured_parser(monkeypatch):
     building=Building.load(DATA/'dev'/'proc-campus-dev-000')
     agent=ChatAgent(Session.for_building(building))
-    with patch('floorwise.llm.client',side_effect=AssertionError('Unexpected model call')):
-        answer=agent.ask('Count all chairs in the building')
-    assert 'chair' in answer
-    assert agent.turn_usage['dispatch']=='deterministic'
+    monkeypatch.setattr('floorwise.agent.local.dispatch',lambda *a:pytest.fail('Chat used regex dispatch'))
+    monkeypatch.setattr('floorwise.agent.parse_llm.LLMParser.parse',lambda *a:pytest.fail('Chat used parser hop'))
+    class Conversation:
+        provider='fixture';model='model';usage=Counter()
+        def ask(self,text,on_event=None):return 'A full question reached the conversational agent.'
+    agent.conversation=Conversation()
+    monkeypatch.setattr(agent,'_prepare_conversation',lambda text:None)
+    assert agent.ask('How many 3d printers and where?').startswith('A full question')
+    assert agent.turn_usage['dispatch']=='agent'
 
 
 def test_claude_transport_requires_fields_without_changing_parser_defaults():
@@ -91,6 +96,42 @@ def test_failed_model_turn_does_not_poison_next_request(monkeypatch,provider):
     assert conversation.messages[-1]['content']=='retry'
 
 
+def test_dynamic_claude_tools_preserve_history_and_allow_invalid_binding_drop(monkeypatch):
+    """A deferred tool changes the signed prefix inside a tool-use turn."""
+    from floorwise.llm.loop import Conversation, THINKING_BINDING_BETA
+    from floorwise.llm.tools import tool
+    requests=[]
+    signed=SimpleNamespace(type='thinking',thinking='',signature='opaque-bound-to-initial-tools')
+    usage=SimpleNamespace(input_tokens=1,output_tokens=1,cache_read_input_tokens=0,cache_creation_input_tokens=0)
+
+    @tool
+    def specialized() -> str:
+        """A deferred operation."""
+        return 'computed'
+
+    @tool
+    def enable() -> str:
+        """Load the operation."""
+        conversation.tools.append(specialized)
+        conversation.by_name[specialized.name]=specialized
+        return 'enabled'
+
+    def create(**kwargs):
+        requests.append(kwargs)
+        if len(requests)==1:
+            return SimpleNamespace(content=[signed,SimpleNamespace(type='tool_use',id='load',name='enable',input={})],stop_reason='tool_use',usage=usage)
+        assert [t['name'] for t in kwargs['tools']]==['enable','specialized']
+        assert THINKING_BINDING_BETA in kwargs['betas']
+        assert kwargs['thinking']['block_binding']['prefix_mismatch_behavior']=='drop_block'
+        # Do not filter/rewrite signed assistant content or lose the actual tool result.
+        assert kwargs['messages'][1]['content'][0] is signed
+        assert kwargs['messages'][2]['content'][0]['tool_use_id']=='load'
+        return SimpleNamespace(content=[SimpleNamespace(type='text',text='Ready')],stop_reason='end_turn',usage=usage)
+
+    monkeypatch.setattr('floorwise.llm.client',lambda provider:SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create))))
+    conversation=Conversation('system',[enable],provider='anthropic')
+    assert conversation.ask('load a tool')=='Ready'
+    assert len(requests)==2
 def test_chat_failure_ends_stream_and_session_can_retry(monkeypatch):
     import json
     from fastapi.testclient import TestClient

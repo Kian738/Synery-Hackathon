@@ -4,7 +4,13 @@ import json
 import math
 from functools import lru_cache
 
+from shapely.geometry import LineString, Point
+
 from floorwise.core.model import Building
+
+
+DOOR_HEIGHT_M = 2.1
+HEADER_MAX_WIDTH_M = 2.5
 
 
 def compile_scene(building: Building) -> dict:
@@ -22,6 +28,7 @@ def _compile(content: str) -> dict:
     walls, unmatched = [], set()
     matched = set()
     seen = set()
+    headers, header_seen = [], set()
     for space in data['spaces']:
         polygon = space['polygon']
         if len(polygon) < 3:
@@ -59,6 +66,17 @@ def _compile(content: str) -> dict:
                     half = max(0.1, float(o.get('width_m') or 0.9)/2)
                     cuts.append((max(0, t*length-half), min(length, t*length+half)))
                     matched.add((o['id'], space['id']))
+                    if o.get('width_m', 0.9) <= HEADER_MAX_WIDTH_M and o.get('kind') != 'opening' or o.get('width_m', 0.9) <= 1.6:
+                        # The wall above a door or narrow opening stays: a lintel from the door height up to the ceiling.
+                        low_h, high_h = max(0, t*length-half), min(length, t*length+half)
+                        door_h = min(DOOR_HEIGHT_M, max(height - 0.3, 0.5))
+                        start = [a[0]+dx*low_h/length, a[1]+dy*low_h/length]
+                        end = [a[0]+dx*high_h/length, a[1]+dy*high_h/length]
+                        key = (space['floor_id'], tuple(sorted((tuple(round(v, 2) for v in start), tuple(round(v, 2) for v in end)))))
+                        if key not in header_seen and high_h-low_h > 0.05 and height > door_h + 0.05:
+                            header_seen.add(key)
+                            headers.append({'floor_id': space['floor_id'], 'a': [round(v, 3) for v in start], 'b': [round(v, 3) for v in end],
+                                            'base_m': door_h, 'height_m': height})
             spans, cursor = [], 0.0
             for low, high in sorted(cuts):
                 if low > cursor:
@@ -76,8 +94,49 @@ def _compile(content: str) -> dict:
                     continue
                 seen.add(key)
                 walls.append({'floor_id': space['floor_id'], 'space_id': space['id'], 'a': start, 'b': end, 'height_m': height})
+    # A doorway clears every wall inside its thin box, including walls of a third space that overlaps the door in the
+    # supplied footprints (a lift shaft drawn over a corridor), so no route meets a wall stub inside a doorway.
+    from shapely import STRtree as _Tree
+    from shapely.ops import unary_union as _union
+    cleared = []
+    for fid in floors:
+        floor_walls = [w for w in walls if w['floor_id'] == fid]
+        zones, zone_spaces = [], []
+        lines = [LineString([w['a'], w['b']]) for w in floor_walls]
+        wall_tree = _Tree(lines) if lines else None
+        for o in data['openings']:
+            if o.get('floor_id') != fid or o.get('kind') not in ('door', 'entrance', 'opening') or wall_tree is None:
+                continue
+            half = max(0.1, float(o.get('width_m') or 0.9)/2)
+            point = Point(o['position'])
+            nearest = int(wall_tree.nearest(point))
+            host, best = floor_walls[nearest], lines[nearest].distance(point)
+            if best > 0.8:
+                continue
+            hx, hy = host['b'][0]-host['a'][0], host['b'][1]-host['a'][1]
+            hn = math.hypot(hx, hy) or 1.0
+            ux, uy = hx/hn, hy/hn
+            px, py = o['position']
+            zones.append(LineString([(px-ux*half, py-uy*half), (px+ux*half, py+uy*half)]).buffer(0.35, cap_style='flat'))
+            zone_spaces.append(set(o['space_ids']))
+        if not zones:
+            cleared += floor_walls
+            continue
+        tree = _Tree(zones)
+        for wall, line in zip(floor_walls, lines):
+            # Only walls of spaces the opening does not join: the joined spaces were cut along their own wall above.
+            hits = [i for i in tree.query(line, predicate='intersects') if wall['space_id'] not in zone_spaces[int(i)]]
+            if not hits:
+                cleared.append(wall)
+                continue
+            rest = line.difference(_union([zones[int(i)] for i in hits]))
+            for part in getattr(rest, 'geoms', [rest]):
+                if part.is_empty or part.length < 0.02:
+                    continue
+                coords = list(part.coords)
+                cleared.append({**wall, 'a': [coords[0][0], coords[0][1]], 'b': [coords[-1][0], coords[-1][1]]})
+    walls = cleared
     # Node and deduplicate partial collinear overlap for display only. Analytical walls are unchanged.
-    from shapely.geometry import LineString
     from shapely.ops import unary_union
     unique=[]
     for fid in floors:
@@ -105,9 +164,33 @@ def _compile(content: str) -> dict:
         triangles = constrained_delaunay_triangles(footprint)
         vertices = [list(p) for triangle in triangles.geoms for p in list(triangle.exterior.coords)[:3]]
         slabs.append({'floor_id': fid, 'vertices': vertices, 'area_m2': footprint.area})
+    # A roof closes every indoor footprint that has no floor above it (the top floor, and wings lower than their
+    # neighbours). Where a floor above does cover it, that floor is the ceiling instead. Outdoor spaces get no roof, and
+    # nothing is inferred over an atrium the data does not record as a space.
+    roofs = []
+    ordered = sorted(data['floors'], key=lambda f: f.get('level', f.get('elevation_m', 0)))
+    indoor = {f['id']: unary_union([make_valid(Polygon(sp['polygon'])) for sp in data['spaces']
+                                    if sp['floor_id'] == f['id'] and sp.get('type') != 'outdoor' and len(sp['polygon']) >= 3]) for f in ordered}
+    for index, floor in enumerate(ordered):
+        cover = indoor[floor['id']]
+        if cover.is_empty:
+            continue
+        if index + 1 < len(ordered):
+            above = indoor[ordered[index + 1]['id']]
+            if not above.is_empty:
+                cover = cover.difference(above.buffer(0.05))
+        cover = cover.buffer(0)
+        if cover.is_empty or cover.area < 0.5:
+            continue
+        triangles = constrained_delaunay_triangles(cover)
+        vertices = [list(p) for triangle in triangles.geoms for p in list(triangle.exterior.coords)[:3]]
+        roofs.append({'floor_id': floor['id'], 'vertices': vertices, 'area_m2': cover.area,
+                      'elevation_m': float(floor.get('elevation_m') or 0.0) + float(floor.get('height_m') or 3.0)})
     unmatched = sorted(o['id'] for o in data['openings'] if any(s != 'outside' and (o['id'], s) not in matched for s in o['space_ids']))
-    return {'revision': hashlib.sha256(('slabs-v1:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+    return {'revision': hashlib.sha256(('scene-v2:' + content).encode()).hexdigest()[:16], 'walls': walls, 'slabs': slabs,
+            'headers': headers, 'roofs': roofs,
             'unmatched_openings': unmatched,
             'assumptions': ['Schematic reconstruction from supplied footprints; no window or stair-flight geometry is supplied.',
                             'Wall thickness and furniture heights are illustrative. Floor coordinates are preserved.',
-                            'Slabs use recorded space footprints. No roof or unrecorded atrium is inferred.']}
+                            'Slabs use recorded space footprints. Roofs close indoor footprints with no floor above; no atrium is inferred.',
+                            'Lintels close the wall above doors and narrow openings at 2.1 m; their height is illustrative.']}

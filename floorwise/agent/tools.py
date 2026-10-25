@@ -137,6 +137,7 @@ def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = F
         if location is not None:
             try:
                 profile.location = session.place(location)
+                profile.location_source = 'declared'
             except ResolveError as error:
                 raise ToolError(as_json({"error": str(error), "candidates": error.candidates[:8]})) from error
         session.emit("profile", profile=profile.__dict__)
@@ -182,4 +183,5 @@ def make_tools(session: Session, allow_edits: bool = True, exact_items: bool = F
 
         tools += [set_closed, add_door, move_item]
     from floorwise.agent.insight_tools import make_insight_tools
-    return tools + make_insight_tools(session, allow_edits, exact_items=exact_items)
+    from floorwise.agent.scenarios import tools as scenario_tools
+    return tools + make_insight_tools(session, allow_edits, exact_items=exact_items) + ([] if exact_items else scenario_tools(session))

@@ -90,8 +90,31 @@ def parse_basic(text: str) -> QuerySpec | None:
     return None
 
 
+FORKLIFT = re.compile(r"\bfork[- ]?lifts?\b", re.I)
+BAYS = re.compile(r"production (?:bays?|zones?|halls?)[^.?!]{0,100}(?:destination|shortcut|through)|(?:destination|shortcut)[^.?!]{0,80}production (?:bays?|zones?)", re.I)
+NO_STAIRS = re.compile(r"\b(?:without|no|avoid(?:ing)?|can'?t (?:use|take)|cannot (?:use|take))\s+(?:the\s+|any\s+)?stairs?\b", re.I)
+
+
+def with_rules(spec: QuerySpec | None, text: str) -> QuerySpec | None:
+    """Route rules stated beside the question (the judges' rule list). Only routes and tours carry them."""
+    if spec is None or spec.kind not in ("route", "tour", "errand"):
+        return spec
+    update = {}
+    if FORKLIFT.search(text):
+        update["forklift"] = True
+    if BAYS.search(text):
+        update["bays_destinations"] = True
+    if spec.kind != "errand" and NO_STAIRS.search(text):
+        update["stairs_allowed"] = False
+    return spec.model_copy(update=update) if update else spec
+
+
 def parse_rules(question: str) -> QuerySpec | None:
     text = " ".join(question.split())
+    return with_rules(_parse(text), text)
+
+
+def _parse(text: str) -> QuerySpec | None:
     basic = parse_basic(text)
     if basic is not None:
         return basic

@@ -26,6 +26,7 @@ class Profile:
     step_free: bool = False
     min_door_width_m: float | None = None
     location: str | None = None
+    location_source: str | None = None
 
 
 @dataclass
@@ -70,6 +71,10 @@ class Session:
         except R.ResolveError as error:
             key = R.normalise(re.sub(r"^(the|a|an|nearest|closest)\s+", "", R.normalise(mention)))
             rooms = {a["space_id"] for a in b.assets.values() if R.normalise(a["name"]) == key}
+            # An exact equipment type outranks substring matches (printer != 3d_printer).
+            exact_types={t for t in R.asset_types(b) if R.normalise(t)==key}
+            if not rooms and exact_types:
+                rooms={a['space_id'] for a in b.assets.values() if a['type'] in exact_types}
             if key in ("exit", "entrance", "way out", "outside", "main entrance"):
                 rooms = {s for o in b.openings.values() if "outside" in o["space_ids"] for s in o["space_ids"] if s != "outside"}
             if not rooms:
@@ -123,6 +128,7 @@ class Session:
             no_stairs=avoid_stairs,
             no_lifts=avoid_lifts,
             soft_avoid_types=frozenset(soft),
+            outside="none",  # people walk indoors; no free hop between entrances
         )
 
     def _avoid_target(self, item: str) -> tuple[str, str]:
@@ -153,6 +159,7 @@ class Session:
                            "spaces": len(spaces)})
         return {
             "name": b.info["name"], "source": b.info["source"], "floors": floors,
+            "unavailable_data": ["bookings", "live position", "seat capacity", "opening hours", "window geometry", "surveyed stair flights"],
             "stairs_and_lifts": [
                 {"id": c["id"], "name": c["name"], "kind": c["kind"], "step_free": c.get("step_free", True),
                  "floors": [b.floor_name(f) for f in c["floor_ids"]]}
@@ -186,20 +193,35 @@ class Session:
                   'floor_ids': sorted({e['floor_id'] for e in entities}), 'measurements': measurements or {},
                   'rows': rows or [], 'lines': lines or [], 'warnings': warnings or [],
                   'provenance': 'Computed from supplied building data; current session edits apply.'}
+        # Immutable grouped snapshots; list paging must not hold the chat's write lock.
+        items = [b.assets[i] for i in ids if i in b.assets]
+        if items:
+            from collections import Counter
+            grouped = Counter(a['space_id'] for a in items)
+            result['room_rows'] = [{'id': sid, 'label': b.label(sid), 'floor_id': b.spaces[sid]['floor_id'],
+                                    'count': count} for sid, count in sorted(grouped.items(), key=lambda p: (b.level(b.spaces[p[0]]['floor_id']), -p[1], p[0]))]
+            result['item_rows'] = [{'id': a['id'], 'label': a['name'], 'room_id': a['space_id'],
+                                   'floor_id': a['floor_id']} for a in items]
+            result['measurements'] = {**result['measurements'], 'grouped': True, 'item_count': len(items), 'room_count': len(grouped)}
         self.visual_results[result['id']] = result
         while len(self.visual_results)>16:
             del self.visual_results[next(iter(self.visual_results))]
         self.emit('highlight', ids=ids)
-        self.emit('visual_result', result={k:v for k,v in result.items() if k!='rows'}, total_rows=len(result['rows']))
+        self.emit('visual_result', result={k:v for k,v in result.items() if k not in ('rows','room_rows','item_rows')}, total_rows=len(result['rows']))
         return result
 
-    def result_page(self, result_id: str, offset: int = 0, limit: int = 25) -> dict:
+    def result_page(self, result_id: str, offset: int = 0, limit: int = 25, view: str = 'default', room: str | None = None) -> dict:
         if offset<0 or not 1<=limit<=100:
             raise ValueError('offset must be nonnegative; limit must be 1 to 100')
         result = self.visual_results[result_id]
-        return {'id': result_id, 'total': len(result['rows']), 'offset': offset,
-                'rows': result['rows'][offset:offset+limit],
-                'next_offset': offset+limit if offset+limit<len(result['rows']) else None}
+        if view not in ('default', 'rooms', 'items'): raise ValueError('Unknown result view')
+        rows = result.get('room_rows', result['rows']) if view == 'rooms' else result.get('item_rows', result['rows']) if view == 'items' else result['rows']
+        if room is not None:
+            if view != 'items': raise ValueError('Room filtering requires item view')
+            rows = [r for r in rows if r.get('room_id') == room]
+        return {'id': result_id, 'total': len(rows), 'offset': offset,
+                'rows': rows[offset:offset+limit],
+                'next_offset': offset+limit if offset+limit<len(rows) else None}
 
     def search(self, query: str, floor: str | None = None, offset: int = 0, limit: int = 12) -> dict:
         b = self.building
@@ -247,7 +269,12 @@ class Session:
         result = filter_rooms(self.building, requirements, floor, room_type)
         visual = self.publish_visual('matches', f"{result['count']} rooms match every requirement", [r['id'] for r in result['rows']],
                                      {'count': result['count'], 'requirements': result['requirements']}, result['rows'])
-        return result | {'rows': result['rows'][:12], 'result_id': visual['id']}
+        from collections import Counter
+        floors=Counter(r['floor_id'] for r in result['rows'])
+        return result | {'rows': result['rows'][:12], 'result_id': visual['id'],
+                         'rows_are_examples':len(result['rows'])>12,
+                         'per_floor':[{'floor':self.building.floor_name(fid),'count':n} for fid,n in floors.items()],
+                         'data_limits':['bookings, seat capacity and opening hours are unavailable; chair counts are not capacity']}
 
     def statistics(self, floor: str | None = None, room_type: str | None = None, group_by: str = 'floor') -> dict:
         from floorwise.core.analytics import statistics
@@ -285,10 +312,10 @@ class Session:
         b = self.building
         self.last_route_request = (start, destination, via, dict(constraint_args))
         assumed = None
-        if not start and not self.profile.location:
+        if not start and (not self.profile.location or self.profile.location_source=='default'):
             if not self.default_start:
                 return {"error": "Start unknown. Ask where the person is: offer 2-3 entrances or things they can see."}
-            assumed = self.default_start
+            assumed = self.profile.location or self.default_start
         first = self.place(start or self.profile.location or assumed)
         middle = []
         for stop in via or []:
@@ -319,7 +346,7 @@ class Session:
             "from": b.label(stops[0]), "to": b.label(stops[-1]), "via": [b.label(s) for s in stops[1:-1]],
             "length_m": route.walk_m if route.walk_m is not None else route.length_m,
             "about_minutes": max(1, round((route.walk_m if route.walk_m is not None else route.length_m) / 1.2 / 60) + sum(s['kind'] == 'floor' for s in route.guide['steps'])), "constraints": route.constraints, "floors": [b.floor_name(f) for f in route.floors],
-            "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m, "distance_basis": "walking metres" if route.walk_m is not None else "route-model metres; walking preview unavailable",
+            "steps": route.steps, "spoken_overview": route.guide.get("spoken"), "walk_m": route.walk_m, "destination_basis":"marked room destination, not an equipment position", "distance_basis": "walking metres" if route.walk_m is not None else "route-model metres; walking preview unavailable",
             **({"assumed_start": f"Start not given: assumed the main entrance, {b.label(assumed)}. Say so in one line."} if assumed else {}),
             **({"other_matches_further_away": alternatives} if alternatives else {}),
         }
@@ -371,6 +398,7 @@ class Session:
                 "constraints": constraints.describe()}
 
     def set_closed(self, element: str, closed: bool) -> dict:
+        previous_walk = self.last_route.walk_m if self.last_route else None
         before = self.impact_snapshot()
         element_id = self.element(element)
         (self.closed.add if closed else self.closed.discard)(element_id)
@@ -389,6 +417,9 @@ class Session:
         if request:
             start, target, via, kwargs = request
             result["route_update"] = self.route(start, target, via, **kwargs)
+            current_walk = self.last_route.walk_m if self.last_route else None
+            if previous_walk is not None and current_walk is not None:
+                result['walking_change_m'] = round(current_walk-previous_walk,1)
         return result
 
     def door_preview(self, first: str, second: str) -> dict:
@@ -455,7 +486,7 @@ class Session:
         snapshots = {"general": ops.distances_to_exit(self.building, general),
                      "step_free": ops.distances_to_exit(self.building, replace(general, step_free=True))}
         if self.profile.min_door_width_m is not None:
-            snapshots["your_needs"] = ops.distances_to_exit(self.building, replace(self.constraints(), extra_openings=extra))
+            snapshots["your_needs"] = ops.distances_to_exit(self.building, replace(self.constraints(), outside="exits", extra_openings=extra))
         return snapshots
 
     def impact_diff(self, before: dict, after: dict) -> dict:
@@ -485,7 +516,7 @@ class Session:
 
     def weak_points(self, step_free: bool = True) -> list[dict]:
         from floorwise.core.resilience import chaos_test
-        result = chaos_test(self.building, self.constraints(step_free=step_free))
+        result = chaos_test(self.building, replace(self.constraints(step_free=step_free), outside="exits"))
         items = result["critical"][:3]
         self.emit("weak_points", items=items, profile="step-free" if step_free else "general")
         self.emit("highlight", ids=list(dict.fromkeys(s for item in items for s in item["room_ids"])))
@@ -501,6 +532,9 @@ class Session:
         return {
             "distance_basis": "route-model metres including connector penalties, not physical walking distance",
             "of_rooms": sum(s in before for s in rooms), "cut_off_ids": cut_off,
+            "cut_off_by_floor": [{"floor":b.floor_name(fid),"count":sum(b.spaces[s]['floor_id']==fid for s in cut_off),
+                                  "total_rooms":sum(b.spaces[s]['floor_id']==fid for s in rooms)} for fid in b.floors
+                                 if any(b.spaces[s]['floor_id']==fid for s in cut_off)],
             "reconnected_ids": reconnected,
             "rooms_cut_off_from_exits": [b.label(s) for s in cut_off][:MAX_RESULTS], "cut_off_count": len(cut_off),
             "rooms_reconnected": [b.label(s) for s in reconnected][:MAX_RESULTS],

@@ -51,7 +51,7 @@ export interface Asset {
 
 export interface Geometry {
   building: { id: string; name: string; source: string };
-  scene?: { revision: string; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
+  scene?: { revision: string; headers?: { floor_id: string; a: XY; b: XY; base_m: number; height_m: number }[]; roofs?: { floor_id: string; vertices: XY[]; area_m2: number; elevation_m: number }[]; slabs?: {floor_id:string;vertices:XY[];area_m2:number}[]; walls: { floor_id: string; space_id: string|null; a: XY; b: XY; height_m: number }[]; unmatched_openings: string[]; assumptions: string[] };
   floors: Floor[];
   spaces: Space[];
   openings: Opening[];
@@ -107,6 +107,7 @@ export interface Impact {
 }
 
 export interface Profile {
+  location_source?: "default" | "declared" | "link" | null;
   step_free: boolean;
   min_door_width_m: number | null;
   location: string | null;
@@ -126,7 +127,8 @@ export type UiEvent =
   | { type: "edit"; op: string; [key: string]: unknown }
   | { type: "profile"; profile: Profile }
   | { type: "scenario_result"; report: ScenarioReport; hazard: string }
-  | { type: "scenario_replay"; action: "play" | "pause" | "restart" | "seek"; seconds?: number };
+  | { type: "scenario_replay"; action: "play" | "pause" | "restart" | "seek"; seconds?: number }
+  | { type: "choice"; question: string; options: string[] };
 
 export interface BuildingRow {
   building_id: string;

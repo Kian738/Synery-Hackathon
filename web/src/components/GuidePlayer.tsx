@@ -21,7 +21,7 @@ export function GuidePlayer({route,model,time,playing,speed,step,reduced,transit
       <div className="player-main-controls"><button aria-label="Previous instruction" title="Previous instruction" disabled={step<=0} onClick={onPrevious}><Pictogram name="skip-back"/></button>
         {!reduced&&<button className="play-toggle" aria-label={arrived?"Replay preview":playing?"Pause preview":"Play preview"} title={arrived?"Replay":"Play / pause (Space)"} onClick={onPlay}><Pictogram name={arrived?"replay":playing?"pause":"play"} size={25}/></button>}
         <button aria-label="Next instruction" title="Next instruction" disabled={arrived} onClick={onNext}><Pictogram name="skip-next"/></button></div>
-      <div className="player-options"><select aria-label="Playback speed" value={speed} onChange={e=>onSpeed(Number(e.target.value))}>{[.5,1,2,4].map(v=><option key={v} value={v}>{v}×</option>)}</select>{arrived&&<button aria-label="Finish preview" onClick={onExit}>Finish</button>}</div>
+      <div className="player-options"><div role="group" aria-label="Playback speed" className="speed-options">{[.5,1,2,4].map(v=><button key={v} aria-label={`Playback speed ${v}×`} aria-pressed={speed===v} onClick={()=>onSpeed(v)}>{v}×</button>)}</div>{arrived&&<button aria-label="Finish preview" onClick={onExit}>Finish</button>}</div>
     </div>
   </section>;
 }

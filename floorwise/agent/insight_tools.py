@@ -113,7 +113,7 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         """Fetch the nearest item then visit the largest room of a type. Returns route-model metres, not walking metres."""
         def compute():
             b = session.building
-            c = replace(session.constraints(), no_stairs=not stairs_ok)
+            c = replace(session.constraints(), no_stairs=not stairs_ok, outside="exits")
             result = ops.errand(b, session.place(start), resolve.resolve_asset_type(b, item_type),
                                 resolve.resolve_floor(b, floor), resolve.resolve_room_type(b, target_room_type), c)
             if 'error' not in result:
@@ -165,6 +165,15 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         return guarded(run)()
 
     @tool
+    def ask_choice(question: str, options: list[str]) -> str:
+        """Ask the person one question as 2 to 4 tappable options (shown in the app; they can also say 'the second one'). Use it when a name fits several rooms, using each candidate's hint to describe it, or when an input is missing and has a few sensible answers. Do not call it for anything the tools can resolve, and do not ask in free text instead."""
+        options = [str(o).strip() for o in options if str(o).strip()]
+        if not 2 <= len(options) <= 4:
+            raise ValueError("ask_choice needs 2 to 4 options")
+        session.emit("choice", question=question.strip(), options=options)
+        return "Shown to the person. Stop here and wait for their answer."
+
+    @tool
     def scenario_replay(action: str, seconds: int | None = None) -> str:
         """Control the evacuation replay in the twin after plan_scenario: action is play, pause, restart or seek (with seconds)."""
         if action not in ("play", "pause", "restart", "seek"):
@@ -172,4 +181,4 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         session.emit("scenario_replay", action=action, seconds=seconds)
         return "ok"
 
-    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario, scenario_replay] + ([apply_fix] if allow_edits else [])
+    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario, scenario_replay, ask_choice] + ([apply_fix] if allow_edits else [])

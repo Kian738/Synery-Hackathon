@@ -31,6 +31,22 @@ class SolveError(ValueError):
     pass
 
 
+def rules_from(inputs: dict) -> Constraints:
+    """The judges' route rules carried by the resolved question: step-free (without stairs), closed places, a forklift,
+    production bays as destinations, places to avoid."""
+    closed = set(inputs.get("closed_ids") or [])
+    if inputs.get("closed"):
+        closed.add(inputs["closed"])
+    return Constraints(
+        step_free=bool(inputs.get("step_free")),
+        closed=frozenset(closed),
+        forklift=bool(inputs.get("forklift")),
+        bays_are_destinations=bool(inputs.get("bays_are_destinations")),
+        avoid_spaces=frozenset(inputs.get("avoid_spaces") or ()),
+        avoid_types=frozenset(inputs.get("avoid_types") or ()),
+    )
+
+
 def solve(building: Building, kind: str, inputs: dict) -> tuple[dict, str]:
     """Returns (result, reply)."""
     b = building
@@ -52,7 +68,7 @@ def solve(building: Building, kind: str, inputs: dict) -> tuple[dict, str]:
             f"{b.floor_name(inputs['floor_id'])}.\nAnswer: {number(result['total_m2'])}"
         )
     elif kind == "errand":
-        result = ops.errand(b, inputs["start"], inputs["asset_type"], inputs["floor_id"], inputs["room_type"])
+        result = ops.errand(b, inputs["start"], inputs["asset_type"], inputs["floor_id"], inputs["room_type"], rules_from(inputs))
         _check(result)
         reply = (
             f"From {b.label(inputs['start'])} the nearest {_type(inputs['asset_type'])} is in "
@@ -119,29 +135,38 @@ def solve(building: Building, kind: str, inputs: dict) -> tuple[dict, str]:
         )
     elif kind in ("route", "tour"):
         stops = inputs["stops"] if kind == "tour" else [inputs["start"], inputs["destination"]]
-        constraints = Constraints(
-            step_free=inputs.get("step_free", False),
-            closed=frozenset({inputs["closed"]}) if inputs.get("closed") else frozenset(),
-        )
+        constraints = rules_from(inputs)
         try:
             route = plan_route(b, stops, constraints)
         except NoRoute as error:
             result = {"reachable": False, "stops": stops}
-            reply = f"{error}. There is no such route.\nAnswer: no route"
+            reply = f"{error}. There is no such route under these rules.\nAnswer: no route"
             return result, reply
         result = {
             "reachable": True, "stops": stops, "length_m": route.length_m,
-            "space_path": [n for leg in route.legs for n in (leg.space_path if leg is route.legs[0] else leg.space_path[1:])],
+            "space_path": _join_paths([leg.space_path for leg in route.legs]),
             "legs": [{"from": leg.from_space_id, "to": leg.to_space_id, "length_m": leg.length_m,
                       "space_path": leg.space_path, "element_path": leg.element_path, "nodes": leg.nodes} for leg in route.legs],
         }
         understood = " → ".join(b.label(s) for s in stops)
         notes = f" ({', '.join(route.constraints)})" if route.constraints else ""
         steps = "\n".join(f"{i}. {step}" for i, step in enumerate(route.steps, 1))
-        reply = f"Route {understood}{notes}: {number(route.length_m)} m.\n{steps}\nAnswer: {number(route.length_m)}"
+        ids = " -> ".join(result["space_path"])
+        reply = (f"Route {understood}{notes}: {number(route.length_m)} m.\n{steps}\n"
+                 f"Spaces passed through, in order (ids): {ids}\nAnswer: {ids}")
     else:
         raise SolveError(f"unknown kind {kind}")
     return result, reply
+
+
+def _join_paths(paths: list[list[str]]) -> list[str]:
+    """Legs of a tour end where the next begins; a space is never listed twice in a row."""
+    joined: list[str] = []
+    for path in paths:
+        for space in path:
+            if not joined or joined[-1] != space:
+                joined.append(space)
+    return joined
 
 
 def locate(b: Building, inputs: dict) -> dict:

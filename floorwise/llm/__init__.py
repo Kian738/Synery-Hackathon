@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 PROVIDERS = {
     "anthropic": {
-        "chat": "claude-opus-5-5", "parser": "claude-haiku-5-5", "vision": "claude-opus-5-5", "judge": "claude-opus-5-5",
+        "chat": "claude-sonnet-5-5", "parser": "claude-haiku-5-5", "vision": "claude-opus-5-5", "judge": "claude-opus-5-5",
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY",
@@ -64,13 +64,19 @@ def info() -> ProviderInfo:
 
 def client(provider: str | None = None):
     """SDK client for the provider: anthropic.Anthropic or openai.OpenAI (compatible endpoint)."""
+    if os.environ.get('FLOORWISE_OFFLINE') == '1':
+        raise RuntimeError('Live model calls are disabled in the offline test profile.')
     provider = provider or provider_name()
     from floorwise.llm.budget import timeout_s, retries
 
     if provider == "anthropic":
         import anthropic
 
-        return anthropic.Anthropic(timeout=timeout_s(), max_retries=retries())
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        if not key and not token:
+            raise KeyError("no API key for anthropic in .env (set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN)")
+        return anthropic.Anthropic(api_key=key, auth_token=token, timeout=timeout_s(), max_retries=retries())
     import openai
 
     config = PROVIDERS[provider]
