@@ -91,8 +91,21 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
   useEffect(() => {
     if (focus) {
       if (followPosition && !tracking) return;
-      const w = Math.max(12, Math.min(24, size * 0.25)), h = (w * screen.h) / Math.max(1, screen.w);
-      setView({ x: focus[0] - w / 2, y: -focus[1] - h / 2, w, h });
+      const focusedSpace = selected ? spaces.find((s) => s.id === selected) : null;
+      if (focusedSpace && focusedSpace.polygon.length) {
+        const b = bounds(focusedSpace.polygon);
+        const rw = b.maxX - b.minX;
+        const rh = b.maxY - b.minY;
+        const pad = Math.max(3.5, Math.max(rw, rh) * 0.4);
+        const w = Math.max(rw + 2 * pad, ((rh + 2 * pad) * screen.w) / Math.max(1, screen.h));
+        const h = (w * screen.h) / Math.max(1, screen.w);
+        const cx = (b.minX + b.maxX) / 2;
+        const cy = (b.minY + b.maxY) / 2;
+        setView({ x: cx - w / 2, y: -cy - h / 2, w, h });
+      } else {
+        const w = Math.max(10, Math.min(22, size * 0.22)), h = (w * screen.h) / Math.max(1, screen.w);
+        setView({ x: focus[0] - w / 2, y: -focus[1] - h / 2, w, h });
+      }
       prevFocus.current = focus;
     } else if (prevFocus.current !== null) {
       prevFocus.current = null;
@@ -110,7 +123,7 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
         setView(fit);
       }
     }
-  }, [focus, followPosition, tracking, route, routeBox, fit, screen.w, screen.h, size]);
+  }, [focus, selected, spaces, followPosition, tracking, route, routeBox, fit, screen.w, screen.h, size]);
   const pxPerM = Math.max(0.01, Math.min(screen.w / view.w, screen.h / view.h));
   const scale = 8 / pxPerM; // 8 screen px, in metres: base unit for strokes and markers
   const font = 12.5 / pxPerM; // labels are 12.5 px on screen

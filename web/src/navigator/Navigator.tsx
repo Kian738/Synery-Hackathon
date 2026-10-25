@@ -48,28 +48,45 @@ function findSpacesMentionedInText(
     for (const id of highlights) candidateIds.add(id);
   }
 
-  // 1. Match numbers like 0.08, 2.02, 2.08, 2.17, 204
-  const numberMatches = Array.from(text.matchAll(/\b\d+\.\d+\b|\b\d{3,4}\b/g));
+  // 1. Check candidate spaces first (from visual results or active highlights)
+  for (const candId of candidateIds) {
+    const s = spaces.find((sp) => sp.id === candId);
+    if (!s) continue;
+    const baseName = s.name.replace(/\s+\d+(\.\d+)?$/, "").trim();
+    const pattern = new RegExp(
+      `\\b(?:${escapeRegExp(s.name)}|${escapeRegExp(baseName)}${s.ref ? `|${escapeRegExp(s.ref)}` : ""})\\b`,
+      "i"
+    );
+    if (pattern.test(text)) {
+      add(s);
+    }
+  }
+
+  // 2. Match room numbers, e.g. 0.08, 2.02, 2.08, 204, or "room 3", "office 02"
+  const numberMatches = Array.from(
+    text.matchAll(/\b\d+\.\d+\b|\b\d{2,4}\b|\b(?:room|office|kitchen|lab|corridor|hall|space)?\s*#?(\d{1,4})\b/gi)
+  );
   for (const match of numberMatches) {
-    const num = match[0];
+    const num = match[1] || match[0];
+    if (!num) continue;
     const matchInCandidates = spaces.find(
-      (s) => candidateIds.has(s.id) && (s.name.includes(num) || s.id.includes(num))
+      (s) => candidateIds.has(s.id) && (s.name.includes(num) || s.id.includes(num) || (s.ref && s.ref.includes(num)))
     );
     if (matchInCandidates) {
       add(matchInCandidates);
       continue;
     }
     const matchInAll = spaces.find((s) => {
-      const tokens: string[] = s.name.match(/\b\d+\.\d+\b|\b\d{3,4}\b/g) ?? [];
+      const tokens: string[] = s.name.match(/\b\d+\.\d+\b|\b\d{1,4}\b/g) ?? [];
       const idEnd = s.id.split("-").pop();
-      return tokens.includes(num) || idEnd === num || s.name.includes(` ${num}`);
+      return tokens.includes(num) || idEnd === num || s.name.includes(` ${num}`) || s.ref === num;
     });
     if (matchInAll) {
       add(matchInAll);
     }
   }
 
-  // 2. Match distinctive room names (e.g. Makerspace, Main lobby, Cafeteria)
+  // 3. Match distinctive room names (e.g. Makerspace, Main lobby, Cafeteria, Kitchen, Lab)
   const GENERIC = new Set([
     "room", "rooms", "floor", "space", "spaces", "corridor", "corridors",
     "office", "offices", "staircase", "elevator", "lift", "printer", "printers",
@@ -77,12 +94,35 @@ function findSpacesMentionedInText(
   ]);
 
   for (const s of spaces) {
+    const fullName = s.name.trim();
+    if (fullName.length >= 4) {
+      const pattern = new RegExp(`\\b${escapeRegExp(fullName)}\\b`, "i");
+      if (pattern.test(text)) {
+        add(s);
+        continue;
+      }
+    }
     const baseName = s.name.replace(/\s+\d+(\.\d+)?$/, "").trim();
-    if (baseName.length >= 4 && !GENERIC.has(baseName.toLowerCase())) {
+    if (baseName.length >= 3 && !GENERIC.has(baseName.toLowerCase())) {
       const pattern = new RegExp(`\\b${escapeRegExp(baseName)}\\b`, "i");
       if (pattern.test(text)) {
         add(s);
+        continue;
       }
+    }
+    if (s.ref && s.ref.length >= 2) {
+      const pattern = new RegExp(`\\b${escapeRegExp(s.ref)}\\b`, "i");
+      if (pattern.test(text)) {
+        add(s);
+      }
+    }
+  }
+
+  // Prioritize specific rooms over corridors if any rooms match
+  if (found.length > 1) {
+    const nonCorridors = found.filter((s) => !/corridor/i.test(s.name) && s.type !== "corridor");
+    if (nonCorridors.length > 0) {
+      return nonCorridors;
     }
   }
 
@@ -197,7 +237,33 @@ export default function Navigator() {
     voiceTourTimers.current = [];
     setVoiceFocusSpace(null);
     setVoiceHighlightId(null);
+    setFocusRequest(null);
   }, []);
+
+  const focusRoom = useCallback((space: Space) => {
+    setSelected(space);
+    nav.setFloorId(space.floor_id);
+    setVoiceFocusSpace(space);
+    setVoiceHighlightId(space.id);
+    setFocusRequest({ id: space.id, revision: Date.now() });
+  }, [nav.setFloorId]);
+
+  const tourRooms = useCallback((matchedSpaces: Space[], totalDurationMs?: number) => {
+    clearVoiceTour();
+    if (!matchedSpaces.length) return;
+    if (matchedSpaces.length === 1) {
+      focusRoom(matchedSpaces[0]);
+    } else {
+      const durationMs = totalDurationMs ?? Math.min(9000, Math.max(3000, matchedSpaces.length * 2500));
+      const interval = Math.max(1500, durationMs / matchedSpaces.length);
+      matchedSpaces.forEach((space, idx) => {
+        const timer = setTimeout(() => {
+          focusRoom(space);
+        }, idx * interval);
+        voiceTourTimers.current.push(timer);
+      });
+    }
+  }, [clearVoiceTour, focusRoom]);
 
   // Voice camera choreography: automatically zoom in to specific rooms mentioned
   // in speech, tour across multiple mentioned rooms, and dezoom back to the route/overview.
@@ -209,36 +275,17 @@ export default function Navigator() {
       const text = custom.detail?.text;
       if (!text) return;
 
-      clearVoiceTour();
-
       const matchedSpaces = findSpacesMentionedInText(text, g.spaces, nav.visualResult, nav.highlights);
 
       if (matchedSpaces.length > 0) {
         const audioDuration = custom.detail?.audio?.duration;
         const durationMs =
           audioDuration && isFinite(audioDuration) ? audioDuration * 1000 : Math.max(2500, text.length * 65);
-
-        if (matchedSpaces.length === 1) {
-          const space = matchedSpaces[0];
-          nav.setFloorId(space.floor_id);
-          setVoiceFocusSpace(space);
-          setVoiceHighlightId(space.id);
-        } else {
-          const interval = Math.max(1200, durationMs / matchedSpaces.length);
-          matchedSpaces.forEach((space, idx) => {
-            const timer = setTimeout(() => {
-              nav.setFloorId(space.floor_id);
-              setVoiceFocusSpace(space);
-              setVoiceHighlightId(space.id);
-            }, idx * interval);
-            voiceTourTimers.current.push(timer);
-          });
-        }
+        tourRooms(matchedSpaces, durationMs);
       } else {
         const isRouteChunk = /\b(?:route|directions|way to|head to|walk to|take the|path|exit)\b/i.test(text);
         if (isRouteChunk && nav.route?.polyline.length) {
-          setVoiceFocusSpace(null);
-          setVoiceHighlightId(null);
+          clearVoiceTour();
           nav.setFloorId(nav.route.polyline[0].floor_id);
         }
       }
@@ -255,7 +302,31 @@ export default function Navigator() {
       window.removeEventListener("floorwise:speech-end", onSpeechEnd);
       clearVoiceTour();
     };
-  }, [voiceOut, voiceMode, g, nav.visualResult, nav.highlights, nav.route, nav.setFloorId, clearVoiceTour]);
+  }, [voiceOut, voiceMode, g, nav.visualResult, nav.highlights, nav.route, nav.setFloorId, clearVoiceTour, tourRooms]);
+
+  // Response camera zoom: when an agent reply arrives (for both text and voice modes),
+  // automatically zoom and frame the room(s) discussed in the response.
+  const lastProcessedReplyId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!g) return;
+    const lastMsg = nav.messages[nav.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== "agent" || lastMsg.id === lastProcessedReplyId.current) return;
+    if (lastMsg.streaming || lastMsg.status === "streaming") return;
+
+    lastProcessedReplyId.current = lastMsg.id;
+
+    const matchedSpaces = findSpacesMentionedInText(lastMsg.text, g.spaces, nav.visualResult, nav.highlights);
+    if (matchedSpaces.length > 0) {
+      tourRooms(matchedSpaces);
+    } else {
+      const isRoute = /\b(?:route|directions|way to|head to|walk to|take the|path|exit)\b/i.test(lastMsg.text);
+      if (isRoute && nav.route?.polyline.length) {
+        clearVoiceTour();
+        nav.setFloorId(nav.route.polyline[0].floor_id);
+      }
+    }
+  }, [nav.messages, g, nav.visualResult, nav.highlights, nav.route, tourRooms, clearVoiceTour]);
 
   // Speak new agent replies and route overviews when voice output or voice mode is on.
   const spokenFor = useRef<string | null>(null);
@@ -366,14 +437,14 @@ export default function Navigator() {
   }, []);
 
   const handleSend = useCallback((text: string) => {
+    clearVoiceTour();
     nav.ask(text, selected?.id);
     setSelected(null);
     setWeakOpen(false);
     setPhoneOpen(false);
     setToolsOpen(false);
-  }, [nav.ask, selected?.id]);
+  }, [nav.ask, selected?.id, clearVoiceTour]);
 
-  const focusRoom=(room:Space)=>{selectSpace(room);setFocusRequest(v=>({id:room.id,revision:(v?.revision??0)+1}));};
   const toggleMap=()=>{setQuestionOpen(false);setPhoneOpen(false);setWeakOpen(false);setSelected(null);setPlanExpanded(v=>!v);};
   if (!g) {
     return <div className="grid h-full place-items-center bg-ink font-sign text-xl text-concrete">{nav.notice ?? "Loading building…"}</div>;

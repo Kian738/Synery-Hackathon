@@ -205,10 +205,13 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
     const rooms=geometry.spaces.filter(s=>(scope!=="current"||visualResult?.kind==="stacking"||visualResult?.kind==="distance"||s.floor_id===floorId)&&(emphasis?s.id===emphasis:highlights.has(s.id)));
     const points=[...rooms.flatMap(s=>s.polygon),...geometry.assets.filter(a=>!emphasis&&(scope!=="current"||a.floor_id===floorId)&&highlights.has(a.id)).map(a=>a.position)];
     if(!points.length)return box;
-    const b=bounds(points),pad=3;return {minX:b.minX-pad,maxX:b.maxX+pad,minY:b.minY-pad,maxY:b.maxY+pad};
+    const b=bounds(points);
+    const roomW=b.maxX-b.minX,roomH=b.maxY-b.minY;
+    const pad=emphasis?Math.max(3,Math.max(roomW,roomH)*0.35):3;
+    return {minX:b.minX-pad,maxX:b.maxX+pad,minY:b.minY-pad,maxY:b.maxY+pad};
   },[geometry,floorId,emphasis,highlights,box,scope,visualResult?.kind]);
   const cx=(box.minX+box.maxX)/2,cz=-(box.minY+box.maxY)/2,span=Math.max(box.maxX-box.minX,box.maxY-box.minY,10);
-  const multi=((visualResult?.kind==="stacking"||visualResult?.kind==="distance")||showAll||scope==="building"||(scope==="route"&&!!route))&&!follow;
+  const multi=!emphasis&&((visualResult?.kind==="stacking"||visualResult?.kind==="distance")||showAll||scope==="building"||(scope==="route"&&!!route))&&!follow;
   const explode=multi&&exploded&&visualResult?.kind!=="distance"?2:0;
   const elevation=(id:string)=>{const f=geometry.floors.find(f=>f.id===id);return (f?.elevation_m??0)+(f?.level??0)*explode;};
   const activeFloor=follow?(sample?.point?.floor_id??floorId):floorId;
