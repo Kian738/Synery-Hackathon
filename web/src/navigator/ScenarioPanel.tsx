@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, type ScenarioCapacity } from "../lib/api";
+import { clock, mmss, useClock } from "./scenarios/clock";
+import { LIMITS, ResultsCard, Scrubber } from "./scenarios/parts";
 import { stopSpeaking } from "../lib/voice";
 import { IconButton, Segmented } from "../ui/kit";
 import { CompareBars } from "./CompareBars";
 import { useDemoRun, type DemoRequest } from "./useDemoRun";
 import { demoLabels } from "../lib/demo";
-import type { Audience, Geometry, RobustReport, ScenarioMark, ScenarioReport, Space, UiEvent } from "../lib/types";
+import type { Audience, Geometry, RobustReport, ScenarioFix, ScenarioMark, ScenarioReport, Space, UiEvent } from "../lib/types";
 
 const AUDIENCES: { value: Audience; label: string; ariaLabel: string }[] = [
   { value: "safety_officer", label: "Safety", ariaLabel: "Safety officer" }, { value: "occupant", label: "Occupant", ariaLabel: "Occupant" },
@@ -53,8 +55,10 @@ type Numbers = { people: number | null; rate: number | null };
 const whole = (v: string) => { const n = Math.floor(Number(v)); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 const positive = (v: string) => { const n = Number(v); return v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null; };
 
-export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat, demo, onNarrate, onDemoActive, onFocus }: {
+export function ScenarioPanel({ top, preset = "fire", quickRun = 0, geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat, demo, onNarrate, onDemoActive, onFocus }: {
   onBeat?: (say: string, focus: string) => void;
+  /** Preset chips of the Scenarios tool, drawn above the panel content. "blocked" re-runs with the busiest exit closed. */
+  top?: ReactNode; preset?: "fire" | "blocked";
   demo?: DemoRequest | null; onNarrate?: (text: string) => Promise<void>; onDemoActive?: (on: boolean) => void; onFocus?: (id: string) => void;
   geometry: Geometry; sessionId: string; selected: Space | null; onClose: () => void;
   quickRun?: number;
@@ -78,12 +82,19 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
   const [limitMax, setLimitMax] = useState("10");
   const [people, setPeople] = useState("");
   const [rate, setRate] = useState("");
-  const [t, setT] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const { t, playing } = useClock();
+  const setT = clock.seek;
+  const setPlaying = (on: boolean) => (on ? clock.play() : clock.pause());
   const T = report?.evacuation?.T_s ?? 0;
+  const [before, setBefore] = useState<{ T: number; at: number; fix: ScenarioFix } | null>(null);
   // A room picked before running sets the fire room. Once a result is showing, the replay's own camera moves select rooms too, so they must not clear it.
   useEffect(() => { if (selected && !report) setHazard(selected); }, [selected]);
-  useEffect(() => { setT(0); setPlaying(!!report?.evacuation?.schedule?.length); }, [report]);
+  useEffect(() => {
+    const e = report?.evacuation;
+    clock.load(e?.T_s ?? 0, demo ? DEMO_REPLAY_SECONDS : REPLAY_SECONDS, !!e?.schedule?.length);
+    clock.setScene(e?.schedule?.length ? { kind: "flow", schedule: e.schedule, hazard: hazard?.id, bottleneck: e.bottleneck ?? [], byExit: e.by_exit ?? {}, stranded: e.stranded ?? {} } : null);
+  }, [report]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => clock.reset(), []);
   useEffect(() => { if (quickRun > 0 && busiest && !busy) { setHazard(busiest); void run(busiest); } }, [quickRun]);
   useEffect(() => {
     if (!incoming) return;
@@ -99,17 +110,6 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     else if (replayCmd.action === "seek") { setT(Math.max(0, Math.min(T, replayCmd.seconds ?? 0))); setPlaying(false); }
     else { if (t >= T) setT(0); setPlaying(true); }
   }, [replayCmd?.n]);
-  useEffect(() => {
-    if (!playing || T <= 0) return;
-    let raf = 0, last = performance.now();
-    const tick = (now: number) => {
-      const dt = (now - last) / 1000; last = now;
-      setT(v => { const n = Math.min(T, v + dt * T / (demo ? DEMO_REPLAY_SECONDS : REPLAY_SECONDS)); if (n >= T) setPlaying(false); return n; });
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, T]);
   const replay = useMemo(() => report?.evacuation ? crowdAt(report.evacuation, t) : null, [report, t]);
   const name = (id: string) => geometry.spaces.find(s => s.id === id)?.name ?? id;
   const exitName = (id: string) => { const o = geometry.openings.find(x => x.id === id); const n = o?.space_ids.filter(x => x !== "outside").map(name).join(" / "); return n || id; };
@@ -151,8 +151,14 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
   const fix = report?.answer?.fixes?.[0];
   const applyFix = async () => {
     if (!fix) return;
+    const was = { T: report?.evacuation?.T_s ?? 0, at: (report?.evacuation?.total ?? 0) - (report?.evacuation?.evacuated ?? 0), fix };
     const { events } = await api.widen(sessionId, fix.element, fix.width_m);
-    apply(events); const after = await run(hazard, audience); setApplied(true); return after;
+    apply(events); const after = await run(hazard, audience); setApplied(true); setBefore(was); return after;
+  };
+  const undoFix = async () => {
+    if (!before) return;
+    try { const { events } = await api.widen(sessionId, before.fix.element, before.fix.previous_width_m); apply(events); setBefore(null); await run(hazard, audience); }
+    catch (e) { setError(e instanceof Error ? e.message : "Undo failed"); }
   };
   const liveRef = useRef({ report, playing, done: false });
   liveRef.current = { report, playing, done: !playing && T > 0 && t >= T };
@@ -173,7 +179,7 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
     return q ? geometry.spaces.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6) : [];
   }, [query, geometry.spaces]);
   const [liveStep, setLiveStep] = useState("");
-  const run = async (h = hazard, a = audience, lim = limit) => {
+  const run = async (h = hazard, a = audience, lim = limit): Promise<ScenarioReport | undefined> => {
     if (!h) return;
     setLiveStep("");
     const mine: Numbers = { people: whole(people), rate: positive(rate) };
@@ -183,6 +189,9 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       const caps: ScenarioCapacity[] = mine.rate ? geometry.openings.filter(o => o.id !== lim?.element).map(o => ({ element: o.id, kind: "rate_persons_per_s", value: mine.rate! / 60 })) : [];
       if (lim) caps.push({ element: lim.element, kind: "total_persons", value: lim.value });
       const r = await api.scenario(sessionId, h.id, a, caps, mine.people ? { [h.id]: mine.people } : undefined, s => setLiveStep(s.summary));
+      // Exit blocked: block the exit this fire sends the most people through, then solve again.
+      const busiestExit = preset === "blocked" && !lim ? Object.entries(r.evacuation?.by_exit ?? {}).sort((p, q) => q[1] - p[1])[0]?.[0] : undefined;
+      if (busiestExit) { const l = { element: busiestExit, value: 0 }; setLimit(l); setLimitExit(busiestExit); setLimitMax("0"); return await run(h, a, l); }
       setUsed(mine); setReport(r);
       onHighlight(new Set([h.id, ...(r.evacuation?.bottleneck ?? [])]));
       onFloor(h.floor_id);
@@ -226,9 +235,10 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
   </>;
   return <section className="k-sheet scenario" aria-label="Fire / evacuation scenario">
     <header className="k-sheet-head">
-      <div><div className="k-pop-title">Scenario</div><h2>Fire / evacuation</h2></div>
+      <div><div className="k-pop-title">Scenarios</div><h2>{preset === "blocked" ? "Fire with an exit blocked" : "Fire / evacuation"}</h2></div>
       <IconButton label="Close scenario" icon="close" onClick={onClose} />
     </header>
+    {top}
     <p className="k-hint">{hazard ? <>Fire room: <b>{hazard.name}</b></> : "Click a room on the map, or search, to set where the fire starts."}</p>
     {demoRun.stage && <p className="k-hint">Prepared scenario. Exact flow over time, every number re-solved.</p>}
     {!hazard && busiest && !demoRun.stage && <IconButton accent label={`Quick fire test: ${busiest.name} (most seats)`} text={`Quick fire test: ${busiest.name}`} disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }} />}
@@ -242,12 +252,15 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       {replay && ev && T > 0 && <div className="k-sheet-group">
         <p className="sr-only scenario-beat" aria-live="polite">{beatText}</p>
         <p className="scenario-counter">{Math.round(replay.out)} of {ev.total} out</p>
-        <div className="k-sheet-row">
-          <IconButton label={playing ? "Pause" : "Play"} icon={playing ? "pause" : "play"} onClick={() => { if (!playing && t >= T) setT(0); setPlaying(p => !p); }} />
-          <input type="range" className="k-range" aria-label="Replay time" min={0} max={T} step={1} value={Math.round(t)} onChange={e => { setT(Number(e.target.value)); setPlaying(false); }} />
-          <span className="k-hint">{Math.round(t)} s</span>
-        </div>
-        <p className="k-hint">Red: fire. Blue: responders. Amber: slow door. Darker rooms hold more people.</p>
+        <Scrubber label="Replay time" />
+      </div>}
+      {ev && <ResultsCard total={ev.evacuated < ev.total ? `not everyone (${ev.evacuated} of ${ev.total})` : mmss(ev.T_s)}
+        bottleneck={ev.bottleneck?.length ? exitName(ev.bottleneck[0]) : "none"} atRisk={ev.total - ev.evacuated}
+        legend={<>Red room: the fire. Dots: people walking (each dot is one or more people). Amber door: slow door. Blue: responders.</>} />}
+      {before && ev && <div className="k-scen-compare" aria-label="Before and after the fix">
+        <p><span>Before</span><b>{mmss(before.T)}{before.at ? ` · ${before.at} at risk` : ""}</b></p>
+        <p><span>After widening to {before.fix.width_m} m</span><b>{mmss(ev.T_s)}{ev.total - ev.evacuated ? ` · ${ev.total - ev.evacuated} at risk` : ""}</b></p>
+        <IconButton label="Undo fix" text="Undo" disabled={busy} onClick={() => void undoFix()} />
       </div>}
       <CompareBars report={report} />
       {report.abstained && !ev ? <p>Stopped at {abstain ? `step ${abstain.id}: ` : "a step: "}{reason ?? "A step could not be completed."}</p> : <>
@@ -275,5 +288,6 @@ export function ScenarioPanel({ quickRun = 0, geometry, sessionId, selected, onC
       </>}
     </>}
     {report && <details className="k-sheet-more"><summary>Change room, audience or numbers</summary>{inputs}</details>}
+    <p className="k-hint k-scen-limits">{LIMITS}</p>
   </section>;
 }

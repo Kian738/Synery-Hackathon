@@ -7,6 +7,7 @@ import { rideMode } from "../lib/rideMode";
 import { InterludeHost } from "./StairInterlude";
 import { SceneAssets } from "./SceneAssets";
 import { Beacons, type BeaconPoint } from "./Beacons";
+import { ScenarioLayer } from "./ScenarioLayer";
 import { useStage } from "../chat/stage";
 import type { DoorMark } from "../lib/demo";
 const TONE={amber:"#ffd45c",accent:"#85dfb2",responder:"#6cb6ff"};
@@ -19,6 +20,7 @@ import { floorColor } from "../lib/floorColors";
 import { relevantSpaces, shaftVoids, ease } from "../lib/focus";
 import { cameraPath, type Door } from "../lib/cameraPath";
 import { SceneLighting } from "./SceneLighting";
+import { CardboardStereo } from "./CardboardStereo";
 import { Roofs } from "./Ceilings";
 import { PerfProbe } from "./PerfProbe";
 import { DetailWatcher, type Detail } from "./DetailWatcher";
@@ -27,6 +29,7 @@ import { LiftShafts, rideState, setInterlude } from "./LiftShafts";
 import { Connectors3D, inside as insidePolygon, stairWalkFor, type WalkPoint } from "./Connectors3D";
 import { SceneLabels, type SceneLabel, type ProjectedLabel } from "./SceneLabels";
 import { GuidePlayer } from "./GuidePlayer";
+import { speaker } from "../lib/voice";
 import { ExploreCamera } from "./ExploreCamera";
 import { Pictogram } from "./Pictogram";
 import { PickIntent } from "../lib/interaction";
@@ -208,7 +211,9 @@ function Path({route,geometry,explode=0,ghost=false,xray=false,visibleFloors,cas
 }
 
 
-function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number}}){
+/** Guide me: at a new instruction the walk waits (briefly) until its sentence is heard, so the camera never runs ahead of the voice. */
+const walkHold={until:0};
+function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lookOffset,deviceQuaternion}:{geometry:Geometry;model:Presentation;clock:MutableRefObject<number>;playing:boolean;speed:number;seekVersion:number;onSample:(time:number)=>void;lookOffset?:{yaw:number;pitch:number};deviceQuaternion?:{current:[number,number,number,number]|null}}){
   const {camera,invalidate,gl,scene}=useThree();const sight=useMemo(()=>new THREE.Raycaster(),[]);const lastReport=useRef(-1);const first=useRef(true);const yawVelocity=useRef(0);const heading=useRef<THREE.Vector3|null>(null);const walkCache=useRef(new Map<string,WalkPoint[]|null>());const lastTick=useRef(performance.now());
   useLayoutEffect(()=>{lastTick.current=performance.now();},[playing]);
   // The Canvas reads its camera props once at creation (overview: near ~0.6 m, fov 40). The walking camera needs its own lens, and the
@@ -237,7 +242,7 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
   },[gl,invalidate]);
   useFrame((_,dt)=>{
     const now=performance.now(),elapsed=Math.max(0,(now-lastTick.current)/1000);lastTick.current=now;
-    if(playing)clock.current=advancePreview(clock.current,elapsed,speed,model.duration);
+    if(playing&&now>=walkHold.until)clock.current=advancePreview(clock.current,elapsed,speed,model.duration);
     const sample=samplePreview(model,clock.current),p=sample.point;if(!p)return;
     const height=geometry.floors.find(f=>f.id===p.floor_id)?.elevation_m??0;
     const ride=sample.ride;let rideDelta=0;let rideTan:THREE.Vector3|null=null;
@@ -280,7 +285,9 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
       const lift=geometry.connectors.some(c=>c.kind==="lift"&&c.space_ids.includes(ride.from.node)&&c.space_ids.includes(ride.to.node));
       rideState.lift=lift?{nodes:[ride.from.node,ride.to.node],y:h0+(h1-h0)*e+.02}:null;
       const label=(id:string)=>geometry.floors.find(f=>f.id===id)?.name??id;
-      setInterlude(jump?{kind:lift?"lift":kind,from:label(ride.chain?.from??ride.from.floor_id),to:label(ride.chain?.to??ride.to.floor_id)}:null);
+      const cutFrom=ride.chain?.from??ride.from.floor_id,cutTo=ride.chain?.to??ride.to.floor_id;
+      // only a real floor change gets the cutout; a same-floor jump in the route (a gap point) must not say "Floor 5 to Floor 5"
+      setInterlude(jump&&cutFrom!==cutTo?{kind:lift?"lift":kind,from:label(cutFrom),to:label(cutTo)}:null);
     }else{
       rideState.lift=null;setInterlude(null);
       // The camera path is already centred and clear of walls; nothing is pushed per frame (that made the picture jitter).
@@ -317,6 +324,8 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
     const aim=new THREE.Quaternion().setFromRotationMatrix(matrix);
     const yawOffset=(lookOffset?.yaw??0)+drag.current.yaw,pitchOffset=Math.max(-80,Math.min(80,(lookOffset?.pitch??0)+drag.current.pitch));
     if(yawOffset||pitchOffset)aim.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(pitchOffset),-THREE.MathUtils.degToRad(yawOffset),0,"YXZ")));
+    const dq=deviceQuaternion?.current; // Cardboard VR: the phone's (recentered) pose over the route heading, level horizon
+    if(dq)aim.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.atan2(-heading.current.x,-heading.current.z)).multiply(new THREE.Quaternion(dq[0],dq[1],dq[2],dq[3]));
     camera.quaternion.copy(aim);
     if(heading.current.angleTo(target)>.01)invalidate();
     first.current=false;
@@ -326,7 +335,8 @@ function RouteCamera({geometry,model,clock,playing,speed,seekVersion,onSample,lo
   });return null;
 }
 
-export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,zones,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset,focus:focusProp=true,onFocus,heat,pins,doorMarks}: {
+export function Building3D({geometry,floorId,route,previousRoute,highlights=new Set(),hazard,zones,closed=new Set(),previewDoor,showAll,scope="current",exploded=true,follow=false,previewMode=true,activeStep=0,seekRequest=0,onStep,onSpaceClick,onFinish,onPreview,here,selected,visualResult,onPosition,heading,onRepeat,focusRequest,lookOffset,focus:focusProp=true,onFocus,heat,pins,doorMarks,stereo=false,deviceQuaternion}: {
+ stereo?:boolean;deviceQuaternion?:{current:[number,number,number,number]|null};
   doorMarks?:DoorMark[];
   heat?:Record<string,string>;pins?:{id:string;floor_id:string;x:number;y:number}[];
  onFocus?:(v:boolean)=>void;
@@ -367,6 +377,10 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   const seek=(value:number)=>{value=Math.max(0,Math.min(value,model?.duration??0));clock.current=value;setTime(value);setSeekVersion(v=>v+1);};
   useEffect(()=>{seek(0);setPlaying(false);},[route,follow]);
   useEffect(()=>{if(!previewMode)setPlaying(false);},[previewMode]);
+  // Hold at most 1.5 s for the guide sentence to start; muted voice means no wait at all.
+  useEffect(()=>{walkHold.until=follow&&playing&&!speaker.isMuted()?performance.now()+1500:0;},[activeStep]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{const go=(e:Event)=>{if((e as CustomEvent<{channel?:string}>).detail?.channel==="guide")walkHold.until=0;};const off=()=>{walkHold.until=0;};
+    window.addEventListener("floorwise:speech-chunk",go);window.addEventListener("floorwise:speech-end",off);return()=>{window.removeEventListener("floorwise:speech-chunk",go);window.removeEventListener("floorwise:speech-end",off);walkHold.until=0;};},[]);
   useEffect(()=>{const pause=()=>setPlaying(false);window.addEventListener("floorwise:voice-start",pause);return()=>window.removeEventListener("floorwise:voice-start",pause);},[]);
   useEffect(()=>{if(model){setPlaying(false);seek(model.chapters[activeStep]??0);}},[seekRequest]);
   useEffect(()=>{const hidden=()=>{if(document.hidden)setPlaying(false);};document.addEventListener("visibilitychange",hidden);return()=>document.removeEventListener("visibilitychange",hidden);},[]);
@@ -430,7 +444,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
   },[geometry,follow,highlights,visibleFloors,explode,pins,doorMarks,staged.pulse]);
 
   return <div ref={stageRef} className="building-stage" onPointerDownCapture={e=>gesture.current.begin(e.clientX,e.clientY)} onPointerMoveCapture={e=>gesture.current.move(e.clientX,e.clientY)} onPointerCancelCapture={()=>gesture.current.cancel()} data-testid="building-scene" data-pulse={staged.pulse??""} data-scene-revision={geometry.scene?.revision} data-ceiling-source="upper-floor-footprints" data-context-floors={follow?geometry.floors.filter(f=>f.elevation_m>elevation(activeFloor)+.05).map(f=>f.id).join(","):""} data-visible-floors={[...visibleFloors].join(",")} data-focus={relevant?"route":"all"} data-playback-state={sample?.arrived?"arrived":sample?.transition?"transition":playing?"playing":time?"paused":"idle"}>
-    <Canvas frameloop={playing&&previewMode&&!reduced?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
+    <Canvas frameloop={stereo||(playing&&previewMode&&!reduced)?"always":"demand"} dpr={[1,dpr]} camera={{position:[cx+span*.65,span*.8,cz+span*.8],fov:follow?70:40,near:follow?.05:Math.max(.5,span*.012),far:follow?Math.max(120,Math.min(span*3,400)):Math.max(200,span*6)}} shadows gl={{antialias:!coarse,logarithmicDepthBuffer:true,powerPreference:"high-performance"}}
       onCreated={({gl})=>{gl.setClearColor("#10171c");}}>
       <XR store={xrStore}>
       <SceneLighting cx={cx} cz={cz} span={span} interior={follow}/>
@@ -458,6 +472,7 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
         return <group position={[alignment.x,elevation(proposed.floor_id)+.8,-alignment.y]} rotation={[0,alignment.angle,0]}><mesh><boxGeometry args={[proposed.width_m,1.6,.06]}/><meshBasicMaterial color="#74c9ef" transparent opacity={.5} depthTest={false}/></mesh></group>;
       })()}
       {!follow&&beaconPoints.length>0&&<Beacons points={beaconPoints}/>}
+      {!follow&&<ScenarioLayer geometry={geometry} elevations={elevations} visibleFloors={visibleFloors}/>}
       {previousRoute&&!follow&&<Path route={previousRoute} geometry={geometry} explode={explode} visibleFloors={visibleFloors} ghost/>}
       {route&&<Path route={route} geometry={geometry} explode={explode} visibleFloors={visibleFloors} casing={1.7}/>}
       {route&&<Path route={route} geometry={geometry} explode={explode} visibleFloors={visibleFloors} xray={false}/>}
@@ -470,10 +485,11 @@ export function Building3D({geometry,floorId,route,previousRoute,highlights=new 
         const r=orientedRect(s.polygon);return <mesh key={s.id} position={[r.cx,elevation(s.floor_id)+.7,-r.cy]} rotation={[0,Math.atan2(r.uy,r.ux),0]}><boxGeometry args={[Math.max(r.length-.1,.5),1.4,Math.max(r.width-.1,.5)]}/><meshStandardMaterial color="#ff8a8f" transparent opacity={.5} depthWrite={false}/></mesh>;
       })}
       {here&&geometry.spaces.filter(s=>s.id===here&&visibleFloors.has(s.floor_id)).map(s=>{const point=route?.stops[0]===here?route.polyline[0]:null;const b=bounds(s.polygon);return <group key={s.id} position={[point?.x??s.anchor?.[0]??(b.minX+b.maxX)/2,elevation(s.floor_id)+.08,-(point?.y??s.anchor?.[1]??(b.minY+b.maxY)/2)]}><mesh rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.14,.22,24]}/><meshBasicMaterial color="#65d7ac" side={THREE.DoubleSide} depthTest={false}/></mesh><mesh position={[0,.12,0]}><sphereGeometry args={[.1,12,8]}/><meshStandardMaterial color="#65d7ac" emissive="#1e7a4c"/></mesh>{heading!==undefined&&<group rotation={[0,-heading*Math.PI/180,0]}><mesh position={[0,.15,-.65]} rotation={[-Math.PI/2,0,0]}><coneGeometry args={[.2,.5,3]}/><meshBasicMaterial color="#65d7ac"/></mesh></group>}</group>;})}
-      {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&previewMode&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report} lookOffset={lookOffset}/>
+      {follow&&route&&model?<RouteCamera geometry={geometry} model={model} clock={clock} playing={playing&&previewMode&&!reduced} speed={speed} seekVersion={seekVersion} onSample={report} lookOffset={lookOffset} deviceQuaternion={stereo?deviceQuaternion:undefined}/>
         :<><OrbitControls mouseButtons={{LEFT:orbiting?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.ROTATE}} touches={{ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_ROTATE}} maxPolarAngle={Math.PI/2.03} minDistance={2} maxDistance={span*4} makeDefault/><ExploreCamera remoteLook={lookOffset} cacheKey={`${focusBox?"focus-":""}${geometry.building.id}-${multi?scope:floorId}-${exploded}-${focusRequest?`${focusRequest.id}-${focusRequest.revision}`:visualResult?.id??"explore"}`} fitVersion={fitVersion} box={focusBox??fitBox} height={multi?Math.max(...floors.map(f=>elevation(f.id)+f.height_m))-Math.min(...floors.map(f=>elevation(f.id))):3.8} elevation={multi?Math.min(...floors.map(f=>elevation(f.id))):elevation(floorId)} action={action}/></>}
 
       <SceneLabels labels={sceneLabels} onProject={setProjectedLabels}/>
+      {stereo&&follow&&<CardboardStereo/>}
       {follow&&route&&model&&<VrRig card={guideCard(route,model,time,sample?.step??0)} onToggle={()=>setPlaying(v=>!v)}/>}
       </XR>
     </Canvas>

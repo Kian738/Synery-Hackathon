@@ -7,7 +7,7 @@ const campus = '/?building=proc-campus-dev-000';
 test('first use discloses default start and groups optional tools and examples', async ({page}, info) => {
   await page.goto(campus);
   await expect(page.getByText('Entrance used as start. Change it if you’re elsewhere.')).toBeVisible();
-  await expect(page.getByRole('button', {name: 'Stress test', exact: true})).toBeHidden();
+  await expect(page.getByRole('button', {name: 'Scenarios', exact: true})).toBeHidden();
   await expect(page.locator('canvas')).toHaveAttribute('data-scene-painted', 'true');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const shortcut = await page.locator('.destination-shortcuts button').last().boundingBox();
@@ -17,11 +17,11 @@ test('first use discloses default start and groups optional tools and examples',
   await page.screenshot({path:path.join(folder, `${info.project.name}-first-use.png`)});
   const tools = page.getByLabel('Building tools', {exact: true});
   await tools.focus(); await tools.press('Enter');
-  await expect(page.getByRole('button', {name: 'Stress test', exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Scenarios', exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Phone companion', exact: true})).toBeVisible();
   await tools.press('Escape');
   await expect(tools).toBeFocused();
-  await expect(page.getByRole('button', {name: 'Stress test', exact: true})).toBeHidden();
+  await expect(page.getByRole('button', {name: 'Scenarios', exact: true})).toBeHidden();
   const examples = page.locator('.example-requests');
   await expect(examples.locator('li').first()).toBeHidden();
   await examples.locator('summary').click();

@@ -6,7 +6,7 @@ test.beforeEach(({}, info) => test.skip(info.project.name === "phone", "desktop 
 test("the fire scenario states one headline, collapses 9 steps and lists them on request", async ({ page }) => {
   await page.goto("/?building=proc-campus-dev-000");
   await page.getByLabel("Building tools", { exact: true }).click();
-  await page.getByRole("button", { name: "Fire test", exact: true }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
   await page.getByRole("textbox", { name: "Search rooms" }).fill("Canteen 0.28");
   await page.getByRole("button", { name: "Canteen 0.28", exact: true }).click();
   await page.getByRole("button", { name: "Run scenario" }).click();
@@ -21,7 +21,7 @@ test("the fire scenario states one headline, collapses 9 steps and lists them on
 test("one click on the quick fire test gives a first answer and fits the viewport", async ({ page }, info) => {
   await page.goto("/?building=proc-campus-dev-000");
   await page.getByLabel("Building tools", { exact: true }).click();
-  await page.getByRole("button", { name: "Fire test", exact: true }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
   await page.getByRole("button", { name: /Quick fire test/ }).click();
   await expect(page.getByText(/(Everyone|out in|\d+ of \d+)/).first()).toBeVisible({ timeout: 60000 });
   await expect(page.getByText("9 steps checked")).toBeVisible();

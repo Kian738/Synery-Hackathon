@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createSpeaker, splitSentences, type Backend, type SoundCallbacks } from "../src/lib/speaker";
+import { cleanTextForSpeech, createSpeaker, splitSentences, type Backend, type SoundCallbacks } from "../src/lib/speaker";
 
 /** A fake audio world: counts sounds that are playing at once and lets the test end them. */
 function world(serverOk = true) {
@@ -71,4 +71,21 @@ test("the microphone silences everything", async () => {
   sp.micStart(); expect(w.playing.size).toBe(0);
   sp.say("Step.", { channel: "guide" }); await tick(); expect(w.playing.size).toBe(0);
   sp.micEnd(); await tick(); await tick(); expect(w.playing.size).toBe(1);
+});
+
+test("speech text is normalised for the ear: floors, areas, percent, WC, singular minute", () => {
+  expect(cleanTextForSpeech("Go to F1, then F-1.")).toBe("Go to floor 1, then floor minus 1.");
+  expect(cleanTextForSpeech("The room has 24 m2 and 30 m².")).toBe("The room has 24 square metres and 30 square metres.");
+  expect(cleanTextForSpeech("Occupancy is 80%.")).toBe("Occupancy is 80 percent.");
+  expect(cleanTextForSpeech("The WC is near two WCs.")).toBe("The toilet is near two toilets.");
+  expect(cleanTextForSpeech("About 1 min, or 3 min.")).toBe("About 1 minute, or 3 minutes.");
+  expect(cleanTextForSpeech("In 12 m, turn left.")).toBe("In 12 metres, turn left.");
+});
+
+test("the next sentence is fetched before the current one ends", async () => {
+  const w = world(); const sp = createSpeaker(w.backend);
+  sp.say("This is the first long sentence of the answer. This is the second long sentence of the answer.", { channel: "chat" });
+  await tick(); await tick(); await tick();
+  expect(w.playing.size).toBe(1);
+  expect(w.stats().fetches).toBe(2);
 });

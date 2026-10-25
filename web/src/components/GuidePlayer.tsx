@@ -28,7 +28,7 @@ export function GuidePlayer({route,model,time,playing,speed,step,reduced,transit
         {after&&!arrived&&<span className="k-guide-next">After that: {after.headline?`${lower(after.headline)} ${after.target??""}`.trim():after.short}</span>}
       </div>
       {!arrived&&<b className="k-guide-meter" aria-label={remaining>=3?`${remaining} metres to go`:"now"}>{remaining>=3?<><i>{remaining}</i><u>m</u></>:<i className="now">now</i>}</b>}
-      <button aria-label="Repeat instruction" title="Repeat instruction" onClick={onRepeat}><Pictogram name="speaker"/></button>
+      {!arrived&&onRepeat&&<button aria-label="Repeat instruction" title="Repeat instruction" onClick={onRepeat}><Pictogram name="replay"/></button>}
     </div>
     <div className="player-progress">
       <div className="progress-track"><span style={{width:`${progress}%`}}/><i style={{left:`${progress}%`}}/></div>

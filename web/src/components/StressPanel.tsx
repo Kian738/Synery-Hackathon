@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { clock, useClock } from "../navigator/scenarios/clock";
+import { LIMITS, ResultsCard, Scrubber } from "../navigator/scenarios/parts";
 import { api } from "../lib/api";
 import { area } from "../lib/geometry";
 import type { Geometry, Opening } from "../lib/types";
@@ -38,10 +40,10 @@ const PRESETS = [
   { key: "stepfree", label: "Step-free only", body: { kind: "step_free_evacuation" } },
   { key: "exit", label: "Busiest exit blocked", body: { _closeBusiest: true } },
 ] as const;
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const mmss = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, "0")}`; };
 
-export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onIdea, onApplied }: {
-  geometry: Geometry; sessionId: string; onClose: () => void;
+export function StressPanel({ top, geometry, sessionId, onClose, onHeat, onPins, onIdea, onApplied }: {
+  geometry: Geometry; sessionId: string; onClose: () => void; top?: ReactNode;
   onHeat: (heat: Record<string, string> | null) => void;
   onPins: (pins: { id: string; floor_id: string; x: number; y: number }[]) => void;
   onIdea: (door: Opening | null) => void;
@@ -50,9 +52,9 @@ export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onId
   const [preset, setPreset] = useState<string>("all");
   const [run, setRun] = useState<StressRun | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [time, setTime] = useState(0), [playing, setPlaying] = useState(false);
+  const { t: time } = useClock();
   const [ideas, setIdeas] = useState<{ candidates: DoorIdea[]; checked: number } | null>(null), [ideasBusy, setIdeasBusy] = useState(false);
-  const timer = useRef<number | undefined>(undefined);
+  const lastHeat = useRef("");
   const horizon = run ? run.kpis.max_s : 0;
 
   const post = async (path: string, body: object) => {
@@ -62,7 +64,7 @@ export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onId
     return j;
   };
   const start = async (key = preset) => {
-    setBusy(true); setError(""); setIdeas(null); onIdea(null); setPlaying(false);
+    setBusy(true); setError(""); setIdeas(null); onIdea(null); clock.pause();
     try {
       const chosen = PRESETS.find(p => p.key === key)!;
       let body: Record<string, unknown> = { ...chosen.body };
@@ -73,22 +75,19 @@ export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onId
         if (busiest) body.closed = [busiest.id];
       }
       const result: StressRun = await post("", body);
-      setRun(result); setTime(0); setPlaying(true);
+      setRun(result); clock.load(result.kpis.max_s, 10);
+      clock.setScene({ kind: "rooms", step_s: result.frames.step_s, rooms: result.frames.rooms, queues: result.doors.slice(0, 6).filter(d => d.peak_queue > 0 && d.floor_id).map(d => ({ id: d.id, floor_id: d.floor_id, x: d.position[0], y: d.position[1], queue: d.peak_queue })) });
     } catch (e) { setError(String((e as Error).message ?? e)); } finally { setBusy(false); }
   };
-  useEffect(() => { void start("all"); return () => { onHeat(null); onPins([]); onIdea(null); }; }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void start("all"); return () => { onHeat(null); onPins([]); onIdea(null); clock.reset(); }; }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!run) return;
-    onHeat(heatAt(run, geometry, time));
+    // Re-colour the floors only when the frame changes: a new heat map re-merges floor geometry.
+    const heat = heatAt(run, geometry, time), key = JSON.stringify(heat);
+    if (key !== lastHeat.current) { lastHeat.current = key; onHeat(heat); }
     const spaces = new Map(geometry.spaces.map(s => [s.id, s]));
     onPins(run.doors.slice(0, 4).filter(d => d.max_wait_s >= 5).map(d => ({ id: d.id, floor_id: d.floor_id, x: d.position[0], y: d.position[1] })).filter(p => !!p.floor_id && spaces.size > 0));
   }, [run, time, geometry]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    window.clearInterval(timer.current);
-    if (!playing || !run) return;
-    timer.current = window.setInterval(() => setTime(t => { const next = t + Math.max(run.frames.step_s, horizon / 90); if (next >= horizon) { setPlaying(false); return horizon; } return next; }), 90);
-    return () => window.clearInterval(timer.current);
-  }, [playing, run, horizon]);
 
   const suggest = async () => {
     setIdeasBusy(true); setError("");
@@ -108,8 +107,9 @@ export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onId
   const worst = useMemo(() => run?.rooms.slice(0, 4) ?? [], [run]);
   return (
     <section className="k-stress" aria-label="Evacuation stress test">
-      <header><h2>Evacuation test</h2><button type="button" className="k-ctl icon" aria-label="Close stress test" onClick={onClose}><Pictogram name="close" size={18} /></button></header>
-      <div className="k-stress-presets" role="group" aria-label="Scenario">
+      <header><div><div className="k-pop-title">Scenarios</div><h2>Crowd surge</h2></div><button type="button" className="k-ctl icon" aria-label="Close stress test" onClick={onClose}><Pictogram name="close" size={18} /></button></header>
+      {top}
+      <div className="k-stress-presets" role="group" aria-label="Crowd options">
         {PRESETS.map(p => <button key={p.key} type="button" className="k-ctl" aria-pressed={preset === p.key} onClick={() => { setPreset(p.key); void start(p.key); }} disabled={busy}>{p.label}</button>)}
       </div>
       {error && <p role="alert" className="k-stress-error">{error}</p>}
@@ -123,11 +123,9 @@ export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onId
             <div><dt>Last out</dt><dd>{mmss(k.max_s)}</dd></div>
           </dl>
           <p className="k-stress-people">{k.evacuated} of {k.people} people reach an exit{k.stranded ? <b className="k-stress-warn"> · {k.stranded} cannot ({k.stranded_rooms.slice(0, 2).map(r => r.name).join(", ")}{k.stranded_rooms.length > 2 ? "…" : ""})</b> : ""}</p>
-          <div className="k-stress-scrub">
-            <button type="button" className="k-ctl icon" aria-label={playing ? "Pause" : "Play"} onClick={() => { if (time >= horizon) setTime(0); setPlaying(p => !p); }}><Pictogram name={playing ? "pause" : "play"} size={18} /></button>
-            <input type="range" aria-label="Time into the evacuation" min={0} max={Math.max(1, Math.round(horizon))} step={1} value={Math.round(time)} onChange={e => { setPlaying(false); setTime(Number(e.target.value)); }} />
-            <output>{mmss(time)}</output>
-          </div>
+          <Scrubber label="Time into the evacuation" />
+          <ResultsCard total={k.stranded ? `not everyone (${k.evacuated} of ${k.people})` : mmss(k.max_s)} bottleneck={run!.doors[0] ? `${run!.doors[0].between.join(" → ")} (${run!.doors[0].peak_queue} waiting)` : "none"} atRisk={k.stranded}
+            legend={<>Room colour = people per m²: blue calm, red packed. Dots are approximate (from room counts).</>} />
           <div className="k-stress-legend" aria-label="Crowding legend">{Object.entries(LOS_COLOR).map(([letter, colour]) => <span key={letter}><i style={{ background: colour }} />{letter}</span>)}<em>crowding, A calm to F packed</em></div>
           <h3>Where people queue</h3>
           <ul className="k-stress-list">
@@ -149,6 +147,7 @@ export function StressPanel({ geometry, sessionId, onClose, onHeat, onPins, onId
               ))}
             </ul>
           ))}
+          <p className="k-hint k-scen-limits">{LIMITS}</p>
           <details className="k-stress-assume"><summary>How this is computed</summary><ul>{run!.assumptions.map(a => <li key={a}>{a}</li>)}</ul></details>
         </>
       )}

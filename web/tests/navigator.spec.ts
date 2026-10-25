@@ -79,7 +79,7 @@ test("3D view can be switched on", async ({ page }) => {
   await expect(page.locator(".building-tools")).toBeAttached();
   await expect(page.getByRole("button",{name:"Fit building"})).toBeVisible();
   await page.getByLabel("Building tools",{exact:true}).click();
-  await expect(page.getByRole("button",{name:"Stress test",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Scenarios",exact:true})).toBeVisible();
   await page.getByRole("button", { name: "Layers" }).click();
   await expect(page.getByRole("group", { name: "Visible floors" })).toBeVisible();
 });
@@ -139,8 +139,9 @@ test("weak point simulation highlights the real step-free consequence", async ({
   await expect(page.locator(".building-tools")).toBeAttached();
   await expect(page.getByRole("button",{name:"Fit building"})).toBeVisible();
   await page.getByLabel("Building tools",{exact:true}).click();
-  await expect(page.getByRole("button",{name:"Stress test",exact:true})).toBeVisible();
-  await page.getByRole("button",{name:"Stress test",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Scenarios",exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Scenarios",exact:true}).click();
+  await page.getByRole("button",{name:"Lift/stair outage"}).click();
   await expect(page.getByRole("region",{name:"Building stress test"})).toContainText("Office lift");
   await expect(page.getByRole("region",{name:"Building stress test"})).toContainText("29 / 56 rooms");
 });

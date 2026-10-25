@@ -47,7 +47,8 @@ def assess(trace: Trace, audience: str = "safety_officer", building=None) -> lis
     if plan is not None:
         found += _responders(plan, audience)
     if trace.abstained:  # the solver ran but a later step found nothing to propose
-        found.append(Finding("info", f"No improvement found at step '{trace.abstained.step}'", trace.abstained.reason,
+        door = "door" in (trace.abstained.reason or "") or "widen" in (trace.abstained.reason or "")
+        found.append(Finding("info", "No wider door helps here" if door else "No improvement found here", trace.abstained.reason,
                              (trace.abstained.step,), "computed"))
     if evacuation is not None:
         found.append(Finding("info", "What this is built on", "; ".join(evacuation.assumptions), ("evac",), "assumption"))

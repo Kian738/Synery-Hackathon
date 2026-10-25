@@ -146,24 +146,34 @@ export function useVoiceTour(o: {
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
   const [currentlySpeakingId, setCurrentlySpeakingId] = useState<number | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const spokeRef = useRef(false);
+  const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (fallback.current) clearTimeout(fallback.current); }, []);
   const focusRef = useRef(o.focusRoom);
   focusRef.current = o.focusRoom;
   const on = voiceOut || voiceMode;
 
+  const focusedId = useRef<string | null>(null);
   const clearVoiceTour = useCallback(() => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
+    focusedId.current = null;
     setVoiceFocusSpace(null);
     setFocusRequest(null);
   }, [setFocusRequest]);
 
+  // One active highlight at a time; the same room again (next sentence names it too) does not move the camera a second time.
   const focusRoom = useCallback((space: Space) => {
+    if (focusedId.current === space.id) return;
+    focusedId.current = space.id;
     setVoiceFocusSpace(space);
     focusRef.current(space);
   }, []);
 
   const tourRooms = useCallback((matched: Space[], totalDurationMs?: number) => {
-    clearVoiceTour();
+    // Only the pending steps are dropped: clearing the highlight between sentences made it blink off and on.
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
     if (!matched.length) return;
     if (matched.length === 1) { focusRoom(matched[0]); return; }
     const duration = totalDurationMs ?? Math.min(9000, Math.max(3000, matched.length * 2500));
@@ -183,13 +193,14 @@ export function useVoiceTour(o: {
     const onChunk = (e: Event) => {
       if (followingRef.current) return;  // Guide me owns the camera while it walks the route
       if (!on || !spaces) return;
-      const detail = (e as CustomEvent<{ text: string; audio?: HTMLAudioElement }>).detail;
+      const detail = (e as CustomEvent<{ text: string; duration?: number }>).detail;
       const text = detail?.text;
       if (!text) return;
+      spokeRef.current = true;
       const matched = findSpacesMentionedInText(text, spaces, visualResult, highlights);
       if (matched.length) {
-        const d = detail.audio?.duration;
-        tourRooms(matched, d && isFinite(d) ? d * 1000 : Math.max(2500, text.length * 65));
+        const d = detail.duration;  // the real clip length, so the tour ends with the sentence
+        tourRooms(matched, d && isFinite(d) && d > 0 ? d * 1000 : Math.max(2500, text.length * 65));
       } else if (ROUTE_WORDS.test(text) && route?.polyline.length) {
         clearVoiceTour();
         setFloorId(route.polyline[0].floor_id);
@@ -214,9 +225,17 @@ export function useVoiceTour(o: {
     if (following) return;
     lastProcessed.current = last.id;
     const matched = findSpacesMentionedInText(last.text, spaces, visualResult, highlights);
-    if (matched.length) tourRooms(matched);
+    if (matched.length) {
+      // Voice on: the camera follows the voice (speech-chunk above starts the tour when the sentence is heard). A fallback tour runs only if
+      // nothing is heard soon (voice failed or blocked). Voice off: the tour starts at once.
+      if (!on) { tourRooms(matched); return; }
+      spokeRef.current = false;
+      if (fallback.current) clearTimeout(fallback.current);
+      fallback.current = setTimeout(() => { fallback.current = null; if (!spokeRef.current) tourRooms(matched); }, 2500);
+      return;
+    }
     else if (ROUTE_WORDS.test(last.text) && route?.polyline.length) { clearVoiceTour(); setFloorId(route.polyline[0].floor_id); }
-  }, [messages, spaces, visualResult, highlights, route, tourRooms, clearVoiceTour, setFloorId]);
+  }, [messages, spaces, visualResult, highlights, route, tourRooms, clearVoiceTour, setFloorId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const lastSpoken = useRef<number | null>(null);
   useEffect(() => {
@@ -247,6 +266,8 @@ export function useVoiceTour(o: {
 
   useEffect(() => {
     // Guide me: the card shows the step AHEAD (GuidePlayer), so that is what is read, once per step change, distance first.
+    // At the last step the card still shows the arrival it already announced: do not say it twice.
+    if (activeStep > 0 && activeStep >= steps.length - 1) return;
     const ahead = steps[Math.min(activeStep + 1, steps.length - 1)];
     if (on && following && ahead) speak(spokenStep(ahead), undefined, { id: `guide:${route?.length_m}:${activeStep}`, channel: "guide" });
   }, [on, following, activeStep]);
@@ -267,8 +288,8 @@ export function useVoiceTour(o: {
     if (currentlySpeakingId === id) { stopSpeaking(); setCurrentlySpeakingId(null); clearVoiceTour(); return; }
     setCurrentlySpeakingId(id);
     speak(text, () => setCurrentlySpeakingId(null));
-    if (spaces) tourRooms(findSpacesMentionedInText(text, spaces, visualResult, highlights));
-  }, [currentlySpeakingId, spaces, visualResult, highlights, tourRooms, clearVoiceTour]);
+    if (spaces && !on) tourRooms(findSpacesMentionedInText(text, spaces, visualResult, highlights));  // voice on: the sentences drive the tour
+  }, [currentlySpeakingId, spaces, visualResult, highlights, tourRooms, clearVoiceTour, on]);
 
   const voiceHighlightId = voiceFocusSpace?.id ?? null;
   const activeHighlights = useMemo(() => {

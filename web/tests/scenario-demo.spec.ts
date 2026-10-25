@@ -7,7 +7,7 @@ test("demo path: quick fire test, checked steps, apply the fix and see the new t
   test.setTimeout(180_000); // the N-1 check re-solves every exit-loss scenario, about 20 s
   await page.goto("/?building=proc-campus-dev-000");
   await page.getByLabel("Building tools", { exact: true }).click();
-  await page.getByRole("button", { name: "Fire test", exact: true }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
   await page.getByRole("button", { name: /Quick fire test/ }).click();
   const headline = page.locator(".scenario-headline");
   await expect(headline).toHaveText(/Everyone is out in \d+ s/, { timeout: 60000 });
@@ -31,7 +31,7 @@ test("replay autoplays to the total, seeks, shows responders, and the exit limit
   test.setTimeout(120_000);
   await page.goto("/?building=proc-campus-dev-000");
   await page.getByLabel("Building tools", { exact: true }).click();
-  await page.getByRole("button", { name: "Fire test", exact: true }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
   await page.getByRole("button", { name: /Quick fire test/ }).click();
   const counter = page.locator(".scenario-counter");
   await expect(counter).toHaveText(/\d+ of \d+ out/, { timeout: 60000 });
@@ -82,7 +82,7 @@ test("blocking an exit (limit 0) reroutes people and takes longer; the first bea
   test.setTimeout(120_000);
   await page.goto("/?building=proc-campus-dev-000");
   await page.getByLabel("Building tools", { exact: true }).click();
-  await page.getByRole("button", { name: "Fire test", exact: true }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
   await page.getByRole("button", { name: /Quick fire test/ }).click();
   const headline = page.locator(".scenario-headline");
   await expect(headline).toHaveText(/Everyone is out in \d+ s/, { timeout: 60000 });

@@ -96,6 +96,21 @@ export interface Door { ids: string[]; x: number; y: number; nx: number; ny: num
 
 const LEAD_M = 0.6;
 
+function crosses(p: XY, q: XY, w: Seg): boolean {
+  const o = (a: XY, b: XY, c: XY) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  return o(w.a, w.b, p) * o(w.a, w.b, q) < -1e-9 && o(p, q, w.a) * o(p, q, w.b) < -1e-9;
+}
+
+/** How far the camera may step straight through a door before (or after) it: LEAD_M, shortened in shallow rooms so the
+ *  lead point never ends up behind the room's far wall (a closet behind a door is often less than 0.6 m deep). */
+function leadFor(door: XY, n: XY, walls: Seg[]): number {
+  for (let l = LEAD_M; l > 0.2 + 1e-9; l -= 0.1) {
+    const p: XY = [door[0] + n[0] * l, door[1] + n[1] * l];
+    if (clearance(p[0], p[1], walls) >= 0.2 && !walls.some(w => crosses(door, p, w))) return l;
+  }
+  return 0.2;
+}
+
 /** Process one stretch inside a room: centre, pull straight, round, resample. Endpoints stay exactly where they are. */
 function room(points: XY[], local: Seg[]): XY[] {
   if (points.length < 3) return points;
@@ -134,7 +149,8 @@ export function cameraPath<T extends PathPoint>(polyline: T[], walls: Wall[], do
     let from = 0;
     for (const c of crossings) {
       const n: XY = [c.door.nx * c.dir, c.door.ny * c.dir];
-      const before: XY = [c.door.x - n[0] * LEAD_M, c.door.y - n[1] * LEAD_M], mid: XY = [c.door.x, c.door.y], after: XY = [c.door.x + n[0] * LEAD_M, c.door.y + n[1] * LEAD_M];
+      const mid: XY = [c.door.x, c.door.y], back = leadFor(mid, [-n[0], -n[1]], local), ahead = leadFor(mid, n, local);
+      const before: XY = [c.door.x - n[0] * back, c.door.y - n[1] * back], after: XY = [c.door.x + n[0] * ahead, c.door.y + n[1] * ahead];
       // original points up to just before the lead-in, ending exactly at the lead-in point
       const room1 = [...pts.slice(from, c.at).filter(q => Math.hypot(q[0] - c.door.x, q[1] - c.door.y) > LEAD_M + 0.1), before];
       if (result.length) room1.unshift(result.pop()!);

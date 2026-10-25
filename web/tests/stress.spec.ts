@@ -3,7 +3,8 @@ import { test, expect } from "@playwright/test";
 test("the evacuation test runs, shows times, queues and a time scrubber, and proves a new door with a second run", async ({ page }) => {
   await page.goto("/?building=proc-factory-dev-003");
   await page.getByRole("button", { name: "Building tools" }).click();
-  await page.getByRole("button", { name: "Evacuation test" }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
+  await page.getByRole("button", { name: "Crowd surge" }).click();
   const panel = page.getByRole("region", { name: "Evacuation stress test" });
   await expect(panel.getByText("95 % out")).toBeVisible({ timeout: 30_000 });
   await expect(panel.getByText(/\d+ of \d+ people reach an exit/)).toBeVisible();
@@ -26,7 +27,8 @@ test("the evacuation test runs, shows times, queues and a time scrubber, and pro
 test("the evacuation test never offers to add a door that makes things worse", async ({ page }) => {
   await page.goto("/?building=osm-way61408163");
   await page.getByRole("button", { name: "Building tools" }).click();
-  await page.getByRole("button", { name: "Evacuation test" }).click();
+  await page.getByRole("button", { name: "Scenarios", exact: true }).click();
+  await page.getByRole("button", { name: "Crowd surge" }).click();
   const panel = page.getByRole("region", { name: "Evacuation stress test" });
   await panel.getByRole("button", { name: "Where should a new door go?" }).click({ timeout: 60_000 });
   const items = panel.locator(".k-stress-ideas li");

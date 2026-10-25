@@ -28,13 +28,12 @@ export function phoneUrl(host: CompanionHost, phonePath = "/phone", origin?: str
 export function LaptopPairing({ host, phonePath = "/phone", phoneOrigin, className }: LaptopPairingProps) {
   const active = host.state !== "idle" && host.state !== "ended";
   const url = phoneUrl(host, phonePath, phoneOrigin);
-  const insecure = typeof window !== "undefined" && !window.isSecureContext;
   return (
     <section className={`cmp cmp-laptop ${className ?? ""}`} aria-label="Pair a phone">
-      <h2>Phone companion</h2>
+      <h3>Remote control</h3>
       {!active && (
         <>
-          <p>Use a phone as a remote: it shows the current step in large type and can turn the view. This laptop keeps full control.</p>
+          <p>Pair a phone to step through the route from it. This screen keeps full control.</p>
           {host.ended && <p className="cmp-error" role="status">{host.ended}</p>}
           {host.error && <p className="cmp-error" role="alert">{host.error}</p>}
           <button className="cmp-btn primary" onClick={() => void host.start()}>Pair a phone</button>
@@ -66,7 +65,6 @@ export function LaptopPairing({ host, phonePath = "/phone", phoneOrigin, classNa
               <p className="cmp-small">One use, valid for two minutes.</p>
               </details>
               <button className="cmp-btn quiet" onClick={host.newCode}>New code</button>
-              {insecure && <p className="cmp-small">This page is not HTTPS, so phone motion look will be off; touch controls work. See the setup notes for HTTPS options.</p>}
             </div>
           )}
           {host.error && <p className="cmp-error" role="alert">{host.error}</p>}

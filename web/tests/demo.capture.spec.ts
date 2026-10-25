@@ -52,7 +52,8 @@ test("capture a deterministic fallback of the real route and widening workflow",
   await page.waitForTimeout(4000);
   await page.screenshot({path:path.join(out,"closure-reroute.png")});
   await page.getByLabel("Building tools",{exact:true}).click();
-  await page.getByRole("button",{name:"Stress test",exact:true}).click();
+  await page.getByRole("button",{name:"Scenarios",exact:true}).click();
+  await page.getByRole("button",{name:"Lift/stair outage"}).click();
   await expect(page.getByRole("region",{name:"Building stress test"})).toBeVisible();
   await page.waitForTimeout(4000);
   await page.getByRole("textbox",{name:"Message"}).fill("Can a 1.1 m trolley reach Print room 0.16 from Main lobby?");

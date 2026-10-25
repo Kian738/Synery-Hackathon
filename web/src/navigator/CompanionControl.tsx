@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import {createPortal} from "react-dom";
 import { LaptopPairing, routeStateFromGuide, useCompanionHost } from "../companion";
+import { phoneUrl } from "../companion/LaptopPairing";
+import { PairingQR } from "../companion/PairingQR";
 import { Pictogram } from "../components/Pictogram";
 import type { GuideStep } from "../lib/types";
 
@@ -17,8 +19,14 @@ export function CompanionControl({path,steps,index,routeId,buildingId,open,onTog
     <button aria-label="Phone companion" aria-expanded={open} aria-pressed={host.phoneOnline} title={host.phoneOnline?"Phone connected":"Use a phone with this laptop"} onClick={onToggle}><Pictogram name="phone" size={18}/><span>Phone</span></button>
     {open&&createPortal(<section className="companion-drawer" role="dialog" aria-label="Phone companion setup">
       <button className="companion-close" aria-label="Close phone setup" onClick={onToggle}><Pictogram name="close"/></button>
+      {(host.state==="idle"||host.state==="ended")&&<div className="phone-card">
+        <h2>Use your phone</h2>
+        <h3>Cardboard VR</h3>
+        <p>Scan to open this building on your phone. Choose a route, press <b>Guide me</b>, then <b>Cardboard</b>, and put the phone in a viewer.</p>
+        <PairingQR url={phoneUrl({...host,code:null},`${location.pathname}${location.search}`)} alt="Scan to open this building on your phone"/>
+        <p className="phone-card-note">Head tracking needs an HTTPS address on the phone.</p>
+      </div>}
       <LaptopPairing host={host}/>
-      <p className="companion-setup-hint">Start the app with <code>uv run fw start --lan</code> to connect from the same network. Touch works over HTTP; motion look requires HTTPS on the phone.</p>
     </section>,document.body)}
   </>;
 }

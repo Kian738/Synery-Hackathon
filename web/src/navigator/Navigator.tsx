@@ -8,7 +8,11 @@ import {ScenarioPanel} from './ScenarioPanel';
 import { JourneyBanner } from "../journey/JourneyBanner";
 import { currentIndoorLeg, nextLeg, setJourneyIndex } from "../journey/journey";
 import {StressPanel} from '../components/StressPanel';
+import {OutagePanel, ScenarioChips, type ScenarioKind} from './scenarios/Scenarios';
+import {clock as scenarioClock} from './scenarios/clock';
 import {vrSupported,xrStore} from '../lib/xr';
+import {CardboardMode} from '../companion/CardboardMode';
+import {cardboardPose,cardboardSupported} from '../companion/orientation';
 import { ToolTrace } from "../components/ToolTrace";
 import { CompanionControl } from "./CompanionControl";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -44,17 +48,25 @@ export default function Navigator() {
   const chatWorkspace=useRef<HTMLDivElement>(null);
   const [buildings, setBuildings] = useState<BuildingRow[]>([]);
   const [selected, setSelected] = useState<Space | null>(null);
-  const [weakOpen,setWeakOpen]=useState(false);
-  const [scenarioOpen,setScenarioOpen]=useState(false);
-  const [quickRun,setQuickRun]=useState(0);
+  // Scenarios tool: one mode for fire, exit blocked, crowd surge and lift/stair outage; opening one closes the others.
+  const [scenarios,setScenarios]=useState<ScenarioKind|null>(null);
+  const scenarioOpen=scenarios==="fire"||scenarios==="blocked",stressOpen=scenarios==="crowd",weakOpen=scenarios==="outage";
+  const setScenarioOpen=(on:boolean)=>setScenarios(s=>on?(s==="blocked"?s:"fire"):(s==="fire"||s==="blocked"?null:s));
+  const setWeakOpen=(on:boolean)=>setScenarios(s=>on?"outage":s==="outage"?null:s);
+  const [quickRun]=useState(0);
   const [exploreOpen,setExploreOpen]=useState(false);
-  const [stressOpen,setStressOpen]=useState(false);
   const [vrOk,setVrOk]=useState(false);
+  const [cardboardOk]=useState(()=>cardboardSupported());const [cardboardOpen,setCardboardOpen]=useState(false);const [cardboardOn,setCardboardOn]=useState(false);
   useEffect(()=>{void vrSupported().then(setVrOk);},[]);
   const [heat,setHeat]=useState<Record<string,string>|null>(null);
   const [stressPins,setStressPins]=useState<{id:string;floor_id:string;x:number;y:number}[]>([]);
   const [ideaDoor,setIdeaDoor]=useState<import('../lib/types').Opening|null>(null);
   const [scenarioMark,setScenarioMark]=useState<ScenarioMark|null>(null);
+  // One cleanup path when the scenario changes or closes: heat, pins, door idea, scenario marks, highlights and the shared clock.
+  const prevScenario=useRef(scenarios);
+  useEffect(()=>{const was=prevScenario.current;prevScenario.current=scenarios;if(was===scenarios||!was)return;setHeat(null);setStressPins([]);setIdeaDoor(null);setScenarioMark(null);if(was==="fire"||was==="blocked")nav.clearScenarioEvents();nav.setHighlights(new Set());if(!scenarios)scenarioClock.reset();},[scenarios]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickScenario=(k:ScenarioKind)=>{setScenarios(k);if(k==="outage"&&!nav.weakPoints.length)nav.inspectWeakPoints();};
+  const scenarioChips=scenarios?<ScenarioChips value={scenarios} onChange={pickScenario}/>:null;
   const scenarioZones=useMemo(()=>{const z:Record<string,string>={};Object.entries(scenarioMark?.crowd??{}).forEach(([id,n])=>{z[id]=n===2?"crowd2":"crowd1";});scenarioMark?.responder?.spaces.forEach(id=>{z[id]="responder";});return z;},[scenarioMark]);
   useEffect(()=>{if(nav.scenarioIn)setScenarioOpen(true);},[nav.scenarioIn]);
   const [questionOpen,setQuestionOpen]=useState(false);
@@ -265,6 +277,7 @@ export default function Navigator() {
             {following&&<IconButton label="Ask" icon="send" text="Ask" pressed={questionOpen} onClick={()=>{setQuestionOpen(!questionOpen);setPlanExpanded(false);}}/>}
             {following&&<IconButton label="Focus on route" icon="focus" pressed={guideFocus} onClick={()=>setGuideFocus(v=>!v)}/>}
             {following&&vrOk&&<IconButton label="Enter VR" icon="cube" text="VR" onClick={()=>void xrStore.enterVR()}/>}
+            {following&&cardboardOk&&<IconButton label="Cardboard VR" icon="cube" text="Cardboard" pressed={cardboardOpen} onClick={()=>{setCardboardOpen(true);setQuestionOpen(false);setPlanExpanded(false);}}/>}
             {following&&<IconButton label="Read aloud" icon="speaker" pressed={voiceOut} onClick={voice.toggleReadAloud}/>}
             <IconButton label="Show map" icon="map" pressed={planExpanded} onClick={toggleMap}/>
             {view==="3d"&&!following&&<Popover label="Layers" icon="layers" open={layersOpen} onOpenChange={setLayersOpen} badge={nav.closed.size||undefined}>
@@ -277,14 +290,12 @@ export default function Navigator() {
               {nav.closed.size>0&&<><div className="k-pop-title">Closed places</div>{[...nav.closed].map(id=><div className="k-closed" key={id}><span>{g.spaces.find(x=>x.id===id)?.name??g.connectors.find(x=>x.id===id)?.name??"Door"}</span><button onClick={()=>nav.toggleClosed(id)}>Reopen</button></div>)}</>}
             </Popover>}
             <Popover label="Building tools" icon="tools" open={toolsOpen} onOpenChange={setToolsOpen} className="building-tools">
-              {g.building.source_ref?.osm&&<button aria-pressed={view==='exterior'} onClick={()=>{setView('exterior');setSelected(null);setPlanExpanded(false);setToolsOpen(false);nav.setNotice(null);}}><Pictogram name="outside" size={18}/>Outside</button>}
-              {!following&&<button aria-pressed={stressOpen} onClick={()=>{setStressOpen(v=>!v);setScenarioOpen(false);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="aid" size={18}/>Evacuation test</button>}
-              {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Fire test</button>}
+              {!following&&<button aria-pressed={!!scenarios} onClick={()=>{setScenarios(s=>s?null:"fire");setToolsOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="aid" size={18}/>Scenarios</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
                 onStep={action=>{if(!nav.route)return;if(action==="repeat"){speakStep(steps[nav.activeStep]);return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
                 onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
-              {!following&&<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}><Pictogram name="aid" size={18}/>Stress test</button><Link to="/lab"><Pictogram name="info" size={18}/>Evidence</Link></>}
+              {!following&&<Link to="/lab"><Pictogram name="info" size={18}/>Evidence</Link>}
             </Popover>
           </Dock>
         </div>
@@ -296,7 +307,7 @@ export default function Navigator() {
               <Suspense fallback={<Loader label={g.building.name} phrases={["Raising the floors","Setting the walls","Placing the furniture"]}/>}>
                 <Building3D heat={heat??undefined} pins={stressPins} doorMarks={marks} hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={activeHighlights}
                   closed={nav.closed} previewDoor={ideaDoor??nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={voiceFocusSpace?.id??selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speakStep(steps[nav.activeStep])} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{setView("follow");}}
-                  onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
+                  onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset} stereo={cardboardOn&&following} deviceQuaternion={cardboardPose}/>
               </Suspense>}
           </ErrorBoundary>
         </div>
@@ -304,6 +315,7 @@ export default function Navigator() {
           <header><span>{g.floors.find(f=>f.id===displayFloor)?.name}</span><button aria-label="Close map" onClick={()=>setPlanExpanded(false)}><Pictogram name="close" size={18}/></button></header>
           <PlanView scenario={scenarioMark} geometry={g} floorId={displayFloor} route={nav.visualResult&&!following?null:nav.route} highlights={activeHighlights} closed={nav.closed} visualResult={nav.visualResult} pins={pins} selected={voiceFocusSpace?.id??selected?.id} focus={focusPoint} focusKey={`${nav.route?.stops.join()}-${focusRequest?.revision}-${nav.visualResult?.id}`} followPosition={following} onSpaceClick={selectSpace} compact/>
         </section>}
+        {cardboardOpen&&following&&<CardboardMode onActive={setCardboardOn} onExit={()=>setCardboardOpen(false)} onNext={()=>{if(nav.route)focusStep(Math.min(steps.length-1,nav.activeStep+1));}}/>}
         {demo.error&&<div className="model-notice" role="alert">{demo.error}</div>}
         {!nav.notice && nav.route?.warnings?.length ? <div className="model-notice" role="status">{nav.route.warnings.join(" ")}</div> : null}
         {nav.closeConfirm && <div role="alertdialog" aria-label="Confirm closing" className="model-notice k-confirm">
@@ -315,17 +327,9 @@ export default function Navigator() {
           <span>Closed {nav.lastClosure.name}.</span><button className="k-ctl" onClick={() => void nav.toggleClosed(nav.lastClosure!.id)}>Undo</button>
         </div>}
         {nav.notice && !nav.closeConfirm && !nav.lastClosure && <div role="status" className="model-notice"><span>{nav.notice}</span>{/^No route/.test(nav.notice)&&nav.closed.size>0&&<button className="reopen-all" onClick={()=>[...nav.closed].forEach(id=>nav.toggleClosed(id))}>Reopen closed places</button>}<button aria-label="Dismiss" onClick={() => nav.setNotice(null)}>×</button></div>}
-        {stressOpen&&!following&&nav.sessionId&&<StressPanel geometry={g} sessionId={nav.sessionId} onClose={()=>setStressOpen(false)} onHeat={setHeat} onPins={setStressPins} onIdea={setIdeaDoor} onApplied={nav.apply}/>}
-        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel quickRun={quickRun} onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room&&!demo.active)focusRoom(room);if(voiceOut&&!demo.active)speak(say,undefined,{channel:"narration",policy:"skip-if-busy"});}} demo={demo.demo} onNarrate={demo.narrate} onDemoActive={demo.onActive} onFocus={id=>{const room=g.spaces.find(s=>s.id===id);if(room){nav.setFloorId(room.floor_id);focusRoom(room);}}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>{setScenarioOpen(false);setScenarioMark(null);nav.clearScenarioEvents();nav.setHighlights(new Set());}} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
-        {weakOpen&&!following&&!scenarioOpen&&<section className="stress-drawer" aria-label="Building stress test">
-          <header><div><span>What-if analysis</span><h2>Exit access under closure</h2></div><button aria-label="Close stress test" onClick={()=>setWeakOpen(false)}><Pictogram name="close"/></button></header>
-          <p>Each result closes one connector independently and checks step-free routes to mapped exits.</p>
-          {nav.busy?<p role="status">Checking connector closures…</p>:nav.weakPoints.length?nav.weakPoints.map((item,i)=><button className="stress-result" key={i} onClick={()=>{nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}>
-            <span><Pictogram name={item.kind==="lift"?"lift":"stairs"}/><b>{item.name}</b></span><strong>{item.rooms_lost}<small> / {item.of_rooms} rooms</small></strong><span>would lose step-free exit access</span><span className="stress-inspect">Show affected rooms</span>
-          </button>):<p>No individual connector closure disconnects mapped rooms for this analysis.</p>}
-          <details><summary>Evidence and assumptions</summary><p>Computed by removing each connector from the route graph and comparing exit reachability. This is a single-failure sensitivity check, not a fire or crowd-capacity simulation. Occupancy and door throughput are not supplied.</p></details>
-          <button className="stress-rerun" disabled={nav.busy} onClick={nav.inspectWeakPoints}>Run again</button>
-        </section>}
+        {stressOpen&&!following&&nav.sessionId&&<StressPanel top={scenarioChips} geometry={g} sessionId={nav.sessionId} onClose={()=>setScenarios(null)} onHeat={setHeat} onPins={setStressPins} onIdea={setIdeaDoor} onApplied={nav.apply}/>}
+        {scenarioOpen&&!following&&nav.sessionId&&<ScenarioPanel key={scenarios} top={scenarioChips} preset={scenarios==="blocked"?"blocked":"fire"} quickRun={quickRun} onBeat={(say,id)=>{const room=g.spaces.find(s=>s.id===id);if(room&&!demo.active)focusRoom(room);if(voiceOut&&!demo.active)speak(say,undefined,{channel:"narration",policy:"skip-if-busy"});}} demo={demo.demo} onNarrate={demo.narrate} onDemoActive={demo.onActive} onFocus={id=>{const room=g.spaces.find(s=>s.id===id);if(room){nav.setFloorId(room.floor_id);focusRoom(room);}}} incoming={nav.scenarioIn} replayCmd={nav.replayCmd} geometry={g} sessionId={nav.sessionId} selected={selected} onClose={()=>setScenarios(null)} onHighlight={nav.setHighlights} onScenario={setScenarioMark} onFloor={nav.setFloorId} apply={nav.apply}/>}
+        {weakOpen&&!following&&<OutagePanel top={scenarioChips} busy={nav.busy} items={nav.weakPoints} onClose={()=>setScenarios(null)} onRerun={nav.inspectWeakPoints} onShow={item=>{nav.setHighlights(new Set(item.room_ids));const room=g.spaces.find(s=>s.id===item.room_ids[0]);if(room)nav.setFloorId(room.floor_id);}}/>}
         {selected && !following && <RoomCard key={selected.id} space={selected} building={g} onClose={() => setSelected(null)} closed={nav.closed}
           onHere={() => { nav.setHere(selected.id); nav.setFloorId(selected.floor_id); setSelected(null); nav.setNotice(`Location set: ${selected.name}. Your green marker is set manually.`); }}
           onGo={() => { nav.goTo(selected.id); setSelected(null); }} onToggleClosed={nav.toggleClosed} onFocus={()=>focusRoom(selected)} />}
@@ -460,6 +464,7 @@ function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, on
   messages: Message[]; busy: boolean; onOption: (id: string, purpose?: string) => void; onDecide: (m: Extract<Message, { role: "change" }>, ok: boolean) => void;
 }) {
   const [history,setHistory]=useState(false);
+  const lastAgentId=messages.filter(m=>m.role==='agent').at(-1)?.id;
   const end = useRef<HTMLDivElement>(null);
   const pinned=useRef(true),lastUser=useRef<number|null>(null);
   const [atBottom,setAtBottom]=useState(true);
@@ -516,7 +521,8 @@ function Conversation({ currentlySpeakingId,onSpeak,messages, busy, onOption, on
           <div key={m.id} className="space-y-1.5 text-[15.5px] leading-relaxed">
             {m.role==='agent'&&m.status==='interrupted'&&<p role="status">Answer interrupted. Computed results remain available.</p>}
             <AgentReply text={m.text} spaces={geometry.spaces} onRoom={onRoom}/>
-            {onSpeak&&m.role==='agent'&&m.status!=='streaming'&&<IconButton label={currentlySpeakingId===m.id?"Stop reading":"Read this reply"} icon="speaker" pressed={currentlySpeakingId===m.id} onClick={()=>onSpeak(m.id,m.text)}/>}
+            {/* One voice control per screen: the dock toggle. A reply gets its own button only when it is the latest one, or while it is being read (to stop it). */}
+            {onSpeak&&m.role==='agent'&&m.status!=='streaming'&&(currentlySpeakingId===m.id||m.id===lastAgentId)&&<IconButton label={currentlySpeakingId===m.id?"Stop reading":"Read this reply"} icon="speaker" pressed={currentlySpeakingId===m.id} onClick={()=>onSpeak(m.id,m.text)}/>}
           </div>
         );
       })}

@@ -423,3 +423,56 @@ button, [role="button"], a { -webkit-tap-highlight-color:transparent; }
 @keyframes k-interlude { 0% { opacity: 0 } 100% { opacity: 1 } }
 .k-interlude-floors { font-size: 1.15rem; font-weight: 600; margin-top: .5rem }
 .k-interlude-note { opacity: .8; font-size: .85rem; margin-top: .15rem }
+
+/* ---- phone: Cardboard VR and phone-first layout (agent-phone2) ---- */
+.cardboard-card { position:fixed; z-index:200; left:50%; top:50%; transform:translate(-50%,-50%); width:min(420px, calc(100vw - 2 * var(--gap-group))); max-height:calc(100dvh - 2 * var(--gap-group)); overflow:auto; box-sizing:border-box; padding:var(--gap-group); border-radius:var(--r-panel, 16px); background:var(--k-bg, #1c2226); color:var(--k-ink, #fff); font:var(--k-font); box-shadow:0 12px 40px #0008; }
+.cardboard-card h2 { margin:0 0 var(--gap); font:700 18px var(--font-sans); }
+.cardboard-card ol { margin:0; padding-left:20px; display:grid; gap:6px; line-height:1.4; }
+.cardboard-note { margin:var(--gap) 0 0; color:#ffd2d2; }
+.cardboard-actions { display:flex; justify-content:flex-end; gap:var(--gap); margin-top:var(--gap-group); }
+.cardboard-surface { position:fixed; inset:0; z-index:190; background:transparent; touch-action:none; -webkit-tap-highlight-color:transparent; outline:none; }
+.cardboard-exit { position:absolute; top:max(8px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); opacity:.7; }
+.cardboard-wait { position:absolute; left:50%; bottom:24px; transform:translateX(-50%); margin:0; padding:6px 12px; border-radius:var(--r-pill); background:#000a; color:#fff; font:var(--k-font); }
+/* while the stereo view runs, the 3D stage owns the whole screen */
+.navigator-shell:has(.cardboard-surface) .model-viewport { position:fixed; inset:0; z-index:180; width:100vw; height:100dvh; }
+.navigator-shell:has(.cardboard-surface) .guide-player, .navigator-shell:has(.cardboard-surface) .k-top { visibility:hidden; }
+
+/* ===== Scenarios tool (fire, exit blocked, crowd surge, lift/stair outage): chips, results card, before/after, limits ===== */
+.k-scen-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.k-scen-results { display:grid; gap:4px; padding:10px 12px; border-radius:12px; background:#17232a; }
+.k-scen-results p, .k-scen-compare p { display:flex; justify-content:space-between; gap:8px; margin:0; font-size:14px; }
+.k-scen-results span, .k-scen-compare span { color:#9fb3bb; } .k-scen-results b { font-variant-numeric:tabular-nums; text-align:right; }
+.k-scen-results p[data-risk="true"] b { color:#ff8a8f; }
+.k-scen-legend { font-size:12px; color:#9fb3bb; margin-top:4px; }
+.k-scen-compare { display:grid; gap:6px; padding:10px 12px; border-radius:12px; border:1px solid #34464f; }
+.k-scen-limits { font-size:12px; opacity:.85; }
+.stress-drawer .k-scen-chips, .k-sheet .k-scen-chips { margin:4px 0 8px; }
+/* phone-first layout: touch targets stay 40 px even on short landscape screens; the route-only pill and the camera dock keep the middle clear */
+@media (pointer:coarse) and (max-height:480px) { :root { --ctl:40px; } }
+@media (max-width:640px) {
+  .k-status { left:auto; right:var(--gap-group); transform:none; max-width:calc(100% - 2 * var(--gap-group) - var(--ctl) - var(--gap)); }
+  .k-status .k-pill span { display:none; }
+  .guide-player .speed-options button { min-height:40px; min-width:40px; }
+  .guide-player .progress-chapters button { min-width:28px; min-height:32px; }
+  .guide-player button[aria-label="Repeat instruction"] { min-width:40px; min-height:40px; }
+}
+.navigator-shell aside .k-composer, .navigator-shell aside > form:last-child { padding-bottom:max(8px, env(safe-area-inset-bottom)); }
+.guide-player { margin-bottom:env(safe-area-inset-bottom); }
+html, body { overflow-x:hidden; }
+/* landscape phone: the 3D view on the left at full height, the conversation on the right, nothing stacked under a 180 px stage */
+@media (max-width:1023px) and (orientation:landscape) and (max-height:500px) {
+  .navigator-shell.flex-col { flex-direction:row; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+  .navigator-shell .model-panel { order:1; height:100dvh; flex:1 1 auto; min-width:0; }
+  .navigator-shell .navigation-panel { order:2; flex:none; width:min(46vw, 380px); height:100dvh; }
+  .navigator-shell .navigation-panel .k-hint { display:none; }
+  .navigator-shell .k-rail { left:auto; right:var(--gap-group); top:calc(var(--gap-group) + var(--ctl) + var(--gap)); max-height:calc(100% - 2 * var(--ctl) - 3 * var(--gap-group)); }
+}
+/* phone card in Building tools: open on the phone (Cardboard VR) first, remote control second */
+.companion-drawer .phone-card { display:grid; gap:var(--gap); padding:var(--gap-group) var(--gap-group) 0; font:var(--k-font); color:var(--k-ink); }
+.companion-drawer .phone-card h2 { margin:0; font:700 18px var(--font-sans); }
+.companion-drawer .phone-card h3, .companion-drawer .cmp-laptop h3 { margin:var(--gap) 0 0; font:700 15px var(--font-sans); }
+.companion-drawer .phone-card p { margin:0; line-height:1.45; color:var(--k-ink); }
+.companion-drawer .phone-card .pairing-qr { justify-self:center; width:180px; height:180px; border-radius:var(--r-ctl); }
+.companion-drawer .phone-card-note { color:var(--k-mute) !important; font-size:13px; }
+.companion-drawer .cmp-laptop { border-top:1px solid var(--k-line); margin-top:var(--gap-group); padding-top:var(--gap) !important; }
+.companion-drawer .cmp-laptop h2 { display:none; }
