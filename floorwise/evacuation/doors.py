@@ -9,6 +9,7 @@ an edited copy of the building that shares no state with the search.
 """
 
 import copy
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -60,6 +61,7 @@ class DoorPlan:
     evaluated: int  # exact re-solves actually run
     new_width_m: float
     widen_to_m: float
+    complete: bool = True  # False when the time budget stopped the search before every candidate was checked
 
 
 @dataclass(frozen=True)
@@ -163,7 +165,8 @@ def _cuts(problem: Problem, current: Quickest) -> list[tuple[set[str], np.ndarra
 
 def best_doors(building: Building, occupants: Occupants, hazard: Hazard | Sequence[Hazard] | None = None,
                capacities: Sequence[Capacity] = (), params: FlowParams = DEFAULT_PARAMS, *, max_fixes: int = 3,
-               new_width_m: float = NEW_DOOR_WIDTH_M, widen_to_m: float = WIDENED_TO_M) -> DoorPlan:
+               new_width_m: float = NEW_DOOR_WIDTH_M, budget_s: float | None = None, widen_to_m: float = WIDENED_TO_M) -> DoorPlan:
+    started = time.perf_counter()
     graph = build_graph(building, params)
     dt = params.dt_s
     blocked_spaces, _ = hazard_blocks(hazard)
@@ -178,6 +181,7 @@ def best_doors(building: Building, occupants: Occupants, hazard: Hazard | Sequen
     pairs = wall_pairs(building, graph, set(blocked_spaces))
     chosen: list[tuple[Candidate, Quickest, Quickest]] = []  # (candidate, quickest before, quickest after)
     total = crossing = evaluated = 0
+    incomplete = False
     for _ in range(max_fixes):
         problem = first_problem if not chosen else problem_of(graph)
         pool = candidates_for(graph, pairs, new_width_m, widen_to_m)
@@ -193,9 +197,13 @@ def best_doors(building: Building, occupants: Occupants, hazard: Hazard | Sequen
             candidate_problem = problem_of(_apply(graph, candidate))
             prepared.append((int(candidate_problem.occ[candidate_problem.evacuable()].sum()), candidate, candidate_problem))
         most = max([current.evacuated] + [reachable for reachable, _, _ in prepared])
+        prepared.sort(key=lambda item: -item[1].added_width_m)  # widest first: the likeliest wins are found before a time budget runs out
         for reachable, candidate, candidate_problem in prepared:
             if reachable < most:
                 continue
+            if budget_s is not None and evaluated and time.perf_counter() - started > budget_s:
+                incomplete = True
+                break
             if best is not None:
                 bound = best[4].steps + 1
             else:
@@ -223,4 +231,4 @@ def best_doors(building: Building, occupants: Occupants, hazard: Hazard | Sequen
                              before.evacuated, after.evacuated,
                              check.T_s == after.steps * dt and check.evacuated == after.evacuated))
     return DoorPlan(start.steps * dt, current.steps * dt, start.evacuated, current.evacuated, tuple(fixes), total,
-                    crossing, evaluated, new_width_m, widen_to_m)
+                    crossing, evaluated, new_width_m, widen_to_m, not incomplete)

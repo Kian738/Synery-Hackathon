@@ -9,6 +9,7 @@ enumerated candidates only.
 """
 
 import itertools
+import time
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ class Responders:
     deadline_s: float | None = None  # latest acceptable arrival at the target
     k_routes: int = 3  # shortest simple routes per entrance
     max_candidates: int = 12  # evacuation re-solves are capped to the earliest-arriving candidates
+    budget_s: float | None = None  # compute time after which no further candidate is re-solved (at least one always is)
 
 
 @dataclass(frozen=True)
@@ -176,11 +178,14 @@ def with_responders(building: Building, occupants: Occupants, hazard: Hazard | S
     best: tuple[int, int, Problem] | None = None  # (-evacuated, steps, problem)
     best_index = -1
     evaluated = 0
+    started = time.perf_counter()
     for index, candidate in enumerate(candidates):
         if deadline is not None and candidate.arrival_s > deadline:
             results[index] = _with(candidate, "over_deadline")
             continue
         if evaluated >= responders.max_candidates:
+            continue
+        if responders.budget_s is not None and evaluated and time.perf_counter() - started > responders.budget_s:
             continue
         evaluated += 1
         reservations: dict[str, list[tuple[float, float]]] = {}
