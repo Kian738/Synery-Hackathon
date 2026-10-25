@@ -346,3 +346,13 @@ button, [role="button"], a { -webkit-tap-highlight-color:transparent; }
 @media (prefers-reduced-motion: reduce) { .k-loader-floor { opacity:1; transform:none; animation:none; } }
 .recovery:has(.k-loader) { display:grid; place-items:center; min-height:100vh; width:100%; max-width:none; margin:0; padding:0; background:#0d161a; }
 .k-loader { width:100%; box-sizing:border-box; }
+
+/* Cleaner overlays: the activity pill sits under the top-right controls instead of the middle of the picture, and the Guide me bar is lower and slimmer. */
+.k-activity { justify-items:end; padding-right:16px; }
+.k-activity-pill { margin-top:64px; }
+@media (max-width:640px) { .k-activity { padding-right:8px; } .k-activity-pill { margin-top:56px; font-size:13px; padding:6px 12px; } }
+.guide-player { bottom:10px !important; padding-top:8px !important; padding-bottom:6px !important; }
+.k-guide-now { min-height:60px; gap:12px; }
+.k-guide-icon { width:46px; height:46px; } .k-guide-icon svg { width:26px; height:26px; }
+.k-guide-body strong { font-size:19px; } .k-guide-target { font-size:14px; } .k-guide-meter { padding:4px 12px; } .k-guide-meter i { font-size:26px; }
+.guide-player .player-progress { height:22px; margin-top:2px; }

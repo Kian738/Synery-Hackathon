@@ -77,37 +77,48 @@ let player: HTMLAudioElement | null = null;
 let ticket = 0;
 const clean = (text: string) => text.replace(/\*\*/g, "").replace(/^Answer:.*$/gim, "").replace(/\s+/g, " ").trim();
 
-function speakBrowser(text: string) {
-  if (!canSpeak()) return;
+let finishCurrent: (() => void) | null = null;
+
+function speakBrowser(text: string, done: () => void) {
+  if (!canSpeak()) return done();
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 1.05;
+  u.onend = done; u.onerror = done;
   window.speechSynthesis.speak(u);
 }
 
-/** Speak immediately, cutting off anything still talking (barge-in friendly). ElevenLabs first, browser voice on any failure. */
-export function speak(text: string) {
+/** Speak immediately, cutting off anything still talking (barge-in friendly). ElevenLabs first, browser voice on any failure.
+ *  `onSpeaking(true)` fires when the voice starts and `onSpeaking(false)` when it ends or is cut off, so the screen can highlight
+ *  what is being talked about for exactly as long as it is talked about. */
+export function speak(text: string, onSpeaking?: (speaking: boolean) => void) {
   const line = clean(text).slice(0, 600);
   stopSpeaking();
   if (!line) return;
   const mine = ++ticket;
+  let ended = false;
+  const end = () => { if (ended) return; ended = true; if (finishCurrent === end) finishCurrent = null; onSpeaking?.(false); };
+  finishCurrent = end;
+  const begin = () => { if (mine === ticket && !ended) onSpeaking?.(true); };
   void remoteVoice().then(async ok => {
-    if (mine !== ticket) return;
-    if (!ok) return speakBrowser(line);
+    if (mine !== ticket) return end();
+    if (!ok) { begin(); return speakBrowser(line, end); }
     try {
       const r = await fetch("/api/voice/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: line }) });
       if (!r.ok) throw new Error(String(r.status));
       const url = URL.createObjectURL(await r.blob());
-      if (mine !== ticket) { URL.revokeObjectURL(url); return; }
+      if (mine !== ticket) { URL.revokeObjectURL(url); return end(); }
       player = new Audio(url);
-      player.onended = () => URL.revokeObjectURL(url);
+      player.onended = () => { URL.revokeObjectURL(url); end(); };
+      player.onerror = end;
       await player.play();
-    } catch { if (mine === ticket) speakBrowser(line); }
+      begin();
+    } catch { if (mine === ticket) { begin(); speakBrowser(line, end); } else end(); }
   });
 }
-
 export function stopSpeaking() {
   ticket++;
+  const finish = finishCurrent; finishCurrent = null; finish?.();
   if (player) { player.pause(); player = null; }
   if (canSpeak()) window.speechSynthesis.cancel();
 }

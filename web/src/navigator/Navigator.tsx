@@ -136,7 +136,9 @@ export default function Navigator() {
     spokenFor.current = key;
     speak(nav.route.guide.spoken);
   }, [nav.route, voiceOut,following]);
-  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speak(spokenStep(steps[nav.activeStep]));return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
+  /** Speak one step and, for exactly as long as it is spoken, light up the place it talks about (the room of the step, or the place you are heading for). */
+  const speakStep=(step?:{space_id:string|null;text:string;headline?:string;target?:string;short:string;cue?:string;kind:string})=>{if(!step)return;const room=step.space_id?new Set([step.space_id]):null;speak(spokenStep(step as never),on=>{if(!room)return;nav.setHighlights(on?room:new Set());});};
+  useEffect(()=>{if(voiceOut&&following&&steps[nav.activeStep])speakStep(steps[nav.activeStep]);return()=>{stopSpeaking();};},[voiceOut,following,nav.activeStep]);
 
   const pins: Pin[] = useMemo(() => {
     if (!g) return [];
@@ -254,7 +256,7 @@ export default function Navigator() {
               {!following&&<button aria-pressed={stressOpen} onClick={()=>{setStressOpen(v=>!v);setScenarioOpen(false);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="aid" size={18}/>Evacuation test</button>}
               {!following&&<button aria-pressed={scenarioOpen} onClick={()=>{setScenarioOpen(v=>!v);setToolsOpen(false);setWeakOpen(false);setPlanExpanded(false);setSelected(null);setPhoneOpen(false);}}><Pictogram name="orbit" size={18}/>Scenarios</button>}
               <CompanionControl path={phonePath} buildingId={buildingId} steps={steps} index={nav.activeStep} routeId={companionRouteId} open={phoneOpen} onToggle={()=>{setPhoneOpen(v=>!v);setToolsOpen(false);setQuestionOpen(false);setPlanExpanded(false);setWeakOpen(false);setSelected(null);}}
-                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"");return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
+                onStep={action=>{if(!nav.route)return;if(action==="repeat"){speakStep(steps[nav.activeStep]);return;}if(!following)setView("guide");focusStep(Math.max(0,Math.min(steps.length-1,nav.activeStep+(action==="next"?1:-1))));}}
                 onLook={(yaw,pitch)=>{if(view==="2d")setView("3d");setLookOffset(v=>({yaw:((v.yaw+yaw+540)%360)-180,pitch:Math.max(-55,Math.min(55,v.pitch+pitch))}));}}
                 onRecenter={()=>setLookOffset({yaw:0,pitch:0})}/>
               {!following&&<><button disabled={nav.busy} onClick={()=>{setWeakOpen(v=>!v);setToolsOpen(false);setPlanExpanded(false);setSelected(null);if(!nav.weakPoints.length)nav.inspectWeakPoints();}}><Pictogram name="aid" size={18}/>Stress test</button><Link to="/lab"><Pictogram name="info" size={18}/>Evidence</Link></>}
@@ -268,7 +270,7 @@ export default function Navigator() {
               pins={pins} previewDoor={nav.previewDoor} selected={selected?.id} focus={focusPoint} onSpaceClick={selectSpace} /> :
               <Suspense fallback={<Loader label={g.building.name} phrases={["Raising the floors","Setting the walls","Placing the furniture"]}/>}>
                 <Building3D heat={heat??undefined} pins={stressPins} hazard={scenarioMark?.hazard} zones={scenarioZones} focus={following?guideFocus:focusOn} onFocus={following?setGuideFocus:setFocusOn} geometry={g} floorId={nav.floorId} route={nav.visualResult&&!following?null:nav.route} previousRoute={nav.visualResult?null:nav.previousRoute} highlights={nav.highlights}
-                  closed={nav.closed} previewDoor={ideaDoor??nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speak(steps[nav.activeStep]?spokenStep(steps[nav.activeStep]):"")} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
+                  closed={nav.closed} previewDoor={ideaDoor??nav.previewDoor} showAll={false} scope={scope} exploded={exploded} follow={following} previewMode={view==="follow"} activeStep={nav.activeStep} seekRequest={seekRequest} here={nav.here} selected={selected?.id} visualResult={nav.visualResult} onPosition={p=>{setPreviewPosition(old=>old&&old.x===p.x&&old.y===p.y&&old.floor_id===p.floor_id?old:p);}} focusRequest={focusRequest} onRepeat={()=>speakStep(steps[nav.activeStep])} onFinish={()=>{setView("3d");setQuestionOpen(false);setPlanExpanded(false);}} onPreview={()=>{stopSpeaking();setVoiceOut(false);setView("follow");}}
                   onStep={nav.setActiveStep} onSpaceClick={selectSpace} lookOffset={lookOffset}/>
               </Suspense>}
           </ErrorBoundary>
