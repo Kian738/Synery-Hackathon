@@ -3,7 +3,7 @@ import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
 import { ApiError, api, chat } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
-import type { Geometry, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
+import type { Geometry, ScenarioReport, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
 export type Message =
   | { id: number; role: "user"; text: string }
@@ -67,6 +67,8 @@ export function useNavigator(buildingId: string) {
   const [busyLabel,setBusyLabel]=useState("Working…");
   const [notice, setNotice] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [scenarioIn, setScenarioIn] = useState<{ n: number; report: ScenarioReport; hazard: string } | null>(null);
+  const [replayCmd, setReplayCmd] = useState<{ n: number; action: "play" | "pause" | "restart" | "seek"; seconds?: number } | null>(null);
   const geometryRef = useRef<Geometry | null>(null);
   geometryRef.current = geometry;
 
@@ -141,6 +143,10 @@ export function useNavigator(buildingId: string) {
       } else if (e.type === "edit") {
         setVisualResult(null); setPreviewDoor(null);
         if (sessionIdRef.current) api.sessionGeometry(sessionIdRef.current).then(setGeometry);
+      } else if (e.type === "scenario_result") {
+        setScenarioIn({ n: nextId++, report: e.report, hazard: e.hazard });
+      } else if (e.type === "scenario_replay") {
+        setReplayCmd({ n: nextId++, action: e.action, seconds: e.seconds });
       } else if (e.type === "profile") {
         setStepFree(e.profile.step_free);
         if (e.profile.location) setHere(e.profile.location);
@@ -258,6 +264,7 @@ export function useNavigator(buildingId: string) {
   return {
     visualResult,setVisualResult,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
+    scenarioIn, replayCmd, clearScenarioEvents: () => { setScenarioIn(null); setReplayCmd(null); },
     goTo, ask, toggleClosed, decideChange,busyLabel,applyEvents:apply,
   };
 }

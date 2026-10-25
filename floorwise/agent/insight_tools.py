@@ -4,7 +4,7 @@ from dataclasses import replace
 from floorwise.core import ops, resolve
 from floorwise.core.analytics import shared_wall_lines
 from floorwise.llm.tools import tool
-from floorwise.reason.report import scenario_report
+from floorwise.reason.report import resolve_exit, scenario_report
 
 
 def make_insight_tools(session, allow_edits=True, exact_items=False):
@@ -149,15 +149,27 @@ def make_insight_tools(session, allow_edits=True, exact_items=False):
         return guarded(session.widen_door)(opening_id, width_m)
 
     @tool
-    def plan_scenario(hazard_rooms: list[str], audience: str = "safety_officer", responders: bool = True) -> str:
-        """Evacuation with a hazard in the named rooms: exact evacuation time, exits used, the bottleneck, a responder route that does not clash with evacuees, and verified door fixes. Every number is re-solved by checked steps; if a step cannot be answered the reply names it. Audience: occupant, safety_officer, builder or regulator."""
+    def plan_scenario(hazard_rooms: list[str], audience: str = "safety_officer", responders: bool = True,
+                      exit_limits: list[dict] | None = None) -> str:
+        """Evacuation with a hazard in the named rooms: exact evacuation time, exits used, the bottleneck, a responder route that does not clash with evacuees, and verified door fixes. Every number is re-solved by checked steps; if a step cannot be answered the reply names it. Audience: occupant, safety_officer, builder or regulator. exit_limits caps an exit, for example [{"exit": "Main lobby", "max_people": 10}] when an entrance only takes 10 people; the rest are routed elsewhere. Also shows the result in the 3D twin."""
         def run():
             spaces = [resolve.resolve_space(session.building, room).id for room in hazard_rooms]
-            spec = {"hazards": [{"spaces": spaces}], "responders": {"auto": responders}}
+            spec = {"hazards": [{"spaces": spaces}], "responders": {"auto": responders},
+                    "capacities": [{"element": resolve_exit(session.building, str(limit["exit"])), "kind": "total_persons",
+                                    "value": int(limit["max_people"])} for limit in exit_limits or []]}
             report = scenario_report(session.building, "evacuation", {"spec": spec}, audience)
+            session.emit("scenario_result", report=report, hazard=spaces[0])
             if report["evacuation"]:  # the per-step movement table is for the 3D replay, not for the model's context
-                report["evacuation"] = {k: v for k, v in report["evacuation"].items() if k != "schedule"}
+                return {**report, "evacuation": {k: v for k, v in report["evacuation"].items() if k != "schedule"}}
             return report
         return guarded(run)()
 
-    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario] + ([apply_fix] if allow_edits else [])
+    @tool
+    def scenario_replay(action: str, seconds: int | None = None) -> str:
+        """Control the evacuation replay in the twin after plan_scenario: action is play, pause, restart or seek (with seconds)."""
+        if action not in ("play", "pause", "restart", "seek"):
+            raise ValueError("action must be play, pause, restart or seek")
+        session.emit("scenario_replay", action=action, seconds=seconds)
+        return "ok"
+
+    return [find_places, count_items, rank_rooms_by_items, filter_rooms, aggregate_stats, result_page, capabilities, shared_walls, stacked_room, distance_3d, errand, door_effect, weak_points, plan_scenario, scenario_replay] + ([apply_fix] if allow_edits else [])

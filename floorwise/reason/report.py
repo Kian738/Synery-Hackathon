@@ -30,6 +30,19 @@ def _summary(r) -> str:
     return lines.get(r.op, lambda: f"{r.op} checked")()
 
 
+def resolve_exit(building: Building, text: str) -> str:
+    """An exit as an opening id, or the outside door(s) of a named space; ambiguous or missing is an error with candidates."""
+    if text in building.openings and "outside" in building.openings[text]["space_ids"]:
+        return text
+    from floorwise.core import resolve
+    space = resolve.resolve_space(building, text).id
+    exits = sorted(o["id"] for o in building.openings.values() if "outside" in o["space_ids"] and space in o["space_ids"])
+    if len(exits) != 1:
+        raise ValueError(f"{text!r} has {len(exits)} exits to the outside; name the exit by its id: {exits[:6]}" if exits
+                         else f"{text!r} has no exit to the outside")
+    return exits[0]
+
+
 def scenario_report(building: Building, template: str, params: dict, audience: str) -> dict:
     trace = run_plan(building, instantiate(template, **params))
     evacuation = next((r.value for r in trace.results if r.op == "evacuate" and r.ok), None)
@@ -37,11 +50,22 @@ def scenario_report(building: Building, template: str, params: dict, audience: s
         "template": template,
         "steps": [{"id": r.id, "op": r.op, "ok": r.ok, "summary": _summary(r),
                    "reason": r.reason, "ms": round(r.ms, 1)} for r in trace.results],
+        "responder": _responder(building, trace),
         "abstained": None if trace.abstained is None else asdict(trace.abstained),
         "answer": to_dict(trace.answer),
         "evacuation": None if evacuation is None else to_dict(evacuation),
         "findings": [asdict(f) for f in assess(trace, audience, building)] if evacuation is not None or trace.abstained else [],
     }
+
+
+def _responder(building: Building, trace) -> dict | None:
+    """The chosen responder route as places to draw: the entrance, the spaces and doors crossed, when they arrive."""
+    plan = next((r.value for r in trace.results if r.op == "responder_route" and r.ok), None)
+    chosen = getattr(plan, "chosen", None)
+    if chosen is None:
+        return None
+    return {"entrance": chosen.entrance, "spaces": list(chosen.spaces), "elements": list(chosen.elements),
+            "arrival_s": round(chosen.arrival_s), "delay_s": plan.delay_s}
 
 
 def robust_report(building: Building, spec: dict) -> dict:

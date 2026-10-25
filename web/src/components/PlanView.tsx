@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { placeMapLabels } from "../lib/mapLabels";
 import { routeRuns } from "../lib/playback";
 import { area, bounds, centroid, zoneOf } from "../lib/geometry";
-import type { Geometry, Opening, Route, Space, XY, VisualResult } from "../lib/types";
+import type { Geometry, Opening, Route, ScenarioMark, Space, XY, VisualResult } from "../lib/types";
 import { Pictogram } from "./Pictogram";
 
 /** Architect's-drawing plan of one floor: ink outlines, quiet zone tints, the route as floor-marking tape.
@@ -28,7 +28,7 @@ interface Props {
   pins?: Pin[];
   previewDoor?: Opening | null;
   selected?: string | null;
-  scenario?: { hazard: string; doors: string[] } | null;
+  scenario?: ScenarioMark | null;
   focus?: XY | null;
   showItems?: boolean;
   onSpaceClick?: (space: Space) => void;
@@ -157,9 +157,10 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
             const zone = zoneOf(s);
             const isClosed = closedSpaces.has(s.id);
             const isHi = highlights?.has(s.id);
+            const crowd = scenario?.crowd?.[s.id];
             return (
+              <g key={s.id}>
               <polygon
-                key={s.id}
                 data-space-id={s.id}
                 points={pts(s.polygon)}
                 fill={isClosed ? "#f3d9dd" : ZONE_FILL[zone]}
@@ -169,6 +170,8 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
               >
                 <title>{`${s.name} — ${s.room_type.replace(/_/g, " ")}, ${area(s.polygon).toFixed(1)} m²`}</title>
               </polygon>
+              {crowd && <polygon points={pts(s.polygon)} fill="var(--color-mark)" fillOpacity={crowd === 2 ? 0.8 : 0.4} pointerEvents="none" />}
+              </g>
             );
           })}
           {/* highlight and selection outlines on top so they are never hidden by neighbours */}
@@ -181,6 +184,16 @@ export function PlanView({ geometry, floorId, route, highlights, closed, pins = 
           {scenario && <defs><pattern id="hazard-hatch" width={scale * 1.2} height={scale * 1.2} patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width={scale * 1.2} height={scale * 1.2} fill="#182329" fillOpacity="0.35" /><line x1="0" y1="0" x2="0" y2={scale * 1.2} stroke="#ff8a8f" strokeWidth={scale * 0.35} /></pattern></defs>}
           {scenario && spaces.filter((s) => s.id === scenario.hazard).map((s) => { const [x, y] = flip(centroid(s.polygon)); return <g key="hz" pointerEvents="none"><polygon points={pts(s.polygon)} fill="url(#hazard-hatch)" stroke="#ff8a8f" strokeWidth={scale * 0.4} /><text x={x} y={y} fontSize={font} textAnchor="middle" fontWeight="700" fill="#edf3f5" stroke="#182329" strokeWidth={font * 0.3} paintOrder="stroke">Fire: {s.name}</text></g>; })}
           {scenario && openings.filter((o) => scenario.doors.includes(o.id)).map((o) => { const [x, y] = flip(o.position); return <g key={`bd-${o.id}`} pointerEvents="none"><circle cx={x} cy={y} r={scale * 0.9} fill="#ffd45c" stroke="#182329" strokeWidth={scale * 0.2} /><text x={x} y={y - scale * 1.2} fontSize={font * 0.85} textAnchor="middle" fontWeight="700" fill="#10171c" stroke="#ffd45c" strokeWidth={font * 0.3} paintOrder="stroke">Slow door</text></g>; })}
+          {scenario?.responder && (() => {
+            const pos = scenario.responder.elements.map((id) => openings.find((o) => o.id === id)).filter((o): o is Opening => !!o).map((o) => flip(o.position));
+            if (!pos.length) return null;
+            const d = pos.map((p) => p.join(",")).join(" ");
+            return <g key="responders" pointerEvents="none">
+              {pos.length > 1 && <polyline points={d} fill="none" stroke="var(--color-mandatory)" strokeWidth={scale * 0.5} strokeLinecap="round" strokeLinejoin="round" />}
+              <circle cx={pos[0][0]} cy={pos[0][1]} r={scale * 0.6} fill="var(--color-mandatory)" />
+              <text x={pos[0][0]} y={pos[0][1] - scale * 1.2} fontSize={font} textAnchor="middle" fill="var(--color-mandatory)" stroke="white" strokeWidth={scale * 0.25} paintOrder="stroke" fontWeight={700} fontFamily="var(--font-sign)">{`Responders, in at ${Math.round(scenario.responder.arrival_s)} s`}</text>
+            </g>;
+          })()}
           {spaces.filter((s) => closedSpaces.has(s.id)).map((s) => {
             const [x, y] = flip(centroid(s.polygon));
             return <text key={`c-${s.id}`} x={x} y={y} fontSize={font * 0.9} textAnchor="middle" dominantBaseline="middle"

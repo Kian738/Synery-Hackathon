@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Audience, Geometry, RobustReport, ScenarioReport, Space, UiEvent } from "../lib/types";
+import { stopSpeaking } from "../lib/voice";
+import type { Audience, Geometry, RobustReport, ScenarioMark, ScenarioReport, Space, UiEvent } from "../lib/types";
 
 const AUDIENCES: { id: Audience; label: string }[] = [
   { id: "safety_officer", label: "Safety officer" }, { id: "occupant", label: "Occupant" },
@@ -17,9 +18,38 @@ export function headline(r: ScenarioReport): string {
   return stranded > 0 || e.evacuated < e.total ? `${e.evacuated} of ${e.total} people get out; ${e.total - e.evacuated} do not` : `Everyone is out in ${e.T_s} s`;
 }
 
-export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply }: {
+const REPLAY_SECONDS = 15;
+
+/** People out, and people left in each room, at time t. Rooms are 1 (some) or 2 (many, over half the busiest the room gets). */
+export function crowdAt(e: NonNullable<ScenarioReport["evacuation"]>, t: number): { out: number; crowd: Record<string, 1 | 2> } {
+  const moves = e.schedule ?? [];
+  const initial: Record<string, number> = {};
+  for (const m of moves) {
+    initial[m.from_space] = (initial[m.from_space] ?? 0) + m.persons;
+    initial[m.to_space] = (initial[m.to_space] ?? 0) - m.persons;
+  }
+  for (const [sp, n] of Object.entries(e.stranded ?? {})) initial[sp] = (initial[sp] ?? 0) + n;
+  const at = (time: number) => {
+    const left = { ...initial };
+    for (const m of moves) { if (m.depart_s <= time) left[m.from_space] -= m.persons; if (m.arrive_s <= time) left[m.to_space] += m.persons; }
+    return left;
+  };
+  const inside = (r: Record<string, number>) => Object.entries(r).filter(([k]) => k !== "outside").map(([, v]) => v);
+  const peak = Math.max(1, ...inside(initial), ...moves.map(m => Math.max(0, ...inside(at(m.arrive_s)))));
+  const crowd: Record<string, 1 | 2> = {};
+  for (const [sp, n] of Object.entries(at(t))) if (sp !== "outside" && n > 0.5) crowd[sp] = n > peak / 2 ? 2 : 1;
+  const out = moves.reduce((a, m) => a + (m.to_space === "outside" && m.arrive_s <= t ? m.persons : 0), 0);
+  return { out, crowd };
+}
+
+type Beat = { t: number; say: string; focus: string };
+
+export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighlight, onScenario, onFloor, apply, incoming, replayCmd, onBeat }: {
+  onBeat?: (say: string, focus: string) => void;
   geometry: Geometry; sessionId: string; selected: Space | null; onClose: () => void;
-  onHighlight: (ids: Set<string>) => void; onScenario: (m: { hazard: string; doors: string[] } | null) => void; onFloor: (id: string) => void; apply: (events: UiEvent[]) => void;
+  incoming?: { n: number; report: ScenarioReport; hazard: string } | null;
+  replayCmd?: { n: number; action: "play" | "pause" | "restart" | "seek"; seconds?: number } | null;
+  onHighlight: (ids: Set<string>) => void; onScenario: (m: ScenarioMark | null) => void; onFloor: (id: string) => void; apply: (events: UiEvent[]) => void;
 }) {
   const [hazard, setHazard] = useState<Space | null>(null);
   const [query, setQuery] = useState("");
@@ -31,21 +61,94 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
   const [more, setMore] = useState(false);
   const [robust, setRobust] = useState<RobustReport | null>(null);
   const [robustBusy, setRobustBusy] = useState(false);
-  useEffect(() => { if (selected) { setHazard(selected); setReport(null); } }, [selected]);
+  const [limit, setLimit] = useState<{ element: string; value: number } | null>(null);
+  const [limitExit, setLimitExit] = useState("");
+  const [limitMax, setLimitMax] = useState("10");
+  const [t, setT] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const T = report?.evacuation?.T_s ?? 0;
+  useEffect(() => { if (selected) { setHazard(selected); setReport(null); setLimit(null); } }, [selected]);
+  useEffect(() => { setT(0); setPlaying(!!report?.evacuation?.schedule?.length); }, [report]);
+  useEffect(() => {
+    if (!incoming) return;
+    const h = geometry.spaces.find(x => x.id === incoming.hazard);
+    if (h) { setHazard(h); onFloor(h.floor_id); }
+    setLimit(null); setReport(incoming.report);
+    onHighlight(new Set([incoming.hazard, ...(incoming.report.evacuation?.bottleneck ?? [])]));
+  }, [incoming?.n]);
+  useEffect(() => {
+    if (!replayCmd || !report) return;
+    if (replayCmd.action === "pause") setPlaying(false);
+    else if (replayCmd.action === "restart") { setT(0); setPlaying(true); }
+    else if (replayCmd.action === "seek") { setT(Math.max(0, Math.min(T, replayCmd.seconds ?? 0))); setPlaying(false); }
+    else { if (t >= T) setT(0); setPlaying(true); }
+  }, [replayCmd?.n]);
+  useEffect(() => {
+    if (!playing || T <= 0) return;
+    let raf = 0, last = performance.now();
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000; last = now;
+      setT(v => { const n = Math.min(T, v + dt * T / REPLAY_SECONDS); if (n >= T) setPlaying(false); return n; });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, T]);
+  const replay = useMemo(() => report?.evacuation ? crowdAt(report.evacuation, t) : null, [report, t]);
+  const name = (id: string) => geometry.spaces.find(s => s.id === id)?.name ?? id;
+  const exitName = (id: string) => { const o = geometry.openings.find(x => x.id === id); const n = o?.space_ids.filter(x => x !== "outside").map(name).join(" / "); return n || id; };
+  const [beatText, setBeatText] = useState("");
+  const beats = useMemo<Beat[]>(() => {
+    const e = report?.evacuation; if (!e?.schedule?.length || !hazard) return [];
+    const mv = e.schedule, out: Beat[] = [];
+    const fire = mv.filter(m => m.from_space === hazard.id);
+    if (fire.length) out.push({ t: 0, say: `People are leaving ${name(hazard.id)}.`, focus: hazard.id });
+    const outs = mv.filter(m => m.to_space === "outside").sort((a, b) => a.arrive_s - b.arrive_s);
+    if (outs.length) out.push({ t: outs[0].arrive_s, say: `The first people are out through ${exitName(outs[0].element)}.`, focus: outs[0].from_space });
+    const queue = mv.filter(m => (e.bottleneck ?? []).includes(m.element) && m.depart_s > 0 && (crowdAt(e, m.depart_s).crowd[m.from_space] ?? 0) > 0).sort((a, b) => a.depart_s - b.depart_s)[0];
+    if (queue) out.push({ t: queue.depart_s, say: `${exitName(queue.element)} is a bottleneck: a queue forms.`, focus: queue.from_space });
+    let acc = 0; const half = outs.find(m => (acc += m.persons) >= e.total / 2);
+    if (half) out.push({ t: half.arrive_s, say: "Half of the people are out.", focus: half.from_space });
+    const stranded = e.total - e.evacuated;
+    out.push({ t: e.T_s, say: stranded > 0 ? `${stranded} people could not get out.` : `The last person is out at ${e.T_s} s.`, focus: Object.keys(e.stranded ?? {})[0] ?? outs[outs.length - 1]?.from_space ?? hazard.id });
+    return out.sort((a, b) => a.t - b.t);
+  }, [report, hazard]);
+  const beatIdx = useRef(0), lastT = useRef(0), lastBeatAt = useRef(0);
+  useEffect(() => {
+    if (t < lastT.current) { beatIdx.current = Math.max(0, beats.filter(b => b.t <= t).length - 1); lastBeatAt.current = 0; }
+    lastT.current = t;
+    let due: Beat | null = null;
+    const now = performance.now();  // one beat at a time, each stays on screen about 2.5 s, so none is skipped
+    if (playing && beatIdx.current < beats.length && beats[beatIdx.current].t <= t && now - lastBeatAt.current >= 2500) { due = beats[beatIdx.current++]; lastBeatAt.current = now; }
+    if (!due || !playing) return;
+    setBeatText(due.say);
+    const sp = geometry.spaces.find(x => x.id === due!.focus);
+    onHighlight(new Set([due.focus]));
+    if (sp) onFloor(sp.floor_id);
+    onBeat?.(due.say, due.focus);
+  }, [t, beats, playing]);
+  useEffect(() => { beatIdx.current = 0; lastT.current = 0; lastBeatAt.current = 0; setBeatText(""); }, [report]);
+  useEffect(() => { if (!playing) stopSpeaking(); }, [playing]);
+  useEffect(() => () => { stopSpeaking(); }, []);
+  const lastMark = useRef("");
+  useEffect(() => {
+    if (!report || !hazard || !replay) return;
+    const mark: ScenarioMark = { hazard: hazard.id, doors: report.evacuation?.bottleneck ?? [], responder: report.responder, crowd: replay.crowd };
+    const key = JSON.stringify(mark);
+    if (key !== lastMark.current) { lastMark.current = key; onScenario(mark); }
+  }, [report, hazard, replay]);
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     return q ? geometry.spaces.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6) : [];
   }, [query, geometry.spaces]);
-  const name = (id: string) => geometry.spaces.find(s => s.id === id)?.name ?? id;
   const doorName = (id: string) => { const o = geometry.openings.find(x => x.id === id); return o ? `${o.space_ids.map(name).join(" / ")} (${o.width_m} m)` : id; };
-  const run = async (h = hazard, a = audience) => {
+  const run = async (h = hazard, a = audience, lim = limit) => {
     if (!h) return;
     setBusy(true); setError(""); setApplied(false); setMore(false); setRobust(null);
     try {
-      const r = await api.scenario(sessionId, h.id, a);
+      const r = await api.scenario(sessionId, h.id, a, lim ? [{ element: lim.element, kind: "total_persons", value: lim.value }] : []);
       setReport(r);
       onHighlight(new Set([h.id, ...(r.evacuation?.bottleneck ?? [])]));
-      onScenario({ hazard: h.id, doors: r.evacuation?.bottleneck ?? [] });
       onFloor(h.floor_id);
     } catch (e) { setError(e instanceof Error ? e.message : "Scenario failed"); }
     setBusy(false);
@@ -67,7 +170,7 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
     <p>{hazard ? <>Hazard room: <b>{hazard.name}</b></> : "Click a room on the plan or 3D view, or search below, to set where the fire starts."}</p>
     {!hazard && busiest && <button className="stress-rerun" disabled={busy} onClick={() => { setHazard(busiest); run(busiest); }}>Quick fire test: {busiest.name} (most seats)</button>}
     <input aria-label="Search rooms" placeholder="Search rooms" value={query} onChange={e => setQuery(e.target.value)} />
-    {matches.map(s => <button key={s.id} className="stress-result" onClick={() => { setHazard(s); setReport(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); }}>{s.name}</button>)}
+    {matches.map(s => <button key={s.id} className="stress-result" onClick={() => { setHazard(s); setReport(null); setLimit(null); setQuery(""); onScenario({ hazard: s.id, doors: [] }); onFloor(s.floor_id); onHighlight(new Set([s.id])); }}>{s.name}</button>)}
     <div role="radiogroup" aria-label="Who is this for" className="scenario-audience">
       {AUDIENCES.map(a => <button key={a.id} role="radio" aria-checked={audience === a.id} onClick={() => { setAudience(a.id); if (report) run(hazard, a.id); }}>{a.label}</button>)}
     </div>
@@ -76,10 +179,28 @@ export function ScenarioPanel({ geometry, sessionId, selected, onClose, onHighli
     <div aria-live="polite">{busy && <p>Checking the evacuation…</p>}</div>
     {report && <>
       <h3 className="scenario-headline" role="status">{headline(report)}</h3>
+      {report.evacuation && limit && report.evacuation.evacuated < report.evacuation.total && <p className="scenario-refusal" role="alert">Cannot meet this limit: {exitName(limit.element)} takes at most {limit.value} people and no other exit can take the rest. {report.evacuation.total - report.evacuation.evacuated} people have no way out.</p>}
+      {replay && report.evacuation && T > 0 && <div className="scenario-replay">
+        <p className="sr-only scenario-beat" aria-live="polite">{beatText}</p>
+        <p className="scenario-counter">{Math.round(replay.out)} of {report.evacuation.total} out</p>
+        <div className="scenario-row">
+          <button onClick={() => { if (!playing && t >= T) setT(0); setPlaying(p => !p); }}>{playing ? "Pause" : "Play"}</button>
+          <input type="range" aria-label="Replay time" min={0} max={T} step={1} value={Math.round(t)} onChange={e => { setT(Number(e.target.value)); setPlaying(false); }} />
+          <small>{Math.round(t)} s</small>
+        </div>
+        <small className="scenario-legend">Red = fire, blue = responders, amber = slow door</small>
+      </div>}
       {report.evacuation?.nearest_exit && report.evacuation.nearest_exit.T_s > report.evacuation.T_s && <p className="scenario-baseline">Everyone using their nearest exit instead: {report.evacuation.nearest_exit.T_s} s ({report.evacuation.nearest_exit.T_s - report.evacuation.T_s} s slower). Exits are planned together here.</p>}
       {report.abstained && !report.evacuation ? <p>Stopped at {abstain ? `step ${abstain.id}: ` : "a step: "}{reason ?? "A step could not be completed."}</p> : <>
         <details><summary>{report.steps.length} steps checked</summary>
           <ol>{report.steps.map(s => <li key={s.id}>{s.ok ? s.summary : `Stopped: ${s.summary}`}</li>)}</ol></details>
+        {Object.keys(report.evacuation?.by_exit ?? {}).length > 0 && <div className="scenario-row scenario-limit">
+          <select aria-label="Exit to limit" value={limitExit || Object.keys(report.evacuation!.by_exit)[0]} onChange={e => setLimitExit(e.target.value)}>
+            {Object.keys(report.evacuation!.by_exit).map(id => <option key={id} value={id}>{exitName(id)}</option>)}
+          </select>
+          <input type="number" min={0} aria-label="Max people" placeholder="max people" value={limitMax} onChange={e => setLimitMax(e.target.value)} />
+          <button disabled={busy || limitMax === ""} onClick={() => { const l = { element: limitExit || Object.keys(report.evacuation!.by_exit)[0], value: Math.max(0, Math.floor(Number(limitMax))) }; setLimit(l); run(hazard, audience, l); }}>Re-run with limit</button>
+        </div>}
         {findings.map((f, i) => <div key={i} className="scenario-finding"><b>{ICON[f.severity]}</b> {f.title}<br /><small>{f.detail}</small></div>)}
         {report.findings.length > 3 && <button onClick={() => setMore(v => !v)}>{more ? "Show fewer" : "Show more"}</button>}
         {hazard && !robust && <button disabled={robustBusy} onClick={async () => { setRobustBusy(true); try { setRobust(await api.scenarioRobust(sessionId, hazard.id)); } catch (e) { setError(e instanceof Error ? e.message : "Check failed"); } setRobustBusy(false); }}>{robustBusy ? "Checking each exit…" : "Check if an exit fails"}</button>}
