@@ -77,9 +77,11 @@ class Conversation:
                         if event.type=='content_block_delta' and event.delta.type=='text_delta':
                             emitted=True
                             on_event('assistant_delta',{'message_id':message_id,'text':event.delta.text})
+                            on_event('text_delta',{'text':event.delta.text})
                     response=stream.get_final_message()
                 self._active_stream=None
                 on_event('assistant_end',{'message_id':message_id,'stop_reason':response.stop_reason})
+                self._streamed_text=emitted
                 return response
             except Exception as error:
                 self._active_stream=None

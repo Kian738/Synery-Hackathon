@@ -1,0 +1,21 @@
+.fw-journey-banner { position: fixed; z-index: 60; top: 12px; left: 50%; transform: translateX(-50%); width: min(640px, calc(100% - 24px)); display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid rgba(255, 212, 92, 0.7); border-radius: var(--r-panel); background: var(--k-bg); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: var(--k-ink); font: 600 13px/1.35 var(--font-sans); box-shadow: 0 18px 40px #000a; }
+.fw-journey-banner > div:first-child { display: grid; gap: 2px; }
+.fw-journey-banner small { color: #ffd45c; font-weight: 700; font-size: 10px; }
+.fw-journey-banner span { opacity: 0.85; }
+.fw-journey-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.fw-journey-actions button { padding: 7px 12px; border: 1px solid var(--k-line); border-radius: var(--r-ctl); background: none; color: var(--k-ink); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.fw-journey-actions button.primary { border: 0; background: #ffd45c; color: #152128; }
+@media (max-width: 520px) { .fw-journey-banner { flex-direction: column; align-items: stretch; } .fw-journey-actions { flex-direction: row; } }
+.fw-journey-banner details { margin-top: 4px; font-size: 12px; } .fw-journey-banner details ol { margin: 4px 0 0; padding-left: 18px; max-height: 30vh; overflow: auto; }
+.fw-journey-status { color: var(--k-accent); font-weight: 700; text-align: center; }
+
+/* Outside/inside trip banner: same material as the outside controls, drops in from the top edge. */
+.fw-journey-banner { top: var(--gap-group); border-color: var(--k-line); border-top-color: rgba(255, 255, 255, 0.16); background: rgba(21, 33, 40, 0.78); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); animation: fw-banner-in 320ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes fw-banner-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.fw-journey-banner small { color: var(--k-mute); font: 600 11px var(--font-sans); }
+.fw-journey-actions button { height: var(--ctl); padding: 0 14px; background: var(--k-bg-hi); transition: filter 160ms ease-out, transform 100ms ease-out; }
+.fw-journey-actions button:active { transform: scale(0.97); }
+.fw-journey-actions button.primary { background: var(--k-accent); color: #1c2226; font-weight: 700; }
+.fw-journey-actions button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .fw-journey-banner { animation: none; } }
+@media (prefers-reduced-transparency: reduce) { .fw-journey-banner { background: var(--k-bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }

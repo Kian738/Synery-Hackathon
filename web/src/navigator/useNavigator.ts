@@ -3,7 +3,7 @@ import {startAssistantStream,appendAssistantText} from "../lib/chatStream";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isRoute, isVisualResult } from "../lib/validation";
 import { fixCardText, impactText } from "../lib/impact";
-import { ApiError, api, chat, cancelChat } from "../lib/api";
+import { ApiError, api, chat, cancelChat, consumePreloadedBuilding } from "../lib/api";
 import { label as labelOf } from "../lib/geometry";
 import type { Geometry, ScenarioReport, Opening, Route, UiEvent, WeakPoint, VisualResult } from "../lib/types";
 
@@ -90,8 +90,14 @@ export function useNavigator(buildingId: string) {
     setSessionId(null); setBusy(false); setNotice(null); setGeometry(null);
     setRoute(null);setRouteMeta(null);setMessages([]);setHighlights(new Set());setClosed(new Set());setPreviewDoor(null);setPreviousRoute(null); setWeakPoints([]); setVisualResult(null);setTurnUsage(null);
     (async () => {
-      const { session_id } = await api.newSession(buildingId);
-      const g = await api.sessionGeometry(session_id);
+      const preloaded = consumePreloadedBuilding(buildingId);
+      const { session_id, geometry: g } = preloaded
+        ? await preloaded
+        : await (async () => {
+            const { session_id } = await api.newSession(buildingId);
+            const g = await api.sessionGeometry(session_id);
+            return { session_id, geometry: g };
+          })();
       if (cancelled) return;
       setSessionId(session_id);
       setGeometry(g);
@@ -315,7 +321,7 @@ export function useNavigator(buildingId: string) {
   return {
     retryLoad:()=>setLoadRevision(n=>n+1),compareItems,planStops,visualResult,setVisualResult,stop,turnUsage,previousRoute, weakPoints, inspectWeakPoints, sessionId, geometry, floorId, setFloorId, route, routeMeta, clearRoute, highlights, setHighlights, closed,
     here, hereSource, setHere, stepFree, setStepFree, previewDoor, messages, busy, notice, setNotice, activeStep, setActiveStep,
-    closeConfirm, setCloseConfirm, lastClosure, goTo, ask, toggleClosed, decideChange,busyLabel,apply,
+    closeConfirm, setCloseConfirm, lastClosure, goTo, ask, toggleClosed, decideChange,busyLabel,apply,applyEvents:apply,
     scenarioIn, replayCmd, clearScenarioEvents: () => { setScenarioIn(null); setReplayCmd(null); },
   };
 }

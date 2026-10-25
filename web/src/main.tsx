@@ -11,6 +11,8 @@ import "./ui/kit.css";
 installActivityTracking();
 
 const Lab = lazy(() => import("./lab/Lab"));
+const MapView = lazy(() => import("./map/MapView"));
+const JourneyTunnel = lazy(() => import("./journey/JourneyTunnel"));
 const Phone = lazy(() => import("./companion/PhoneCompanion").then(m=>({default:m.PhoneCompanion})));
 
 // Page zoom is never intended in this app (the 3D view has its own zoom), and doing it by accident breaks the layout.
@@ -23,6 +25,8 @@ createRoot(document.getElementById("root")!).render(
     <ErrorBoundary><BrowserRouter>
       <ActivityBar />
       <Routes>
+        <Route path="/map" element={<Suspense fallback={null}><MapView /></Suspense>} />
+        <Route path="/tunnel" element={<Suspense fallback={null}><JourneyTunnel /></Suspense>} />
         <Route path="/" element={<Navigator />} />
         <Route path="/phone" element={<Suspense fallback={null}><Phone /></Suspense>} />
         <Route path="/lab/*" element={<Suspense fallback={null}><Lab /></Suspense>} />

@@ -1,0 +1,60 @@
+/* Outside view controls: the interior control kit (ui/kit.css) on a translucent material.
+   Feedback is instant on press; motion uses transform and opacity only. */
+.drone-hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; font: var(--k-font); color: var(--k-ink); user-select: none; }
+.hud-interactive { pointer-events: auto; }
+
+.hud-material {
+  background: rgba(21, 33, 40, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--k-line);
+  border-top-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* Campus switcher: one segmented control */
+.hud-campus-switch { position: absolute; top: var(--gap-group); left: var(--gap-group); display: inline-flex; gap: 2px; padding: 3px; height: var(--ctl); box-sizing: border-box; border-radius: var(--r-ctl); }
+.hud-campus-btn { height: 100%; padding: 0 12px; border: 0; border-radius: calc(var(--r-ctl) - 4px); background: transparent; color: var(--k-ink); font: var(--k-font); cursor: pointer; white-space: nowrap; transition: background 160ms ease-out, transform 100ms ease-out; }
+.hud-campus-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.hud-campus-btn:active { transform: scale(0.97); }
+.hud-campus-btn[aria-pressed="true"] { background: var(--k-accent); color: #1c2226; }
+
+/* Bottom right: compass + orbit */
+.hud-camera-controls { position: absolute; right: var(--gap-group); bottom: var(--gap-group); display: flex; gap: var(--gap); align-items: center; }
+.hud-compass { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 12px; box-sizing: border-box; border-radius: var(--r-ctl); }
+.hud-compass svg { transition: transform 120ms linear; }
+.hud-orbit-btn { height: var(--ctl); padding: 0 14px; border-radius: var(--r-ctl); color: var(--k-ink); font: var(--k-font); cursor: pointer; transition: background 160ms ease-out, transform 100ms ease-out; }
+.hud-orbit-btn:hover { background: rgba(31, 48, 57, 0.85); }
+.hud-orbit-btn:active { transform: scale(0.97); }
+.hud-orbit-btn[aria-pressed="true"] { background: var(--k-accent); border-color: var(--k-accent); color: #1c2226; }
+
+/* Building sheet: rises from the bottom edge where it will leave to */
+.hud-sheet { position: absolute; left: var(--gap-group); bottom: var(--gap-group); width: min(360px, calc(100% - 2 * var(--gap-group))); box-sizing: border-box; padding: 16px; border-radius: var(--r-panel); display: flex; flex-direction: column; gap: 14px; transform-origin: bottom left; animation: hud-rise 320ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes hud-rise { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+.hud-sheet header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.hud-sheet small { color: var(--k-mute); font: 600 11px var(--font-sans); text-transform: capitalize; }
+.hud-sheet h2 { margin: 2px 0 0; font: 700 20px/1.15 var(--font-sign); letter-spacing: -0.01em; }
+.hud-close { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: var(--k-ink); cursor: pointer; transition: background 160ms ease-out, transform 100ms ease-out; }
+.hud-close:hover { background: rgba(255, 255, 255, 0.18); }
+.hud-close:active { transform: scale(0.94); }
+.hud-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 0; overflow: hidden; border-radius: var(--r-ctl); background: var(--k-line); }
+.hud-stats div { padding: 10px 12px; background: rgba(21, 33, 40, 0.85); }
+.hud-stats dt { color: var(--k-mute); font: 500 11px var(--font-sans); }
+.hud-stats dd { margin: 2px 0 0; font: 700 16px var(--font-sans); }
+.hud-engage-btn { height: calc(var(--ctl) + 4px); border: 0; border-radius: var(--r-ctl); background: var(--k-accent); color: #1c2226; font: 700 14px var(--font-sans); cursor: pointer; transition: filter 160ms ease-out, transform 100ms ease-out; }
+.hud-engage-btn:hover { filter: brightness(1.06); }
+.hud-engage-btn:active { transform: scale(0.98); }
+
+.hud-hint { position: absolute; left: 50%; bottom: var(--gap-group); transform: translateX(-50%); margin: 0; height: var(--ctl); display: flex; align-items: center; padding: 0 16px; box-sizing: border-box; border-radius: var(--r-pill); color: var(--k-mute); font-weight: 500; white-space: nowrap; }
+
+.hud-campus-btn:focus-visible, .hud-orbit-btn:focus-visible, .hud-close:focus-visible, .hud-engage-btn:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .hud-campus-switch { right: var(--gap-group); overflow-x: auto; scrollbar-width: none; }
+  .hud-hint { display: none; }
+  .hud-camera-controls { bottom: auto; top: calc(var(--gap-group) + var(--ctl) + var(--gap)); }
+  .hud-sheet { right: var(--gap-group); width: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .hud-sheet { animation: opacity-in 160ms ease-out; } .hud-compass svg { transition: none; } @keyframes opacity-in { from { opacity: 0; } } }
+@media (prefers-reduced-transparency: reduce) { .hud-material { background: var(--k-bg); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (prefers-contrast: more) { .hud-material { background: var(--k-bg); border-color: var(--k-ink); } }

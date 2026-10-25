@@ -52,7 +52,7 @@ def scenario_router(get_session):
                 raise HTTPException(422, str(e)) from e
             entry = get_session(session_id)
             from floorwise.agent.scenarios import simulate
-            with entry["lock"]:
+            with session_write(entry):
                 before = len(entry["session"].events)
                 result = simulate(entry["session"], **direct.model_dump())
                 return {"result": result, "events": entry["session"].events[before:]}

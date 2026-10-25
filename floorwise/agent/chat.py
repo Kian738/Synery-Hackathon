@@ -91,6 +91,18 @@ This is a one-shot question: no follow-up is possible, so don't ask back; pick t
 Finish with a single line 'Answer: <answer>' in exactly the format the question asks for."""
 
 
+CAMPUS_SUFFIX = """
+
+## Between buildings
+If the person starts in or goes to a different building, use the `campus_route` tool. It compares every entrance of both buildings and returns the indoor walk out, the outdoor walk and the indoor walk in. Say which door to leave by and which to enter. When its notes say the outdoor distance is an estimate, say so. If it returns candidates, ask which one they mean. Only buildings with a real-world location can be joined; say so if one is not."""
+
+OUTDOOR_SUFFIX = """
+
+## Outdoor campus navigation
+If the person needs to walk between two different buildings (not between rooms inside this building), use the `outdoor_route` tool. It uses real GPS coordinates and OpenRouteService to compute a pedestrian walking route with turn-by-turn steps.
+After giving outdoor directions, offer to continue with indoor navigation once they arrive at the destination building."""
+
+
 class ChatAgent:
     """Conversation with tools over one Session; provider and model from floorwise.llm."""
 
@@ -100,6 +112,10 @@ class ChatAgent:
         text = SYSTEM_PROMPT.format(overview=json.dumps(session.overview(), ensure_ascii=False))
         if benchmark:
             text += BENCHMARK_SUFFIX
+        else:
+            text += CAMPUS_SUFFIX
+            if os.environ.get("ORS_API_KEY"):
+                text += OUTDOOR_SUFFIX
         self._system=text
         self._provider=provider or llm.provider_name()
         self._model=model
